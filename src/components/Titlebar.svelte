@@ -13,6 +13,7 @@
     Archive
   } from "lucide-svelte";
   import { getCurrentWindow } from "@tauri-apps/api/window";
+  import { dragRegion } from "../lib/dragRegion.js";
   import { invoke } from "@tauri-apps/api/core";
   import { emit, emitTo, listen } from "@tauri-apps/api/event";
   import { onMount } from "svelte";
@@ -36,8 +37,24 @@
     appState.save();
   }
 
+  // 전환이 진행 중인지 표시하는 잠금.
+  // 왜: 더블클릭 연타나 버튼 중복 클릭으로 전환이 겹치면 창이 커졌다 작아졌다 합니다.
+  let isTogglingFullscreen = false;
+
   async function handleFullscreen() {
+    if (isTogglingFullscreen) return;
+    isTogglingFullscreen = true;
+    try {
+      await runFullscreenToggle();
+    } finally {
+      // 창 전환이 끝난 뒤 잠금 해제 (연타 방어)
+      setTimeout(() => { isTogglingFullscreen = false; }, 200);
+    }
+  }
+
+  async function runFullscreenToggle() {
     const appWindow = getCurrentWindow();
+    // 화면에 실제로 적용된 네이티브 상태를 유일한 진실로 삼습니다.
     const currentlyFullscreen = await appWindow.isFullscreen();
 
     if (!currentlyFullscreen) {
@@ -50,21 +67,24 @@
         const logicalSize = size.toLogical(factor);
         appState.windowWidth = logicalSize.width;
         appState.windowHeight = logicalSize.height;
-        const pos = await appWindow.innerPosition();
+        // setPosition() 과 기준을 맞추기 위해 outerPosition() 을 사용합니다.
+        // (안쪽 좌표로 저장하면 전체화면 왕복마다 창이 테두리 두께만큼 밀립니다.)
+        const pos = await appWindow.outerPosition();
         const logicalPos = pos.toLogical(factor);
         appState.windowPosX = logicalPos.x;
         appState.windowPosY = logicalPos.y;
       } catch(e) {}
     }
 
-    appState.isFullscreen = !currentlyFullscreen;
-    await appWindow.setFullscreen(!currentlyFullscreen);
-    appState.saveNow(false);
-  }
+    // 최대화된 창은 Windows가 setSize/전체화면 해제 후 크기 복원을 무시합니다.
+    // 전환 전에 최대화 잔재를 먼저 제거해야 "커진 채로 남는" 증상이 없습니다.
+    try {
+      if (await appWindow.isMaximized()) await appWindow.unmaximize();
+    } catch (_) {}
 
-  async function handleTitlebarDoubleClick(e) {
-    if (e.target.closest("button")) return; 
-    await handleFullscreen();
+    await appWindow.setFullscreen(!currentlyFullscreen);
+    appState.isFullscreen = !currentlyFullscreen;
+    appState.saveNow(false);
   }
 
 
@@ -128,7 +148,7 @@
       // 왜 toLogical 변환이 필요한가: DPI 스케일링(125%, 150%) 환경에서
       // Physical 값을 그대로 저장하면 복원 시 위치가 스케일 배수만큼 어긋납니다.
       const factor = await win.scaleFactor();
-      const pos = await win.innerPosition();
+      const pos = await win.outerPosition();
       const logicalPos = pos.toLogical(factor);
       if (typeof logicalPos.x === 'number') {
         appState.windowPosX = Math.round(logicalPos.x);
@@ -194,14 +214,16 @@
   </div>
 {/if}
 
+<!-- 타이틀바: 드래그 + 더블클릭 전체화면.
+     data-tauri-drag-region 을 쓰지 않는 이유는 dragRegion 액션 주석 참고
+     (네이티브 자동 최대화가 우리 전체화면 전환과 충돌했습니다). -->
 <div
   class="flex items-center justify-between px-3 py-2 select-none group w-full cursor-move"
   style="color: {appState.isDarkMode ? '#d1d5db' : '#374151'};"
-  data-tauri-drag-region
+  use:dragRegion={{ onDoubleClick: handleFullscreen }}
   role="presentation"
-  ondblclick={handleTitlebarDoubleClick}
 >
-  <div class="flex items-center gap-1 pointer-events-none" data-tauri-drag-region>
+  <div class="flex items-center gap-1 pointer-events-none">
     <button
       class="cursor-pointer pointer-events-auto p-1 rounded-md transition-colors {appState.isPinned ? '' : 'text-gray-400 hover:bg-black/5'}"
       style={appState.isPinned ? `color: ${appState.getThemeAccentColor()};` : null}
@@ -244,11 +266,11 @@
     </button>
   </div>
 
-  <div class="flex flex-col items-center justify-center pointer-events-none mt-1" data-tauri-drag-region>
-    <span class="text-[13px] font-bold tracking-wide select-none pointer-events-none" style="color: {appState.isDarkMode ? '#e2e8f0' : '#6b7280'};" data-tauri-drag-region>Tidy Task</span>
+  <div class="flex flex-col items-center justify-center pointer-events-none mt-1">
+    <span class="text-[13px] font-bold tracking-wide select-none pointer-events-none" style="color: {appState.isDarkMode ? '#e2e8f0' : '#6b7280'};">Tidy Task</span>
   </div>
 
-  <div class="flex items-center gap-1.5 pointer-events-none" data-tauri-drag-region>
+  <div class="flex items-center gap-1.5 pointer-events-none">
 
     <button
       class="pointer-events-auto p-1 rounded-md transition-colors {appState.canUndo ? 'cursor-pointer text-gray-500 hover:text-gray-800 hover:bg-black/5' : 'text-gray-300 opacity-40 cursor-not-allowed'}"

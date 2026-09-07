@@ -3,6 +3,7 @@
   import { slide, fade, scale } from "svelte/transition";
   import { Check, Eraser } from "lucide-svelte";
   import { appState } from "./lib/appState.svelte.js";
+  import { TINY_NOTE_MIN_WIDTH, TINY_NOTE_ROLLED_HEIGHT } from "./lib/tinyNoteWindow.js";
 
   import Titlebar from "./components/Titlebar.svelte";
   import MainToolbar from "./components/MainToolbar.svelte";
@@ -173,7 +174,7 @@
 
       if (!appState.isVerticalSnapped) {
         // ── 세로 스냅 진입: 현재 Y좌표와 높이를 백업 후 세로 최대화 ──
-        const pos = await win.innerPosition();
+        const pos = await win.outerPosition();
         const logicalPos = pos.toLogical(factor);
         const size = await win.innerSize();
         const logicalSize = size.toLogical(factor);
@@ -199,7 +200,7 @@
         const logicalSize = size.toLogical(factor);
 
         if (appState.preSnapPosY !== null) {
-          const pos = await win.innerPosition();
+          const pos = await win.outerPosition();
           const logicalPos = pos.toLogical(factor);
           await win.setPosition(new LogicalPosition(
             Math.round(logicalPos.x),
@@ -219,7 +220,7 @@
 
       // 변경된 크기/위치를 즉시 상태에 반영 후 저장
       const updatedSize = await win.innerSize();
-      const updatedPos = await win.innerPosition();
+      const updatedPos = await win.outerPosition();
       const updatedLogicalSize = updatedSize.toLogical(factor);
       const updatedLogicalPos = updatedPos.toLogical(factor);
       appState.windowWidth = updatedLogicalSize.width;
@@ -726,7 +727,7 @@
                 title: isTiny ? `Tiny Note ${label.split('-')[1]}` : `Tidy Task Note ${label.split('-')[1]}`,
                 width: isTiny ? 250 : 380,
                 height: (isTiny && isRolledUp) ? 35 : (isTiny ? 280 : 500),
-                minWidth: isTiny ? 160 : 250,
+                minWidth: isTiny ? TINY_NOTE_MIN_WIDTH : 250,
                 minHeight: (isTiny && isRolledUp) ? 35 : (isTiny ? 45 : 300),
                 decorations: false,
                 transparent: !isTiny, // Tiny Note는 transparent false 기반이어야 테마 배경색이 정상 적용됨
@@ -748,7 +749,7 @@
                     if (isRolledUp && isTiny) {
                       try {
                         await subWin.setMaxSize(null);
-                        await subWin.setMinSize(new LogicalSize(160, 35));
+                        await subWin.setMinSize(new LogicalSize(TINY_NOTE_MIN_WIDTH, TINY_NOTE_ROLLED_HEIGHT));
                         // ✨ [TCREI: Integrity] tW는 Logical 단위로 저장되어 있으므로 devicePixelRatio 나누기 제거
                         await subWin.setSize(new LogicalSize(isValidSize(tW) ? Math.round(tW) : 250, 35));
                         await subWin.setResizable(false);
@@ -829,7 +830,8 @@
         // 왜: 전체화면 해상도(1920×1080 등)가 일반 창 크기로 저장되면,
         //     다음 실행 시 전체화면이 아닌데 전체화면 크기의 기형적 창이 열립니다.
         if (!nativeFullscreen) {
-          const pos = await win.innerPosition();
+          // setPosition() 과 같은 기준(outer)으로 저장해야 재시작 때 위치가 밀리지 않습니다.
+          const pos = await win.outerPosition();
           const logicalPos = pos.toLogical(factor);
           appState.windowPosX = logicalPos.x;
           appState.windowPosY = logicalPos.y;

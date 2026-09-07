@@ -12,10 +12,17 @@
     TINY_NOTE_MIN_HEIGHT,
     TINY_NOTE_MIN_WIDTH,
     TINY_NOTE_ROLLED_HEIGHT,
+    clampTinyNoteSize,
     resolveTinyNoteExpandedHeight,
     resolveTinyNoteWidth,
     shouldPersistTinyNoteBounds,
   } from "../lib/tinyNoteWindow.js";
+  import { dragRegion } from "../lib/dragRegion.js";
+  import {
+    resolveAvailableToolWidth,
+    resolveVisibleToolCount,
+  } from "../lib/headerOverflow.js";
+  import { MoreHorizontal } from "lucide-svelte";
 
   // ✨ 안전한 윈도우 캡처용 지연 할당 변수 (초기화 오류 방지)
   let appWindow = null;
@@ -51,6 +58,26 @@
     return Number.isFinite(value) && value > -10000 && value < 20000;
   }
 
+  // 작업 표시줄을 제외한 화면 크기 (Logical). 값이 이상하면 클램프를 건너뜁니다.
+  function getWorkArea() {
+    const width = window.screen?.availWidth;
+    const height = window.screen?.availHeight;
+    return {
+      width: Number.isFinite(width) && width > 200 ? width : undefined,
+      height: Number.isFinite(height) && height > 200 ? height : undefined,
+    };
+  }
+
+  // 최대화된 창은 Windows가 setSize를 무시합니다.
+  // 크기를 되돌리기 전에 반드시 최대화를 먼저 풀어야 "커진 채로 남는" 증상이 사라집니다.
+  async function ensureNotMaximized() {
+    try {
+      if (await appWindow.isMaximized()) await appWindow.unmaximize();
+    } catch (_) {
+      // 권한이나 플랫폼 문제로 실패해도 복원 자체는 계속 진행합니다.
+    }
+  }
+
   async function setExpandedConstraints() {
     await appWindow.setResizable(true);
     await appWindow.setMaxSize(null);
@@ -58,11 +85,23 @@
   }
 
   async function rememberNormalBounds() {
+    // 전체화면이거나 최대화된 상태의 크기는 "정상 크기"가 아니므로 기억하지 않습니다.
+    // 왜: 이걸 저장해 버리면 전체화면을 풀었을 때 화면을 꽉 채운 크기로 되돌아옵니다.
+    try {
+      if ((await appWindow.isFullscreen()) || (await appWindow.isMaximized())) return;
+    } catch (_) {
+      // 상태를 못 읽으면 아래의 클램프에 맡깁니다.
+    }
+
     const factor = await appWindow.scaleFactor();
     const size = (await appWindow.innerSize()).toLogical(factor);
-    const position = (await appWindow.innerPosition()).toLogical(factor);
-    const width = resolveTinyNoteWidth(size.width, appState.windowWidth);
-    const height = resolveTinyNoteExpandedHeight(size.height, appState.previousHeight, appState.windowHeight);
+    // setPosition() 은 창의 "바깥(outer)" 좌표를 설정하므로 저장도 outerPosition() 으로 맞춥니다.
+    // 왜: 안쪽 좌표를 저장하고 바깥 좌표로 복원하면 전체화면을 켜고 끌 때마다
+    //     테두리 두께(약 7px)만큼 창이 계속 오른쪽 아래로 밀려납니다.
+    const position = (await appWindow.outerPosition()).toLogical(factor);
+    const rawWidth = resolveTinyNoteWidth(size.width, appState.windowWidth);
+    const rawHeight = resolveTinyNoteExpandedHeight(size.height, appState.previousHeight, appState.windowHeight);
+    const { width, height } = clampTinyNoteSize(rawWidth, rawHeight, getWorkArea());
 
     appState.windowWidth = width;
     appState.windowHeight = height;
@@ -72,14 +111,20 @@
   }
 
   async function restoreExpandedWindow({ restorePosition = false } = {}) {
+    // 최대화 상태에서는 setSize가 먹지 않으므로 가장 먼저 풀어 줍니다.
+    await ensureNotMaximized();
+
     const factor = await appWindow.scaleFactor();
     const currentSize = (await appWindow.innerSize()).toLogical(factor);
-    const width = resolveTinyNoteWidth(appState.windowWidth, currentSize.width);
-    const height = resolveTinyNoteExpandedHeight(
+    const rawWidth = resolveTinyNoteWidth(appState.windowWidth, currentSize.width);
+    const rawHeight = resolveTinyNoteExpandedHeight(
       appState.windowHeight,
       appState.previousHeight,
       currentSize.height,
     );
+
+    // 과거 경합으로 "최대화 크기"가 정상 크기로 저장된 창도 여기서 정상으로 되돌아옵니다.
+    const { width, height } = clampTinyNoteSize(rawWidth, rawHeight, getWorkArea());
 
     await setExpandedConstraints();
     await appWindow.setSize(new LogicalSize(width, height));
@@ -283,31 +328,51 @@
 
 
 
-  // 수동 클릭 간격 계산 대신 Svelte의 dblclick과 Tauri 네이티브 전체화면 API를 사용합니다.
-  // data-tauri-drag-region과 조합하면 드래그와 더블클릭이 서로 다른 상태를 건드리지 않습니다.
-  async function handleHeaderDoubleClick(e) {
-    if (e.target.closest('button')) return;
-    e.preventDefault();
-    e.stopPropagation();
+  // ═══════════════════════════════════════════════════════════════════
+  // 전체화면 전환 — 단일 상태 머신
+  //
+  // 더블클릭(타이틀바)과 전체화면 버튼이 "완전히 같은 함수 하나"만 호출합니다.
+  // 왜 하나로 합쳤는가: 예전에는 거의 같은 코드가 두 벌 있어서, 한쪽만 고치면
+  //   다른 쪽에 옛 동작이 남는 구조였습니다. 전환 경로가 하나면 상태가 갈릴 수 없습니다.
+  //
+  // 네이티브 자동 최대화와의 경합은 dragRegion 액션이 원천 차단합니다.
+  // (data-tauri-drag-region 의 internal_toggle_maximize 경로 제거)
+  // ═══════════════════════════════════════════════════════════════════
+  async function toggleFullscreen(e) {
+    if (e) {
+      e.preventDefault?.();
+      e.stopPropagation?.();
+    }
+    // 전환이 진행 중이면 즉시 무시합니다 (연타·중복 호출 방어).
     if (!appWindow || isProcessing) return;
-
     isProcessing = true;
+
     try {
+      // 화면에 실제로 적용된 네이티브 상태를 유일한 진실로 삼습니다.
+      // 저장된 appState.isFullscreen 이 어긋나 있어도 여기서 바로잡힙니다.
       const currentlyFullscreen = await appWindow.isFullscreen();
 
       if (!currentlyFullscreen) {
+        // ── 전체화면 진입 ──
         if (appState.isRolledUp) {
           // 편집기는 창 높이가 복구된 뒤 마운트되어야 0px 레이아웃으로 고정되지 않습니다.
           await restoreExpandedWindow();
           appState.isRolledUp = false;
         }
 
-        await rememberNormalBounds();
+        await rememberNormalBounds();   // 돌아올 크기·위치를 먼저 기억
+        await ensureNotMaximized();     // 최대화 잔재를 제거한 뒤 전체화면으로
         await setExpandedConstraints();
+        // 플래그를 네이티브 호출보다 "먼저" 세웁니다.
+        // 왜: 전체화면 전환으로 발생하는 onResized 이벤트가 도착했을 때
+        //     isFullscreen 이 아직 false 면 전체화면 크기(1920x1080)가
+        //     정상 창 크기로 저장될 수 있습니다. shouldPersistTinyNoteBounds 가
+        //     이 플래그로 저장을 막아 주므로 순서가 중요합니다.
         appState.isFullscreen = true;
         await appWindow.setFullscreen(true);
       } else {
-        // 네이티브 전체화면을 먼저 해제한 뒤 저장된 정상 크기와 위치를 확정 복원합니다.
+        // ── 전체화면 해제 ──
+        // 네이티브 전체화면을 먼저 끄고, 그 다음 저장된 정상 크기·위치를 확정 복원합니다.
         await appWindow.setFullscreen(false);
         await restoreExpandedWindow({ restorePosition: true });
         appState.isFullscreen = false;
@@ -315,12 +380,14 @@
 
       await appState.saveNow(false);
     } catch (err) {
+      // 실패했을 때는 추측하지 않고 네이티브 상태를 다시 읽어 화면과 동기화합니다.
       try {
         appState.isFullscreen = await appWindow.isFullscreen();
       } catch (_) {}
       console.warn("Tiny Note 전체화면 전환 오류:", err);
     } finally {
-      setTimeout(() => { isProcessing = false; }, 150);
+      // 창 전환 애니메이션이 끝난 뒤 잠금을 풀어 연타로 인한 중복 전환을 막습니다.
+      setTimeout(() => { isProcessing = false; }, 200);
     }
   }
 
@@ -330,11 +397,16 @@
       e.preventDefault();
       e.stopPropagation();
     }
-    if (!appWindow || isProcessing || appState.isFullscreen || await appWindow.isFullscreen()) return;
+    if (!appWindow || isProcessing) return;
+    // 잠금을 await 보다 먼저 겁니다.
+    // 왜: isFullscreen() 을 기다리는 사이에 두 번째 호출이 통과해 롤업이 두 번 실행될 수 있습니다.
     isProcessing = true;
     const rollingUp = !appState.isRolledUp;
 
     try {
+      // 전체화면 중에는 롤업하지 않습니다 (네이티브 상태를 기준으로 판단).
+      if (appState.isFullscreen || (await appWindow.isFullscreen())) return;
+
       if (rollingUp) {
         await rememberNormalBounds();
         appState.isRolledUp = true;
@@ -412,49 +484,142 @@
     await appWindow.minimize();
   }
 
-  // ✨ 전체화면 토글 버튼 핸들러
-  // handleHeaderDoubleClick과 동일한 검증된 로직을 재사용합니다.
-  // isProcessing 플래그로 중복 호출을 방지하여 안정성을 보장합니다.
-  async function handleFullscreen(e) {
-    if (e) { e.preventDefault(); e.stopPropagation(); }
-    if (!appWindow || isProcessing) return;
-
-    isProcessing = true;
-    try {
-      const currentlyFullscreen = await appWindow.isFullscreen();
-
-      if (!currentlyFullscreen) {
-        // 롤업 상태라면 먼저 창을 펼친 뒤 전체화면으로 진입합니다.
-        if (appState.isRolledUp) {
-          await restoreExpandedWindow();
-          appState.isRolledUp = false;
-        }
-        // 현재 정상 크기/위치를 기억해 둡니다 (전체화면 해제 시 복원용).
-        await rememberNormalBounds();
-        await setExpandedConstraints();
-        appState.isFullscreen = true;
-        await appWindow.setFullscreen(true);
-      } else {
-        // 네이티브 전체화면을 해제한 뒤 저장된 크기와 위치로 복원합니다.
-        await appWindow.setFullscreen(false);
-        await restoreExpandedWindow({ restorePosition: true });
-        appState.isFullscreen = false;
-      }
-
-      await appState.saveNow(false);
-    } catch (err) {
-      // 오류 발생 시 실제 네이티브 상태와 동기화합니다.
-      try { appState.isFullscreen = await appWindow.isFullscreen(); } catch (_) {}
-      console.warn("Tiny Note 전체화면 버튼 전환 오류:", err);
-    } finally {
-      setTimeout(() => { isProcessing = false; }, 150);
-    }
-  }
+  // 전체화면 버튼은 더블클릭과 완전히 같은 단일 상태 머신을 호출합니다.
+  const handleFullscreen = toggleFullscreen;
 
   async function handleClose() {
     await appWindow.close();
   }
+
+  // ═══════════════════════════════════════════════════════════════════
+  // 헤더 반응형 엔진 (docs/PRD-tiny-note-header.md)
+  //
+  // 헤더 폭이 모자라면 우선순위가 낮은 도구부터 "..." 메뉴로 접어 넣습니다.
+  // 왜 이런 구조인가: 버튼이 계속 추가되어 왔는데 헤더 폭은 고정이라,
+  //   어느 순간부터 기본 크기에서도 버튼이 잘리고 있었습니다.
+  //   개수가 늘어도 깨지지 않으려면 "폭에 맞춰 스스로 접는" 구조가 필요합니다.
+  // ═══════════════════════════════════════════════════════════════════
+
+  let headerEl = $state(null);
+  let isOverflowOpen = $state(false);
+  let isWindowFocused = $state(true);
+
+  // 초기 폭은 저장된 창 너비로 추정합니다.
+  // 왜: 0에서 시작하면 첫 프레임에 버튼이 전부 접혔다가 펼쳐지며 깜빡입니다.
+  let headerWidth = $state(Math.max(0, (appState.windowWidth ?? 250) - 12));
+
+  // 접기 대상 도구 — 배열 순서가 "헤더에 표시되는 좌우 순서" 입니다.
+  // 왜 표시 순서와 우선순위를 분리했는가: 버튼이 접혔다 펼쳐져도 좌우 위치가
+  //   그대로여야 사용자가 위치를 기억할 수 있기 때문입니다.
+  const TOOL_ORDER = ["pin", "theme", "rollup", "clear"];
+
+  // 남는 순서(앞일수록 끝까지 살아남음). 롤업은 Tiny Note 고유 기능이라 가장 오래 남깁니다.
+  const TOOL_PRIORITY = ["rollup", "pin", "theme", "clear"];
+
+  // 롤업 상태에서는 본문이 보이지 않으므로 롤업 해제 버튼만 남깁니다.
+  let activeTools = $derived(appState.isRolledUp ? ["rollup"] : TOOL_ORDER);
+
+  let visibleToolCount = $derived(
+    resolveVisibleToolCount({
+      availableWidth: resolveAvailableToolWidth(headerWidth),
+      toolCount: activeTools.length,
+    }),
+  );
+
+  // 우선순위 상위 N개만 헤더에 남기고 나머지는 "..." 으로 보냅니다.
+  let visibleToolIds = $derived(
+    new Set(
+      TOOL_PRIORITY.filter((id) => activeTools.includes(id)).slice(0, visibleToolCount),
+    ),
+  );
+
+  let headerTools = $derived(activeTools.filter((id) => visibleToolIds.has(id)));
+  let overflowTools = $derived(activeTools.filter((id) => !visibleToolIds.has(id)));
+
+  // 접힌 게 없으면 "..." 버튼 자체를 숨깁니다.
+  let hasOverflow = $derived(overflowTools.length > 0);
+
+  // 헤더 폭 관찰: 창 크기 변경과 DPI 변경을 모두 잡아냅니다.
+  $effect(() => {
+    if (!headerEl) return;
+    const observer = new ResizeObserver((entries) => {
+      const entry = entries[0];
+      if (entry) headerWidth = entry.contentRect.width;
+    });
+    observer.observe(headerEl);
+    return () => observer.disconnect();
+  });
+
+  // 접힌 메뉴가 열려 있는데 창이 넓어져 접을 게 없어지면 메뉴를 닫아 줍니다.
+  $effect(() => {
+    if (!hasOverflow && isOverflowOpen) isOverflowOpen = false;
+  });
+
+  // 창 활성 여부에 따라 버튼 진하기를 바꿔, 여러 개 띄웠을 때 지금 쓰는 창이 도드라지게 합니다.
+  $effect(() => {
+    if (!appWindow) return;
+    let unlisten = null;
+    let disposed = false;
+
+    appWindow
+      .onFocusChanged(({ payload: focused }) => {
+        isWindowFocused = focused;
+        if (!focused) isOverflowOpen = false;
+      })
+      .then((fn) => {
+        if (disposed) fn();
+        else unlisten = fn;
+      })
+      .catch(() => {});
+
+    return () => {
+      disposed = true;
+      if (unlisten) unlisten();
+    };
+  });
+
+  // 평소에는 은은하게, 헤더에 마우스를 올리면 또렷하게.
+  let toolIdleOpacity = $derived(isWindowFocused ? 0.45 : 0.25);
+
+  function toggleOverflow(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    isOverflowOpen = !isOverflowOpen;
+  }
+
+  function closeOverflow() {
+    isOverflowOpen = false;
+  }
+
+  // 메뉴에서 고른 항목을 실행한 뒤 메뉴를 닫습니다.
+  function runTool(id, e) {
+    closeOverflow();
+    if (id === "pin") handlePin();
+    else if (id === "theme") handleThemeCycle();
+    else if (id === "rollup") handleRollup(e);
+    else if (id === "clear") confirmDelete();
+  }
+
+  // 바깥 클릭 / Esc 로 닫기
+  function handleWindowPointerDown(e) {
+    if (!isOverflowOpen) return;
+    if (e.target instanceof Element && e.target.closest("[data-overflow-root]")) return;
+    closeOverflow();
+  }
+
+  function handleWindowKeyDown(e) {
+    if (e.key === "Escape" && isOverflowOpen) closeOverflow();
+  }
+
+  const TOOL_LABELS = {
+    pin: "항상 위",
+    theme: "테마 바꾸기",
+    rollup: "롤업/펼치기",
+    clear: "내용 비우기",
+  };
 </script>
+
+<svelte:window onpointerdown={handleWindowPointerDown} onkeydown={handleWindowKeyDown} />
 
 <div
   class="h-screen w-screen flex flex-col group overflow-hidden transition-colors duration-300 relative"
@@ -463,26 +628,33 @@
     color: {appState.isDarkMode ? '#e2e8f0' : '#4b5563'};
   "
 >
-  <!-- 타이틀바: 네이티브 드래그 영역 + 더블클릭 전체화면 토글 -->
+  <!-- ═══════════════════════════════════════════════════════════════
+       타이틀바 — 드래그 영역 + 더블클릭 전체화면 + 반응형 도구 모음
+       폭이 모자라면 우선순위가 낮은 도구부터 "..." 안으로 접힙니다.
+       docs/PRD-tiny-note-header.md
+       ═══════════════════════════════════════════════════════════════ -->
   <div
-    class="flex items-center justify-between px-1.5 h-[35px] shrink-0 w-full cursor-move select-none relative z-10"
+    bind:this={headerEl}
+    class="tiny-header flex items-center gap-1 px-1.5 h-[35px] shrink-0 w-full cursor-move select-none relative z-10"
     style="
       background-color: {tapeColor};
       background-image: {headerGradient};
       border-top: {headerBorderTop};
       box-shadow: {headerShadow};
+      --tool-idle-opacity: {toolIdleOpacity};
     "
-    data-tauri-drag-region
-    ondblclick={handleHeaderDoubleClick}
+    use:dragRegion={{ onDoubleClick: toggleFullscreen }}
     role="presentation"
   >
-    <!-- ✨ 좌측: 아카이브 아이콘(보관 버튼) + 제목 (항상 보임) -->
-    <div class="flex items-center gap-1.5 pointer-events-none">
+    <!-- 좌측: 아카이브 버튼(고정) + 제목 입력(가변) -->
+    <!-- 제목은 flex-1 로 두어, 창이 넓으면 길게 쓰고 좁으면 버튼에 자리를 양보합니다. -->
+    <div class="flex items-center gap-1 min-w-0 flex-1 overflow-hidden pointer-events-none">
       <button
-        class="cursor-pointer pointer-events-auto flex items-center justify-center p-1 rounded-md hover:bg-black/10 transition-colors ml-0.5 mt-[1px]"
+        class="tiny-tool shrink-0 cursor-pointer pointer-events-auto flex items-center justify-center rounded-md hover:bg-black/10"
         onpointerdown={(e) => e.stopPropagation()} ondblclick={(e) => e.stopPropagation()}
         onclick={(e) => { e.preventDefault(); e.stopPropagation(); handleArchive(); }}
         title="아카이빙하기"
+        aria-label="아카이빙하기"
       >
         <Archive size={14} class="text-amber-600" strokeWidth={2.2} />
       </button>
@@ -490,72 +662,132 @@
         type="text"
         bind:value={appState.title}
         oninput={() => appState.save()} maxlength="10"
-        class="pointer-events-auto bg-transparent border-none outline-none text-left text-[11px] font-semibold w-[80px]"
+        class="tiny-title pointer-events-auto bg-transparent border-none outline-none text-left text-[11px] font-semibold flex-1"
         style="color: {appState.isDarkMode ? 'rgba(255,255,255,0.95)' : 'rgba(0,0,0,0.85)'};"
         placeholder="Tiny Note..."
       />
     </div>
 
-    <!-- ✨ 우측: 호버 시 나타나는 도구들 + 닫기 버튼 -->
-    <div class="flex items-center gap-0.5 pointer-events-none">
-      <div class="flex items-center gap-0 opacity-0 invisible group-hover:visible group-hover:opacity-100 transition-opacity duration-200">
-        <button
-          class="cursor-pointer pointer-events-auto p-1 rounded-md transition-colors {appState.isPinned ? 'text-rose-500' : 'text-gray-500 hover:text-amber-600 hover:bg-black/5'}"
-          onpointerdown={(e) => e.stopPropagation()} ondblclick={(e) => e.stopPropagation()}
-          onclick={(e) => { e.preventDefault(); e.stopPropagation(); handlePin(); }}
-          title="항상 위"
-        >
-          <Pin size={12} class={appState.isPinned ? "fill-current tracking-tight" : ""} />
-        </button>
-        <button
-          class="cursor-pointer pointer-events-auto p-1 rounded-md text-gray-500 hover:text-amber-600 hover:bg-black/5 transition-colors"
-          onpointerdown={(e) => e.stopPropagation()} ondblclick={(e) => e.stopPropagation()}
-          onclick={(e) => { e.preventDefault(); e.stopPropagation(); handleThemeCycle(); }}
-          title="테마 변경"
-        >
-          <Palette size={12} />
-        </button>
+    <!-- 우측: 접기 대상 도구 + "..." + 창 제어 3종(절대 안 접힘) -->
+    <div class="flex items-center shrink-0 pointer-events-none" data-overflow-root>
+      {#each headerTools as id (id)}
+        {#if id === 'pin'}
+          <button
+            class="tiny-tool cursor-pointer pointer-events-auto rounded-md {appState.isPinned ? 'is-active text-rose-500' : 'text-gray-500 hover:text-amber-600'}"
+            onpointerdown={(e) => e.stopPropagation()} ondblclick={(e) => e.stopPropagation()}
+            onclick={(e) => { e.preventDefault(); e.stopPropagation(); handlePin(); }}
+            title="항상 위"
+            aria-label="항상 위"
+          >
+            <Pin size={12} class={appState.isPinned ? "fill-current" : ""} />
+          </button>
+        {:else if id === 'theme'}
+          <button
+            class="tiny-tool cursor-pointer pointer-events-auto rounded-md text-gray-500 hover:text-amber-600"
+            onpointerdown={(e) => e.stopPropagation()} ondblclick={(e) => e.stopPropagation()}
+            onclick={(e) => { e.preventDefault(); e.stopPropagation(); handleThemeCycle(); }}
+            title="테마 변경"
+            aria-label="테마 변경"
+          >
+            <Palette size={12} />
+          </button>
+        {:else if id === 'rollup'}
+          <button
+            class="tiny-tool cursor-pointer pointer-events-auto rounded-md text-gray-500 hover:text-amber-600 disabled:cursor-not-allowed disabled:opacity-40"
+            onpointerdown={(e) => e.stopPropagation()} ondblclick={(e) => e.stopPropagation()}
+            onclick={(e) => { e.preventDefault(); e.stopPropagation(); handleRollup(e); }}
+            disabled={appState.isFullscreen}
+            title={appState.isFullscreen ? '전체화면을 해제한 뒤 롤업할 수 있습니다' : '롤업/펼치기'}
+            aria-label={appState.isRolledUp ? 'Tiny Note 펼치기' : 'Tiny Note 롤업'}
+          >
+            {#if appState.isRolledUp}
+              <ChevronDown size={12} />
+            {:else}
+              <ChevronUp size={12} />
+            {/if}
+          </button>
+        {:else if id === 'clear'}
+          <button
+            class="tiny-tool cursor-pointer pointer-events-auto rounded-md text-gray-500 hover:text-red-500"
+            onpointerdown={(e) => e.stopPropagation()} ondblclick={(e) => e.stopPropagation()}
+            onclick={(e) => { e.preventDefault(); e.stopPropagation(); confirmDelete(); }}
+            title="내용 비우기"
+            aria-label="내용 비우기"
+          >
+            <Trash2 size={12} />
+          </button>
+        {/if}
+      {/each}
 
+      {#if hasOverflow}
+        <div class="relative pointer-events-none">
+          <button
+            class="tiny-tool cursor-pointer pointer-events-auto rounded-md text-gray-500 hover:text-amber-600 {isOverflowOpen ? 'is-active' : ''}"
+            onpointerdown={(e) => e.stopPropagation()} ondblclick={(e) => e.stopPropagation()}
+            onclick={toggleOverflow}
+            title="더 보기"
+            aria-label="도구 더 보기"
+            aria-expanded={isOverflowOpen}
+          >
+            <MoreHorizontal size={13} strokeWidth={2.5} />
+          </button>
 
-
-        <button
-          class="cursor-pointer pointer-events-auto p-1 rounded-md text-gray-500 hover:text-amber-600 hover:bg-black/5 transition-colors disabled:cursor-not-allowed disabled:opacity-40"
-          onpointerdown={(e) => e.stopPropagation()} ondblclick={(e) => e.stopPropagation()}
-          onclick={(e) => { e.preventDefault(); e.stopPropagation(); handleRollup(e); }}
-          disabled={appState.isFullscreen}
-          title={appState.isFullscreen ? '전체화면을 해제한 뒤 롤업할 수 있습니다' : '롤업/펼치기'}
-          aria-label={appState.isRolledUp ? 'Tiny Note 펼치기' : 'Tiny Note 롤업'}
-        >
-          {#if appState.isRolledUp}
-            <ChevronDown size={12} />
-          {:else}
-            <ChevronUp size={12} />
+          {#if isOverflowOpen}
+            <!-- 스티커가 톡 떨어지듯 등장합니다. 배경은 현재 노트의 테마 색을 따라갑니다. -->
+            <div
+              class="tiny-overflow-menu pointer-events-auto absolute right-0 top-[26px] min-w-[126px] rounded-xl border p-1 flex flex-col"
+              style="
+                background-color: {appState.isDarkMode ? 'rgba(30,30,36,0.97)' : 'rgba(255,255,255,0.97)'};
+                border-color: {appState.isDarkMode ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.08)'};
+                box-shadow: 0 8px 20px rgba(0,0,0,0.16), 0 0 0 3px {tapeColor};
+              "
+              onpointerdown={(e) => e.stopPropagation()}
+              ondblclick={(e) => e.stopPropagation()}
+              role="menu"
+              tabindex="-1"
+            >
+              {#each overflowTools as id (id)}
+                <button
+                  class="tiny-overflow-item flex items-center gap-2 w-full px-2 py-1.5 rounded-lg text-[11px] font-semibold text-left transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                  style="color: {appState.isDarkMode ? '#e2e8f0' : '#4b5563'};"
+                  onclick={(e) => { e.preventDefault(); e.stopPropagation(); runTool(id, e); }}
+                  disabled={id === 'rollup' && appState.isFullscreen}
+                  role="menuitem"
+                >
+                  {#if id === 'pin'}
+                    <Pin size={12} class="shrink-0 {appState.isPinned ? 'fill-current text-rose-500' : ''}" />
+                  {:else if id === 'theme'}
+                    <Palette size={12} class="shrink-0" />
+                  {:else if id === 'rollup'}
+                    {#if appState.isRolledUp}
+                      <ChevronDown size={12} class="shrink-0" />
+                    {:else}
+                      <ChevronUp size={12} class="shrink-0" />
+                    {/if}
+                  {:else if id === 'clear'}
+                    <Trash2 size={12} class="shrink-0 text-red-400" />
+                  {/if}
+                  <span class="truncate">{TOOL_LABELS[id]}</span>
+                </button>
+              {/each}
+            </div>
           {/if}
-        </button>
+        </div>
+      {/if}
 
-        <button
-          class="cursor-pointer pointer-events-auto p-1 rounded-md text-gray-500 hover:text-red-500 hover:bg-red-50 transition-colors"
-          onpointerdown={(e) => e.stopPropagation()} ondblclick={(e) => e.stopPropagation()}
-          onclick={(e) => { e.preventDefault(); e.stopPropagation(); confirmDelete(); }}
-          title="내용 비우기"
-        >
-          <Trash2 size={12} />
-        </button>
-      </div>
-
+      <!-- 창 제어 3종: OS 창 관습을 따라 절대 접히지 않습니다. -->
       <button
-        class="cursor-pointer pointer-events-auto p-1 rounded-md ml-0.5 opacity-0 invisible group-hover:visible group-hover:opacity-100 text-gray-500 hover:text-gray-800 hover:bg-black/5 transition-all duration-150"
+        class="tiny-tool cursor-pointer pointer-events-auto rounded-md ml-0.5 text-gray-500 hover:text-gray-800"
         onpointerdown={(e) => e.stopPropagation()} ondblclick={(e) => e.stopPropagation()}
         onclick={(e) => { e.preventDefault(); e.stopPropagation(); handleMinimize(); }}
         title="창 숨기기"
+        aria-label="창 숨기기"
       >
         <Minus size={13} strokeWidth={2.5} />
       </button>
 
-      <!-- ✨ 전체화면 토글 버튼: 최소화와 닫기 사이에 위치 -->
-      <!-- 전체화면 중에는 Minimize2(축소) 아이콘, 아닐 때는 Maximize2(확대) 아이콘을 표시합니다. -->
       <button
-        class="cursor-pointer pointer-events-auto p-1 rounded-md ml-0.5 opacity-0 invisible group-hover:visible group-hover:opacity-100 text-gray-500 hover:text-amber-600 hover:bg-black/5 transition-all duration-150"
+        class="tiny-tool cursor-pointer pointer-events-auto rounded-md text-gray-500 hover:text-amber-600"
         onpointerdown={(e) => e.stopPropagation()} ondblclick={(e) => e.stopPropagation()}
         onclick={(e) => handleFullscreen(e)}
         title={appState.isFullscreen ? '전체화면 해제' : '전체화면'}
@@ -569,10 +801,11 @@
       </button>
 
       <button
-        class="cursor-pointer pointer-events-auto p-1 rounded-md ml-0.5 opacity-0 invisible group-hover:visible group-hover:opacity-100 text-gray-500 hover:text-white hover:bg-red-500 transition-all duration-150"
+        class="tiny-tool tiny-close cursor-pointer pointer-events-auto rounded-md text-gray-500"
         onpointerdown={(e) => e.stopPropagation()} ondblclick={(e) => e.stopPropagation()}
         onclick={(e) => { e.preventDefault(); e.stopPropagation(); handleClose(); }}
         title="닫기"
+        aria-label="닫기"
       >
         <X size={13} strokeWidth={2.5} />
       </button>
@@ -614,3 +847,100 @@
     </div>
   {/if}
 </div>
+
+<style>
+  /* ── 헤더 도구 버튼 ─────────────────────────────────────────────
+     크기를 22x22px로 고정하는 이유:
+       headerOverflow.js 가 "몇 개를 펼칠 수 있는지"를 이 폭으로 계산합니다.
+       폭이 흔들리면 계산이 어긋나 버튼이 잘리거나 어색하게 남습니다. */
+  .tiny-tool {
+    width: 22px;
+    height: 22px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    /* 평소에는 은은하게. 헤더에 마우스를 올리면 또렷해집니다.
+       창이 비활성일 때는 더 흐려져, 여러 개 띄웠을 때 지금 쓰는 창이 도드라집니다. */
+    opacity: var(--tool-idle-opacity, 0.45);
+    transition:
+      opacity 150ms ease,
+      color 150ms ease,
+      background-color 150ms ease,
+      transform 150ms cubic-bezier(0.34, 1.56, 0.64, 1);
+  }
+
+  .tiny-header:hover .tiny-tool {
+    opacity: 1;
+  }
+
+  /* 켜져 있는 토글(핀 등)과 열려 있는 메뉴는 상태 표시이므로 항상 또렷합니다. */
+  .tiny-tool.is-active {
+    opacity: 1;
+  }
+
+  .tiny-tool:hover:not(:disabled) {
+    /* 살짝 떠오르는 느낌으로 아기자기하게 */
+    transform: translateY(-1px);
+    background-color: rgba(0, 0, 0, 0.06);
+  }
+
+  .tiny-tool:active:not(:disabled) {
+    transform: translateY(0) scale(0.92);
+  }
+
+  .tiny-close:hover:not(:disabled) {
+    background-color: #ef4444;
+    color: #ffffff;
+  }
+
+  /* ── 제목 입력창 ───────────────────────────────────────────────
+     고정 80px를 가변으로 바꿔, 창이 좁아지면 버튼에 자리를 양보합니다. */
+  .tiny-title {
+    /* 창이 아무리 좁아도 제목이 완전히 사라지지는 않도록 하한을 둡니다.
+       headerOverflow.js 는 좌측 영역을 72px로 잡고 계산하므로
+       (아카이브 22 + 간격 4 + 제목 28 = 54) 이 값이면 버튼을 밀어내지 않습니다. */
+    min-width: 28px;
+    text-overflow: ellipsis;
+  }
+
+  .tiny-title::placeholder {
+    opacity: 0.55;
+  }
+
+  /* ── "..." 접힘 메뉴 ───────────────────────────────────────────
+     스티커가 톡 떨어지듯 살짝 튀어오르며 등장합니다. */
+  .tiny-overflow-menu {
+    z-index: 99999;
+    transform-origin: top right;
+    animation: tiny-pop 180ms cubic-bezier(0.34, 1.56, 0.64, 1);
+  }
+
+  @keyframes tiny-pop {
+    from {
+      opacity: 0;
+      transform: scale(0.94) translateY(-4px);
+    }
+    to {
+      opacity: 1;
+      transform: scale(1) translateY(0);
+    }
+  }
+
+  .tiny-overflow-item:hover:not(:disabled) {
+    background-color: rgba(0, 0, 0, 0.06);
+  }
+
+  /* 애니메이션을 줄이도록 설정한 사용자는 존중합니다. */
+  @media (prefers-reduced-motion: reduce) {
+    .tiny-tool,
+    .tiny-overflow-menu {
+      transition: none;
+      animation: none;
+    }
+    .tiny-tool:hover:not(:disabled),
+    .tiny-tool:active:not(:disabled) {
+      transform: none;
+    }
+  }
+</style>

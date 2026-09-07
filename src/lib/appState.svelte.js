@@ -3,6 +3,7 @@ import { getCurrentWindow, primaryMonitor } from '@tauri-apps/api/window';
 import { WebviewWindow } from '@tauri-apps/api/webviewWindow';
 import { emit, listen } from '@tauri-apps/api/event';
 import { LogicalPosition } from '@tauri-apps/api/dpi';
+import { TINY_NOTE_MIN_WIDTH, TINY_NOTE_ROLLED_HEIGHT } from './tinyNoteWindow.js';
 
 let tauriStore = null;
 
@@ -646,7 +647,7 @@ async init() {
     const isValidPos = (v) => v !== null && v !== undefined && !isNaN(v) && typeof v === 'number';
     let winOpts = {
       url: "index.html", title: `Tiny Note ${targetLabel.split('-')[1]}`,
-      width: savedW, height: savedH, minWidth: 160, minHeight: isRolledUp ? 35 : 45,
+      width: savedW, height: savedH, minWidth: TINY_NOTE_MIN_WIDTH, minHeight: isRolledUp ? TINY_NOTE_ROLLED_HEIGHT : 45,
       transparent: false, decorations: false, alwaysOnTop: false,
       maximizable: false, visible: false
     };
@@ -738,7 +739,7 @@ async init() {
     // 윈도우 생성 (복원된 데이터가 담겨서 로드됨)
     const newWin = new WebviewWindow(emptyLabel, { 
       url: "index.html", title: `Tiny Note ${emptyLabel.split('-')[1]}`, 
-      width: 250, height: 280, minWidth: 160, minHeight: 45,
+      width: 250, height: 280, minWidth: TINY_NOTE_MIN_WIDTH, minHeight: 45,
       transparent: false, decorations: false, alwaysOnTop: false,
       maximizable: false, visible: false 
     });
