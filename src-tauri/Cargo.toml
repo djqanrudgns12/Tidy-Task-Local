@@ -1,6 +1,6 @@
 [package]
 name = "tidy_task"
-version = "4.5.0"
+version = "5.0.0"
 description = "여러분들의 소중한 업무를 기록해보세요!"
 authors = ["you"]
 license = ""

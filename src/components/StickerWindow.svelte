@@ -5,6 +5,7 @@
   import { LogicalSize, LogicalPosition, PhysicalPosition } from "@tauri-apps/api/dpi";
   import { Pin, Palette, ChevronUp, ChevronDown, Trash2, X, Minus, Archive, Maximize2, Minimize2 } from "lucide-svelte";
   import { appState } from "../lib/appState.svelte.js";
+  import { getTinyNoteTheme } from "../lib/themes.js";
   import NoteEditor from "./NoteEditor.svelte";
   import FloatingRTE from "./FloatingRTE.svelte";
   import { archiveState } from "../lib/archiveStore.svelte.js";
@@ -36,17 +37,8 @@
   let showCreationMessage = $state(true);
   let showArchiveMessage = $state(false);
 
-  const stickerThemeMap = {
-    white: { light: "#f8fafc", dark: "#1e293b", tapeLight: "rgba(0,0,0,0.04)", tapeDark: "rgba(255,255,255,0.06)" },
-    amber: { light: "#fef3c7", dark: "#78350f", tapeLight: "rgba(0,0,0,0.06)", tapeDark: "rgba(255,255,255,0.08)" },
-    blue:  { light: "#dbeafe", dark: "#1e3a8a", tapeLight: "rgba(0,0,0,0.05)", tapeDark: "rgba(255,255,255,0.08)" },
-    green: { light: "#dcfce7", dark: "#14532d", tapeLight: "rgba(0,0,0,0.06)", tapeDark: "rgba(255,255,255,0.08)" },
-    rose:  { light: "#ffe4e6", dark: "#881337", tapeLight: "rgba(0,0,0,0.05)", tapeDark: "rgba(255,255,255,0.08)" },
-    purple:{ light: "#f3e8ff", dark: "#4c1d95", tapeLight: "rgba(0,0,0,0.05)", tapeDark: "rgba(255,255,255,0.08)" },
-    slate: { light: "#f1f5f9", dark: "#334155", tapeLight: "rgba(0,0,0,0.05)", tapeDark: "rgba(255,255,255,0.08)" }
-  };
-  
-  let currentTheme = $derived(stickerThemeMap[appState.themeColor] || stickerThemeMap['amber']);
+  let currentThemeDefinition = $derived(getTinyNoteTheme(appState.themeColor));
+  let currentTheme = $derived(currentThemeDefinition.tinyNote);
   let bgColor = $derived(appState.isDarkMode ? currentTheme.dark : currentTheme.light);
   let tapeColor = $derived(appState.isDarkMode ? currentTheme.tapeDark : currentTheme.tapeLight);
 
@@ -298,32 +290,9 @@
     appState.save();
   }
 
-  // ✨ 테마 7+1종 강제 적용 및 다크모드 순환
+  // 테마 레지스트리의 Tiny Note 전용 순서와 다크 모드를 한 상태 머신으로 순환합니다.
   function handleThemeCycle() {
-    const themes = ['white', 'amber', 'blue', 'green', 'rose', 'purple', 'slate'];
-    
-    // 다크모드 상태에서 클릭 시 무조건 첫 번째 라이트 모드로 복귀 (사이클 루프 시작)
-    if (appState.isDarkMode) {
-      appState.themeColor = themes[0];
-      appState.isDarkMode = false;
-      appState.saveNow();
-      return;
-    }
-
-    let idx = themes.indexOf(appState.themeColor);
-    
-    if (idx === -1) {
-      // 명단에 없는 이상한 테마일 경우 기본 첫 번째(white)로 강제 복원
-      appState.themeColor = themes[0];
-      appState.isDarkMode = false;
-    } else if (idx === themes.length - 1) {
-      // 7번째 색상(slate) 클릭 시: 색상은 유지하고 다크모드만 발동
-      appState.isDarkMode = true;
-    } else {
-      // 일반적인 순서대로 다음 색상으로 변경
-      appState.themeColor = themes[idx + 1];
-    }
-    appState.saveNow();
+    appState.cycleTinyNoteTheme();
   }
 
 
@@ -611,11 +580,22 @@
     if (e.key === "Escape" && isOverflowOpen) closeOverflow();
   }
 
+  // 툴팁·접근성용 전체 라벨
   const TOOL_LABELS = {
     pin: "항상 위",
     theme: "테마 바꾸기",
     rollup: "롤업/펼치기",
     clear: "내용 비우기",
+  };
+
+  // 한 줄 도구 바에 표시할 짧은 라벨.
+  // 왜 따로 두는가: 창이 200px까지 좁아질 수 있어, 긴 라벨은 말줄임으로 잘려 지저분해집니다.
+  //   짧은 라벨이면 최대 3개가 나란히 놓여도 잘리지 않습니다.
+  const TOOL_SHORT_LABELS = {
+    pin: "항상 위",
+    theme: "테마",
+    rollup: "롤업",
+    clear: "비우기",
   };
 </script>
 
@@ -686,8 +666,8 @@
             class="tiny-tool cursor-pointer pointer-events-auto rounded-md text-gray-500 hover:text-amber-600"
             onpointerdown={(e) => e.stopPropagation()} ondblclick={(e) => e.stopPropagation()}
             onclick={(e) => { e.preventDefault(); e.stopPropagation(); handleThemeCycle(); }}
-            title="테마 변경"
-            aria-label="테마 변경"
+            title={`테마 변경 · ${currentThemeDefinition.label}`}
+            aria-label={`테마 변경, 현재 ${currentThemeDefinition.label}`}
           >
             <Palette size={12} />
           </button>
@@ -720,59 +700,16 @@
       {/each}
 
       {#if hasOverflow}
-        <div class="relative pointer-events-none">
-          <button
-            class="tiny-tool cursor-pointer pointer-events-auto rounded-md text-gray-500 hover:text-amber-600 {isOverflowOpen ? 'is-active' : ''}"
-            onpointerdown={(e) => e.stopPropagation()} ondblclick={(e) => e.stopPropagation()}
-            onclick={toggleOverflow}
-            title="더 보기"
-            aria-label="도구 더 보기"
-            aria-expanded={isOverflowOpen}
-          >
-            <MoreHorizontal size={13} strokeWidth={2.5} />
-          </button>
-
-          {#if isOverflowOpen}
-            <!-- 스티커가 톡 떨어지듯 등장합니다. 배경은 현재 노트의 테마 색을 따라갑니다. -->
-            <div
-              class="tiny-overflow-menu pointer-events-auto absolute right-0 top-[26px] min-w-[126px] rounded-xl border p-1 flex flex-col"
-              style="
-                background-color: {appState.isDarkMode ? 'rgba(30,30,36,0.97)' : 'rgba(255,255,255,0.97)'};
-                border-color: {appState.isDarkMode ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.08)'};
-                box-shadow: 0 8px 20px rgba(0,0,0,0.16), 0 0 0 3px {tapeColor};
-              "
-              onpointerdown={(e) => e.stopPropagation()}
-              ondblclick={(e) => e.stopPropagation()}
-              role="menu"
-              tabindex="-1"
-            >
-              {#each overflowTools as id (id)}
-                <button
-                  class="tiny-overflow-item flex items-center gap-2 w-full px-2 py-1.5 rounded-lg text-[11px] font-semibold text-left transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-                  style="color: {appState.isDarkMode ? '#e2e8f0' : '#4b5563'};"
-                  onclick={(e) => { e.preventDefault(); e.stopPropagation(); runTool(id, e); }}
-                  disabled={id === 'rollup' && appState.isFullscreen}
-                  role="menuitem"
-                >
-                  {#if id === 'pin'}
-                    <Pin size={12} class="shrink-0 {appState.isPinned ? 'fill-current text-rose-500' : ''}" />
-                  {:else if id === 'theme'}
-                    <Palette size={12} class="shrink-0" />
-                  {:else if id === 'rollup'}
-                    {#if appState.isRolledUp}
-                      <ChevronDown size={12} class="shrink-0" />
-                    {:else}
-                      <ChevronUp size={12} class="shrink-0" />
-                    {/if}
-                  {:else if id === 'clear'}
-                    <Trash2 size={12} class="shrink-0 text-red-400" />
-                  {/if}
-                  <span class="truncate">{TOOL_LABELS[id]}</span>
-                </button>
-              {/each}
-            </div>
-          {/if}
-        </div>
+        <button
+          class="tiny-tool cursor-pointer pointer-events-auto rounded-md text-gray-500 hover:text-amber-600 {isOverflowOpen ? 'is-active' : ''}"
+          onpointerdown={(e) => e.stopPropagation()} ondblclick={(e) => e.stopPropagation()}
+          onclick={toggleOverflow}
+          title={isOverflowOpen ? '도구 접기' : '도구 더 보기'}
+          aria-label={isOverflowOpen ? '도구 접기' : '도구 더 보기'}
+          aria-expanded={isOverflowOpen}
+        >
+          <MoreHorizontal size={13} strokeWidth={2.5} />
+        </button>
       {/if}
 
       <!-- 창 제어 3종: OS 창 관습을 따라 절대 접히지 않습니다. -->
@@ -811,6 +748,57 @@
       </button>
     </div>
   </div>
+
+  <!-- ═══════════════════════════════════════════════════════════════
+       접힌 도구 — 헤더 아래 "한 줄"로 펼칩니다.
+       왜 떠 있는 드롭다운이 아닌가:
+         Tiny Note는 250x280 정도의 작은 창입니다. 세로 드롭다운(4항목 약 130px)은
+         본문의 절반을 덮어버려서, 메모를 보면서 도구를 쓰는 게 불가능했습니다.
+         헤더가 한 줄 늘어나는 형태로 바꾸면 본문이 아래로 밀릴 뿐 가려지지 않고,
+         원래 헤더에 있던 버튼들이라 "헤더의 연장"으로 자연스럽게 읽힙니다.
+       ═══════════════════════════════════════════════════════════════ -->
+  {#if isOverflowOpen && hasOverflow && !appState.isRolledUp}
+    <div
+      class="tiny-overflow-bar shrink-0 flex items-stretch gap-0.5 px-1.5 py-1 border-b"
+      style="
+        background-color: {tapeColor};
+        border-bottom-color: {appState.isDarkMode ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)'};
+      "
+      transition:slide={{ duration: 180, axis: 'y' }}
+      data-overflow-root
+      role="toolbar"
+      aria-label="추가 도구"
+      tabindex="-1"
+    >
+      {#each overflowTools as id (id)}
+        <button
+          class="tiny-bar-item flex items-center justify-center gap-1 flex-1 min-w-0 px-1 py-1 rounded-lg text-[10px] font-bold disabled:opacity-40 disabled:cursor-not-allowed"
+          style="color: {appState.isDarkMode ? '#e2e8f0' : '#4b5563'};"
+          onpointerdown={(e) => e.stopPropagation()}
+          ondblclick={(e) => e.stopPropagation()}
+          onclick={(e) => { e.preventDefault(); e.stopPropagation(); runTool(id, e); }}
+          disabled={id === 'rollup' && appState.isFullscreen}
+          title={TOOL_LABELS[id]}
+          aria-label={TOOL_LABELS[id]}
+        >
+          {#if id === 'pin'}
+            <Pin size={12} class="shrink-0 {appState.isPinned ? 'fill-current text-rose-500' : ''}" />
+          {:else if id === 'theme'}
+            <Palette size={12} class="shrink-0" />
+          {:else if id === 'rollup'}
+            {#if appState.isRolledUp}
+              <ChevronDown size={12} class="shrink-0" />
+            {:else}
+              <ChevronUp size={12} class="shrink-0" />
+            {/if}
+          {:else if id === 'clear'}
+            <Trash2 size={12} class="shrink-0 text-red-400" />
+          {/if}
+          <span class="truncate">{TOOL_SHORT_LABELS[id]}</span>
+        </button>
+      {/each}
+    </div>
+  {/if}
 
   <!-- ✨ 메인 에디터 영역 (롤업 시에는 숨김 처리) -->
   {#if !appState.isRolledUp}
@@ -908,38 +896,40 @@
     opacity: 0.55;
   }
 
-  /* ── "..." 접힘 메뉴 ───────────────────────────────────────────
-     스티커가 톡 떨어지듯 살짝 튀어오르며 등장합니다. */
-  .tiny-overflow-menu {
-    z-index: 99999;
-    transform-origin: top right;
-    animation: tiny-pop 180ms cubic-bezier(0.34, 1.56, 0.64, 1);
+  /* ── "..." 접힘 도구 바 ────────────────────────────────────────
+     헤더 아래에 한 줄로 펼쳐지는 띠. 본문을 덮지 않고 밀어냅니다. */
+  .tiny-overflow-bar {
+    /* 헤더와 같은 톤을 쓰되 살짝 눌러, 헤더가 한 칸 늘어난 것처럼 보이게 합니다. */
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.25);
   }
 
-  @keyframes tiny-pop {
-    from {
-      opacity: 0;
-      transform: scale(0.94) translateY(-4px);
-    }
-    to {
-      opacity: 1;
-      transform: scale(1) translateY(0);
-    }
+  .tiny-bar-item {
+    /* 스티커가 톡 떨어지듯 살짝 튀는 반응 */
+    transition:
+      background-color 150ms ease,
+      transform 150ms cubic-bezier(0.34, 1.56, 0.64, 1);
   }
 
-  .tiny-overflow-item:hover:not(:disabled) {
-    background-color: rgba(0, 0, 0, 0.06);
+  .tiny-bar-item:hover:not(:disabled) {
+    background-color: rgba(0, 0, 0, 0.07);
+    transform: translateY(-1px);
+  }
+
+  .tiny-bar-item:active:not(:disabled) {
+    transform: translateY(0) scale(0.94);
   }
 
   /* 애니메이션을 줄이도록 설정한 사용자는 존중합니다. */
   @media (prefers-reduced-motion: reduce) {
     .tiny-tool,
-    .tiny-overflow-menu {
+    .tiny-bar-item {
       transition: none;
       animation: none;
     }
     .tiny-tool:hover:not(:disabled),
-    .tiny-tool:active:not(:disabled) {
+    .tiny-tool:active:not(:disabled),
+    .tiny-bar-item:hover:not(:disabled),
+    .tiny-bar-item:active:not(:disabled) {
       transform: none;
     }
   }

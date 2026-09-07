@@ -4,6 +4,7 @@
   import { getCurrentWindow } from '@tauri-apps/api/window';
   import { emit, emitTo } from '@tauri-apps/api/event';
   import { LogicalPosition, LogicalSize } from "@tauri-apps/api/dpi";
+  import { getThemeAccent, getTidyTheme } from '../lib/themes.js';
 
   let { isStandalone = false } = $props();
 
@@ -93,24 +94,13 @@
     }
   }
 
-  // ── 색상 매핑 ──────────────────────────────────────────────────────────────
-  const themeColorMap = {
-    white: { bg: "#ffffff", border: "#e5e7eb", text: "#374151", accent: "#d97706" },
-    amber: { bg: "#fdfaf3", border: "#e8ddb7", text: "#374151", accent: "#d97706" },
-    blue:  { bg: "#f0f7ff", border: "#c4e1f6", text: "#374151", accent: "#3b82f6" },
-    green: { bg: "#f2fbf5", border: "#c7ecd5", text: "#374151", accent: "#16a34a" },
-    rose:  { bg: "#fff7f8", border: "#f2c9d1", text: "#374151", accent: "#e11d48" },
-    purple:{ bg: "#f9f7ff", border: "#ddd3f5", text: "#374151", accent: "#7c3aed" },
-    slate: { bg: "#f8fafc", border: "#dce3ea", text: "#374151", accent: "#475569" },
-  };
-
   function bg() { 
     if (config.isDarkMode) return '#1e2028';
-    return (themeColorMap[config.themeColor] || themeColorMap.amber).bg;
+    return getTidyTheme(config.themeColor).tidy.bg;
   }
-  function border() { return config.isDarkMode ? 'rgba(255,255,255,0.08)' : (themeColorMap[config.themeColor] || themeColorMap.amber).border; }
+  function border() { return config.isDarkMode ? 'rgba(255,255,255,0.08)' : getTidyTheme(config.themeColor).tidy.border; }
   function textC()  { return config.isDarkMode ? '#d1d5db'              : '#374151'; }
-  function accent() { return config.isDarkMode ? '#f59e0b'              : (themeColorMap[config.themeColor] || themeColorMap.amber).accent; }
+  function accent() { return getThemeAccent(config.themeColor, config.isDarkMode); }
   function sepC()   { return config.isDarkMode ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.08)'; }
 </script>
 

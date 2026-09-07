@@ -11,6 +11,7 @@
   import { archiveState } from "../lib/archiveStore.svelte.js";
   import { editable } from "../lib/editable.js";
   import { clampFontSizeHtml, STABLE_MAX_PT } from "../lib/fontSize.js";
+  import { TINY_NOTE_THEMES, getTinyNoteTheme } from "../lib/themes.js";
   import ArchiveToolbar from "./ArchiveToolbar.svelte";
   // ✨ [Compatibility] appState를 import하지 않습니다.
   // 아카이브 창에서 appState.init()이 호출되면 windowLabel="archive"로 세팅되어
@@ -32,20 +33,21 @@
     return (temp.innerText || temp.textContent || '').trim();
   }
 
-  // 아카이브 전용 컬러 팔레트 (테마 이름에 매칭)
-  const themeColorsLight = {
-    white: "#ffffff", amber: "#fef3c7", blue: "#dbeafe",
-    green: "#dcfce7", rose: "#ffe4e6", purple: "#f3e8ff", slate: "#f1f5f9"
-  };
-  const themeColorsDark = {
-    white: "#2d333b", amber: "#78350f", blue: "#1e3a8a",
-    green: "#14532d", rose: "#881337", purple: "#4c1d95", slate: "#1e293b"
-  };
-  let currentThemeColors = $derived(archiveState.globalSettings.isDarkMode ? themeColorsDark : themeColorsLight);
+  let currentThemeColors = $derived(Object.fromEntries(
+    TINY_NOTE_THEMES.map((theme) => [
+      theme.id,
+      archiveState.globalSettings.isDarkMode ? theme.tinyNote.dark : theme.tinyNote.light,
+    ]),
+  ));
 
   // 카드 배경색(테마 색상) — 접힘 페이드 그라데이션이 카드 배경으로 자연스럽게 녹아들도록 사용
   function cardBg(note) {
-    return currentThemeColors[note.themeColor] || currentThemeColors.amber;
+    const theme = getTinyNoteTheme(note.themeColor);
+    return archiveState.globalSettings.isDarkMode ? theme.tinyNote.dark : theme.tinyNote.light;
+  }
+
+  function themeLabel(themeId) {
+    return getTinyNoteTheme(themeId).label;
   }
 
   // 아카이브 내부 토스트 (앱 전체 토스트 시스템과 독립)
@@ -582,13 +584,14 @@
         <!-- 테마 색상 팔레트 -->
         <div>
           <span class="text-[11px] font-bold block mb-1.5 opacity-70">테마 색상</span>
-          <div class="flex gap-2 justify-center">
+          <div class="grid grid-cols-5 gap-2 place-items-center">
             {#each Object.entries(currentThemeColors) as [colorKey, colorHex]}
               <button 
                 onclick={() => addThemeColor = colorKey}
                 class="w-6 h-6 rounded-full border-2 transition-transform hover:scale-110 {addThemeColor === colorKey ? 'scale-110 shadow-sm border-black/30' : 'border-black/5'}"
                 style="background-color: {colorHex};"
-                title={colorKey}
+                title={themeLabel(colorKey)}
+                aria-label={themeLabel(colorKey)}
               >
                 {#if addThemeColor === colorKey}
                   <div class="w-full h-full flex items-center justify-center text-black/50">
@@ -923,8 +926,8 @@
                         onclick={() => setNoteColor(note.id, colorKey)}
                         class="w-5 h-5 rounded-full border-2 transition-transform hover:scale-110 {note.themeColor === colorKey ? 'border-black/40' : 'border-black/5'}"
                         style="background-color: {colorHex};"
-                        title={colorKey}
-                        aria-label={colorKey}
+                         title={themeLabel(colorKey)}
+                         aria-label={themeLabel(colorKey)}
                       ></button>
                     {/each}
                   </div>
@@ -1076,8 +1079,8 @@
                             onclick={() => setNoteColor(note.id, colorKey)}
                             class="w-5 h-5 rounded-full border-2 transition-transform hover:scale-110 {note.themeColor === colorKey ? 'border-black/40' : 'border-black/5'}"
                             style="background-color: {colorHex};"
-                            title={colorKey}
-                            aria-label={colorKey}
+                             title={themeLabel(colorKey)}
+                             aria-label={themeLabel(colorKey)}
                           ></button>
                         {/each}
                       </div>

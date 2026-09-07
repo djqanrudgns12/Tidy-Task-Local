@@ -4461,7 +4461,7 @@ dependencies = [
 
 [[package]]
 name = "tidy_task"
-version = "4.5.0"
+version = "5.0.0"
 dependencies = [
  "log",
  "serde",

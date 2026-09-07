@@ -5,6 +5,8 @@
   import { getCurrentWindow } from '@tauri-apps/api/window';
   import { emitTo, listen, emit } from '@tauri-apps/api/event';
   import { onMount, onDestroy } from 'svelte';
+  import ThemePicker from './ThemePicker.svelte';
+  import { getTidyTheme } from '../lib/themes.js';
 
   let targetLabel = 'main';
   let unlistenTarget;
@@ -27,17 +29,6 @@
   
   let showResetDataConfirm = $state(false);
   let showResetConfigConfirm = $state(false);
-
-  // ✨ [디자인 보완] 설정창 모달 배경색 반영을 위한 컬러맵 동기화
-  const themeColorMap = {
-    white:  { bg: "#ffffff", section: "#f4f5f7", border: "#e5e7eb" },
-    amber:  { bg: "#fdfaf3", section: "#f4ebce", border: "#e8ddb7" },
-    blue:   { bg: "#f0f7ff", section: "#dceefb", border: "#c4e1f6" },
-    green:  { bg: "#f2fbf5", section: "#e0f5e7", border: "#c7ecd5" },
-    rose:   { bg: "#fff7f8", section: "#fae3e7", border: "#f2c9d1" },
-    purple: { bg: "#f9f7ff", section: "#ede7fa", border: "#ddd3f5" },
-    slate:  { bg: "#f8fafc", section: "#eef2f6", border: "#dce3ea" }
-  };
 
   onMount(async () => {
     // ✨ 1. 무전을 받으면 타겟 이름과 그 창의 최신 설정값으로 화면을 덮어씁니다!
@@ -134,11 +125,16 @@
   });
 </script>
 
-<div class="h-screen w-screen flex items-center justify-center p-1" style="font-family: {localUiFontFamily}; font-size: {localUiFontSize}pt;">
+<!-- 루트에 여백을 두지 않습니다.
+     왜: p-1(4px)을 주면 창 가장자리에 4px 투명 띠가 생기는데,
+       이 창은 transparent:true 라서 그 띠로 뒤 화면이 그대로 비칩니다.
+       둥근 모서리와 맞물려 네 귀퉁이에 각진 잔재처럼 보이던 원인입니다.
+       메인 창처럼 배경 컨테이너가 창을 꽉 채우도록 맞췄습니다. -->
+<div class="h-screen w-screen flex" style="font-family: {localUiFontFamily}; font-size: {localUiFontSize}pt;">
   <div
     class="w-full h-full rounded-xl shadow-2xl flex flex-col overflow-hidden border relative transition-colors duration-300"
     style="
-      background-color: {localIsDarkMode ? '#232530' : (themeColorMap[localThemeColor]?.bg || '#ffffff')}; 
+      background-color: {localIsDarkMode ? '#232530' : getTidyTheme(localThemeColor).tidy.bg};
       border-color: {localIsDarkMode ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.08)'}; 
       color: {localIsDarkMode ? '#e2e8f0' : '#1f2937'};
     "
@@ -167,19 +163,7 @@
           테마 색상
         </label>
         <div class="pl-[34px] mt-2">
-          <select
-            bind:value={localThemeColor}
-            class="w-full border rounded-lg py-2.5 px-2 text-[0.85em] font-bold outline-none cursor-pointer transition-colors duration-300" 
-            style="background-color: {localIsDarkMode ? '#2d303e' : '#ffffff'}; border-color: {localIsDarkMode ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)'}; color: {localIsDarkMode ? '#e2e8f0' : '#1f2937'};"
-          >
-            <option value="white" style="background-color: #ffffff;" class="text-gray-900">⬜ 퓨어 프로스트 (화이트)</option>
-            <option value="amber" style="background-color: #fdfaf3;" class="text-gray-900">🟨 샴페인 앰버</option>
-            <option value="blue" style="background-color: #f0f7ff;" class="text-gray-900">🟦 노르딕 블루</option>
-            <option value="green" style="background-color: #f2fbf5;" class="text-gray-900">🟩 세이지 가든</option>
-            <option value="rose" style="background-color: #fff7f8;" class="text-gray-900">🌸 더스티 로즈</option>
-            <option value="purple" style="background-color: #f9f7ff;" class="text-gray-900">💜 라벤더 미스트</option>
-            <option value="slate" style="background-color: #f8fafc;" class="text-gray-900">☁️ 클라우디 슬레이트</option>
-          </select>
+          <ThemePicker bind:value={localThemeColor} isDarkMode={localIsDarkMode} />
         </div>
       </div>
 

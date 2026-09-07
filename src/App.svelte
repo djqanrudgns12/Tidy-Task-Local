@@ -4,6 +4,7 @@
   import { Check, Eraser } from "lucide-svelte";
   import { appState } from "./lib/appState.svelte.js";
   import { TINY_NOTE_MIN_WIDTH, TINY_NOTE_ROLLED_HEIGHT } from "./lib/tinyNoteWindow.js";
+  import { getTidyTheme } from "./lib/themes.js";
 
   import Titlebar from "./components/Titlebar.svelte";
   import MainToolbar from "./components/MainToolbar.svelte";
@@ -453,17 +454,6 @@
     }
   }
 
-  // ─── 기존 테마, 렌더링, 이벤트 로직들 (손상 없이 100% 유지) ───
-  const themeColorMap = {
-    white: { bg: "#ffffff", section: "#f4f5f7", border: "#e5e7eb" }, 
-    amber: { bg: "#fdfaf3", section: "#f4ebce", border: "#e8ddb7" }, 
-    blue: { bg: "#f0f7ff", section: "#dceefb", border: "#c4e1f6" }, 
-    green: { bg: "#f2fbf5", section: "#e0f5e7", border: "#c7ecd5" }, 
-    rose: { bg: "#fff7f8", section: "#fae3e7", border: "#f2c9d1" }, 
-    purple: { bg: "#f9f7ff", section: "#ede7fa", border: "#ddd3f5" }, 
-    slate: { bg: "#f8fafc", section: "#eef2f6", border: "#dce3ea" }, 
-  };
-
   function applyCSSVars() {
     const root = document.documentElement;
 
@@ -484,7 +474,7 @@
     root.style.setProperty("--ui-font-size", `${appState.uiFontSize || 10}pt`);
     root.style.setProperty("--global-letter-spacing", `${appState.letterSpacing ?? 0}em`);
 
-    const theme = themeColorMap[appState.themeColor] || themeColorMap.amber;
+    const theme = getTidyTheme(appState.themeColor).tidy;
     if (!appState.isDarkMode) {
       root.style.setProperty("--global-theme-color", theme.bg);
       root.style.setProperty("--global-section-bg", theme.section);
@@ -1553,7 +1543,7 @@
           style="
             background-color: {appState.isDarkMode
             ? '#252830'
-            : themeColorMap[appState.themeColor]?.bg || '#ffffff'};
+            : getTidyTheme(appState.themeColor).tidy.bg};
             border-color: {appState.isDarkMode
             ? 'rgba(255,255,255,0.1)'
             : 'rgba(0,0,0,0.08)'};

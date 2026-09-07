@@ -13,6 +13,7 @@
   } from "lucide-svelte";
   import { getCurrentWindow } from "@tauri-apps/api/window";
   import { listen, emit } from "@tauri-apps/api/event";
+  import { getThemeAccent, getTidyTheme } from "../lib/themes.js";
 
   let isDarkMode = $state(false);
   let uiFontFamily = $state('"Gulim", sans-serif');
@@ -102,24 +103,8 @@
     reminderTitle = e.target.innerText;
     emit("update-reminder-title", { title: reminderTitle });
   }
-  const themeColorMap = {
-    white: { bg: "#ffffff", section: "#f4f5f7", border: "#e5e7eb" },
-    amber: { bg: "#fdfaf3", section: "#f4ebce", border: "#e8ddb7" },
-    blue: { bg: "#f0f7ff", section: "#dceefb", border: "#c4e1f6" },
-    green: { bg: "#f2fbf5", section: "#e0f5e7", border: "#c7ecd5" },
-    rose: { bg: "#fff7f8", section: "#fae3e7", border: "#f2c9d1" },
-    purple: { bg: "#f9f7ff", section: "#ede7fa", border: "#ddd3f5" },
-    slate: { bg: "#f8fafc", section: "#eef2f6", border: "#dce3ea" },
-  };
-
-  // ✨ 테마별 accent color를 반환하는 헬퍼 (Tidy Task의 appState.getThemeAccentColor()와 동일 로직)
-  // 왜: ReminderPopup은 appState에 접근하지 못하므로, themeColor 값에서 직접 계산합니다.
   function getAccentColor() {
-    const accentMap = {
-      white: '#6b7280', amber: '#d97706', blue: '#2563eb',
-      green: '#16a34a', rose: '#e11d48', purple: '#7c3aed', slate: '#475569'
-    };
-    return accentMap[themeColor] || '#d97706';
+    return getThemeAccent(themeColor, isDarkMode);
   }
 
   // ✨ 통합 리마인더 기한 뱃지 색상 로직
@@ -161,10 +146,10 @@
   style="
     background-color: {isDarkMode
     ? '#1e2028'
-    : themeColorMap[themeColor]?.bg || '#ffffff'};
+    : getTidyTheme(themeColor).tidy.bg};
     border-color: {isDarkMode
     ? 'rgba(255,255,255,0.1)'
-    : themeColorMap[themeColor]?.border || 'rgba(0,0,0,0.08)'};
+    : getTidyTheme(themeColor).tidy.border};
     font-family: {uiFontFamily};
     font-size: {uiFontSize}pt;
     letter-spacing: {letterSpacing}em;
@@ -178,7 +163,7 @@
       ? 'rgba(255,255,255,0.05)'
       : 'rgba(0,0,0,0.03)'}; background-color: {isDarkMode
       ? 'rgba(0,0,0,0.2)'
-      : themeColorMap[themeColor]?.section || '#fef3c7'};"
+      : getTidyTheme(themeColor).tidy.section};"
   >
     <div class="flex items-center gap-2 overflow-hidden pointer-events-none">
       <div

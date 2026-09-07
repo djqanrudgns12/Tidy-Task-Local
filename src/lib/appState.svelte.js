@@ -4,6 +4,7 @@ import { WebviewWindow } from '@tauri-apps/api/webviewWindow';
 import { emit, listen } from '@tauri-apps/api/event';
 import { LogicalPosition } from '@tauri-apps/api/dpi';
 import { TINY_NOTE_MIN_WIDTH, TINY_NOTE_ROLLED_HEIGHT } from './tinyNoteWindow.js';
+import { getThemeAccent, isTinyNoteDarkTheme, nextTinyNoteThemeState, normalizeThemeId } from './themes.js';
 
 let tauriStore = null;
 
@@ -165,18 +166,7 @@ export class AppState {
   // Svelte 5 컴파일러의 $state() 매크로 변환과 충돌하여 런타임 에러를 유발할 수 있습니다.
   getThemeAccentColor() {
     try {
-      const theme = this.themeColor || 'amber';
-      const dark = this.isDarkMode || false;
-      const colors = {
-        slate: dark ? '#94a3b8' : '#475569',
-        white: dark ? '#94a3b8' : '#475569',
-        amber: dark ? '#fbbf24' : '#d97706',
-        blue: dark ? '#60a5fa' : '#2563eb',
-        green: dark ? '#34d399' : '#059669',
-        rose: dark ? '#fb7185' : '#e11d48',
-        purple: dark ? '#a78bfa' : '#7c3aed'
-      };
-      return colors[theme] || (dark ? '#fbbf24' : '#d97706');
+      return getThemeAccent(this.themeColor, this.isDarkMode);
     } catch(e) {
       return '#d97706';
     }
@@ -359,7 +349,10 @@ async init() {
       if (this.todos.length > 0 || this.archivedTodos.length > 0 || (this.notes || '').trim().length > 0) {
         this._everHadContent = true;
       }
-      this.themeColor = winData.themeColor || 'amber';
+      this.themeColor = normalizeThemeId(
+        winData.themeColor,
+        this.windowLabel.startsWith('tinynote-') ? 'tiny-note' : 'tidy',
+      );
       this.opacity = winData.opacity ?? 1.0;
       if (typeof this.opacity !== 'number' || this.opacity < 0.1) this.opacity = 1.0;
       this.reminderOpacity = winData.reminderOpacity ?? 1.0;
@@ -374,7 +367,7 @@ async init() {
 
       this.isPinned = winData.isPinned || false;
       this.title = winData.title || '';
-      this.isDarkMode = winData.isDarkMode || false;
+      this.isDarkMode = isTinyNoteDarkTheme(this.themeColor) || winData.isDarkMode || false;
       this.showArchived = winData.showArchived ?? true;
       this.showNotes = winData.showNotes ?? true;
       this.showReminders = winData.showReminders ?? true;
@@ -719,8 +712,8 @@ async init() {
     const restoreData = {
       title: noteData.title,
       notes: noteData.content,
-      themeColor: noteData.themeColor,
-      isDarkMode: noteData.isDarkMode,
+      themeColor: normalizeThemeId(noteData.themeColor, 'tiny-note'),
+      isDarkMode: isTinyNoteDarkTheme(noteData.themeColor) || noteData.isDarkMode,
       todos: [],
       archivedTodos: [],
       // ✨ [버그 #5 수정] 아카이브 복원 시 기본 크기를 명시합니다.
@@ -753,17 +746,10 @@ async init() {
   }
 
   cycleTinyNoteTheme() {
-    const themes = ['white', 'amber', 'blue', 'green', 'rose', 'purple', 'slate'];
-    const currentIndex = themes.indexOf(this.themeColor);
-    
-    if (currentIndex >= themes.length - 1) {
-      this.themeColor = themes[0];
-      this.isDarkMode = !this.isDarkMode;
-    } else {
-      this.themeColor = themes[currentIndex + 1];
-    }
-    
-    this.save();
+    const next = nextTinyNoteThemeState(this.themeColor, this.isDarkMode);
+    this.themeColor = next.themeId;
+    this.isDarkMode = next.isDarkMode;
+    this.saveNow();
   }
 
   async removeWindowFromRegistry(label) {
