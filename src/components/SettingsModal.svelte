@@ -362,7 +362,7 @@
             <span class="opacity-80 group-hover:opacity-100">설정 초기화</span>
           </button>
         </div>
-        <span class="text-[9px] font-medium opacity-30 select-none uppercase tracking-widest" style="color: {localIsDarkMode ? '#ffffff' : '#000000'};">v.4.5.0</span>
+        <span class="text-[9px] font-medium opacity-30 select-none uppercase tracking-widest" style="color: {localIsDarkMode ? '#ffffff' : '#000000'};">v.5.0.0</span>
       </div>
 
       <div class="flex items-center justify-end px-5 py-4 gap-3">
