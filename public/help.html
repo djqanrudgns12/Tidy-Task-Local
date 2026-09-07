@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Tidy Task — 스마트 가이드</title>
+  <style>
+    @font-face {
+      font-family: 'MaplestoryOTFLight';
+      src: url('https://fastly.jsdelivr.net/gh/projectnoonnu/noonfonts_20-04@2.1/MaplestoryOTFLight.woff') format('woff');
+      font-weight: 300;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: 'MaplestoryOTFLight', 'Malgun Gothic', sans-serif; font-size: 13px; background: #fdfaf3; color: #374151; overflow-x: hidden; letter-spacing: 0.02em; }
+    
+    .header { position: sticky; top: 0; background: linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%); color: white; padding: 18px 20px; z-index: 10; box-shadow: 0 4px 15px rgba(245,158,11,0.25); }
+    .header h1 { font-size: 18px; font-weight: bold; letter-spacing: 0.03em; display: flex; align-items: center; gap: 8px;}
+    .header p { font-size: 11.5px; opacity: 0.9; margin-top: 6px; line-height: 1.4; }
+    .version-badge { display: inline-block; background: rgba(255,255,255,0.25); border-radius: 20px; padding: 2px 8px; font-size: 10px; font-weight: bold; vertical-align: middle; }
+
+    .content { padding: 18px 16px 24px; display: flex; flex-direction: column; gap: 20px; }
+    .section { background: #fff; border: 1px solid rgba(0,0,0,0.07); border-radius: 12px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.03); }
+    .section-head { background: #fffbeb; border-bottom: 1px solid rgba(245,158,11,0.15); padding: 12px 16px; font-size: 14px; font-weight: bold; color: #d97706; display: flex; align-items: center; gap: 8px; }
+    
+    .new-tag { display: inline-block; background: linear-gradient(135deg, #f59e0b, #ef4444); color: #fff; border-radius: 4px; padding: 2px 6px; font-size: 9px; font-weight: bold; margin-left: auto; }
+    table { width: 100%; border-collapse: collapse; }
+    tr:not(:last-child) td { border-bottom: 1px solid rgba(0,0,0,0.04); }
+    tr:hover td { background: rgba(245,158,11,0.03); }
+    td { padding: 12px 16px; vertical-align: top; line-height: 1.6; }
+    td:first-child { font-weight: bold; color: #1f2937; width: 33%; white-space: nowrap; border-right: 1px dashed rgba(0,0,0,0.05); }
+    td:last-child { color: #4b5563; font-size: 12.5px; }
+
+    .kbd { display: inline-block; background: #f3f4f6; border: 1px solid #d1d5db; border-radius: 4px; padding: 2px 6px; font-size: 11px; font-family: 'Consolas', monospace; color: #1f2937; box-shadow: 0 1px 0 #c5c7ca; margin: 0 2px; font-weight: bold; }
+    .badge { color: #d97706; font-weight: bold; background: rgba(245,158,11,0.15); padding: 2px 6px; border-radius: 4px; font-size: 11px;}
+    .badge-red { color: #ef4444; font-weight: bold; background: rgba(239,68,68,0.1); padding: 2px 6px; border-radius: 4px; font-size: 11px;}
+    .badge-green { color: #059669; font-weight: bold; background: rgba(16,185,129,0.1); padding: 2px 6px; border-radius: 4px; font-size: 11px;}
+    
+    .footer { text-align: center; padding: 20px 12px; display: flex; flex-direction: column; gap: 6px; border-top: 1px dashed rgba(0,0,0,0.1); margin-top: 10px; background: rgba(0,0,0,0.01); }
+    .footer-title { font-size: 13px; font-weight: bold; color: #d97706; }
+    .footer-credit { font-size: 11px; color: #a1a1aa; }
+  </style>
+</head>
+<body>
+
+  <div class="header">
+    <h1>📖 Tidy Task 스마트 가이드 <span class="version-badge">v3.5.0</span></h1>
+    <p>Tiny Note와 아카이브 등 새롭게 추가된 핵심 기능을 카테고리별로 안내합니다.</p>
+  </div>
+
+  <div class="content">
+
+    <!-- 1. 단축키 사전 -->
+    <div class="section">
+      <div class="section-head">⌨️ Tidy Task 전체 단축키 사전</div>
+      <table>
+        <tr>
+          <td><kbd class="kbd">Enter</kbd> / <kbd class="kbd">Tab</kbd></td>
+          <td>하단 입력창에서 타이핑 후 즉시 할 일을 생성합니다.</td>
+        </tr>
+        <tr>
+          <td><kbd class="kbd">Ctrl</kbd> + <kbd class="kbd">Z</kbd> / <kbd class="kbd">Y</kbd></td>
+          <td><b>타임머신</b>: 잘못 수정한 텍스트나 실수로 삭제한 항목을 이전/이후 단계로 되돌립니다.</td>
+        </tr>
+        <tr>
+          <td><kbd class="kbd">Ctrl</kbd> + <kbd class="kbd">S</kbd></td>
+          <td><b>수동 동기화</b>: 입력 중인 데이터를 즉시 안전하게 저장합니다.</td>
+        </tr>
+        <tr>
+          <td><kbd class="kbd">Ctrl</kbd> + <kbd class="kbd">C</kbd> / <kbd class="kbd">V</kbd></td>
+          <td><b>스마트 다중 생성</b>: 여러 줄의 텍스트를 복사한 뒤 앱에 붙여넣으면, 각 줄이 독립된 할 일 항목으로 한 번에 쪼개져 생성됩니다. (편집 모드 시 다중 항목 복사도 가능)</td>
+        </tr>
+        <tr>
+          <td><kbd class="kbd">Alt</kbd> + <kbd class="kbd">Shift</kbd> + <kbd class="kbd">N</kbd> / <kbd class="kbd">W</kbd></td>
+          <td><b>자간 조절</b>: N(좁게), W(넓게) 키를 통해 텍스트 자간을 미세 조정합니다.</td>
+        </tr>
+        <tr>
+          <td><kbd class="kbd">Ctrl</kbd> + <kbd class="kbd">B</kbd> / <kbd class="kbd">I</kbd> / <kbd class="kbd">U</kbd></td>
+          <td><b>스타일 편집</b>: 편집 모드에서 여러 항목을 선택한 후 누르면 각각 굵게(Bold), 기울임(Italic), 밑줄(Underline)이 일괄 적용됩니다.</td>
+        </tr>
+      </table>
+    </div>
+
+    <!-- 2. 다중 윈도우 (Tiny Note) 단독 세션 -->
+    <div class="section">
+      <div class="section-head">🪟 다중 윈도우 & Tiny Note <span class="new-tag">NEW</span></div>
+      <table>
+        <tr>
+          <td>무제한 서브 노트</td>
+          <td>메인 노트 바깥에서 바탕화면을 우클릭하여 <b>'새 창 띄우기'</b>를 선택하면, 조그마한 포스트잇 형태의 <b>Tiny Note</b>를 여러 개 띄울 수 있습니다. 각 노트는 별도의 데이터를 가집니다.</td>
+        </tr>
+        <tr>
+          <td>Tiny Note 아카이빙</td>
+          <td>Tiny Note 화면 좌측 상단의 <b>아카이빙 버튼(보관함 아이콘)</b>을 누르면, 해당 서브 노트의 완료된 내용 전체가 메인 아카이브(중앙 보관함)로 일괄 전송됩니다.</td>
+        </tr>
+        <tr>
+          <td>전체화면 · 롤업</td>
+          <td>메인 및 Tiny Note의 <b>타이틀바를 더블클릭</b>하면 전체화면으로 전환되고, 다시 더블클릭하면 원래 크기와 위치로 돌아옵니다. Tiny Note는 상단의 화살표 버튼으로 롤업/펼치기를 사용할 수 있으며 상태가 그대로 보존됩니다.</td>
+        </tr>
+        <tr>
+          <td>영역 분할 스플리터</td>
+          <td>메인 화면 내 할 일 목록과 하단 텍스트 메모장 사이의 경계선을 드래그하여, 작업 공간의 높이 비율을 내 마음대로 분할할 수 있습니다.</td>
+        </tr>
+      </table>
+    </div>
+
+    <!-- 3. 아카이브 보관함 -->
+    <div class="section">
+      <div class="section-head">🗄️ 아카이브 보관함 <span class="new-tag">NEW</span></div>
+      <table>
+        <tr>
+          <td>중앙 보관함 저장</td>
+          <td>메인 툴바의 아카이빙 아이콘이나 서브 노트의 전송 버튼을 통해 삭제하기 아까운 기록들을 중앙 보관함으로 영구 저장할 수 있습니다.</td>
+        </tr>
+        <tr>
+          <td>스마트 검색 & 복원</td>
+          <td>보관함 상단의 검색창을 통해 수개월 전의 기록도 즉시 찾을 수 있으며, 클릭 한 번에 다시 메인 노트로 꺼내올 수 있습니다.</td>
+        </tr>
+      </table>
+    </div>
+
+    <!-- 4. 데드라인 및 리마인더 -->
+    <div class="section">
+      <div class="section-head">🔔 스마트 리마인더 시스템 <span class="new-tag">NEW</span></div>
+      <table>
+        <tr>
+          <td>마감일 뱃지</td>
+          <td>할 일 좌측의 날짜 뱃지를 눌러 마감일을 지정하세요. 잔여 일수에 따라 뱃지가 <span class="badge-red">D-3 (빨강)</span>, <span class="badge-green">D-7 (초록)</span> 등으로 자동 변환됩니다.</td>
+        </tr>
+        <tr>
+          <td>투명도 조절 기능</td>
+          <td>리마인더 팝업창 상단의 눈알 아이콘을 드래그하여 알림창의 투명도를 내가 원하는 대로 세밀하게 조절할 수 있습니다.</td>
+        </tr>
+        <tr>
+          <td>알림 지연 타이머</td>
+          <td>리마인더 팝업 하단의 <b>'시간 지정'</b> 🕒 버튼을 누르면, 내가 원하는 정확한 <b>시간과 분 단위</b>로 알람을 조용히 연기(Snooze)시킬 수 있습니다.</td>
+        </tr>
+      </table>
+    </div>
+
+    <!-- 5. 편집 모드 및 서식 -->
+    <div class="section">
+      <div class="section-head">✏️ 다중 편집 모드 & 일괄 디자인</div>
+      <table>
+        <tr>
+          <td>편집 모드 전환</td>
+          <td>하단의 펜 아이콘(편집 모드) 버튼을 누르거나 우클릭 메뉴를 통해 항목 다중 선택 상태로 전환합니다.</td>
+        </tr>
+        <tr>
+          <td>일괄 스타일 & 삭제</td>
+          <td>항목을 여러 개 선택한 뒤 팝업되는 전용 툴바를 이용해 형광펜 색상을 칠하거나, 수십 개의 항목을 동시에 휴지통으로 지울 수 있습니다.</td>
+        </tr>
+        <tr>
+          <td>인라인 직접 편집</td>
+          <td>각 할 일의 글자를 마우스로 누르면 즉석에서 타이핑하여 내용을 수정할 수 있습니다.</td>
+        </tr>
+      </table>
+    </div>
+
+    <!-- 6. 시스템 환경 설정 -->
+    <div class="section">
+      <div class="section-head">⚙️ 환경 설정 및 백업</div>
+      <table>
+        <tr>
+          <td>사용자 커스텀 폰트</td>
+          <td>시스템 설정 창에서 PC 내의 .ttf 파일 등을 등록해 나만의 글꼴을 사용하세요. UI 전용 글꼴과 본문용 글꼴을 분리해 적용할 수 있습니다.</td>
+        </tr>
+        <tr>
+          <td>리마인더 마스터 토글</td>
+          <td>방해받고 싶지 않은 회의 시간이라면, 환경 설정에서 '리마인더 알림'을 완전히 꺼버릴 수 있습니다.</td>
+        </tr>
+        <tr>
+          <td>데이터 안전 내보내기</td>
+          <td>시스템 트레이 혹은 우클릭 메뉴의 '텍스트로 내보내기'를 통해 지금까지 쓴 모든 기록을 .txt 로 안전하게 로컬 백업합니다.</td>
+        </tr>
+      </table>
+    </div>
+
+  </div>
+
+  <div class="footer">
+    <span class="footer-title">당신의 일상을 정돈하는 가장 스마트한 방법</span>
+    <span class="footer-credit">Developed by 초등교사 달디단 &nbsp;·&nbsp; Tidy Task v3.5.0</span>
+  </div>
+
+</body>
+</html>
