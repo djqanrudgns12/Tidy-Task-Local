@@ -5,11 +5,30 @@ import { emit, listen } from '@tauri-apps/api/event';
 import { LogicalPosition } from '@tauri-apps/api/dpi';
 import { TINY_NOTE_MIN_WIDTH, TINY_NOTE_ROLLED_HEIGHT } from './tinyNoteWindow.js';
 import { getThemeAccent, isTinyNoteDarkTheme, nextTinyNoteThemeState, normalizeThemeId } from './themes.js';
+import {
+  AUTO_CHECK_INTERVAL_MS,
+  BOOT_CHECK_DELAY_MS,
+  RELAY_TIMEOUT_MS,
+  RELEASES_PAGE_URL,
+  SNOOZE_DURATION_MS,
+  buildUpdateInfo,
+  fetchLatestRelease,
+  isNewerVersion,
+  shouldAutoCheck,
+  shouldNotifyUser,
+} from './updateChecker.js';
 
 let tauriStore = null;
 
 // 모든 창이 공유하는 통합 저장 파일
 const STORE_FILE = 'tidy-task-config.json';
+
+// ✨ [업데이트 안내] 앱 전체가 공유하는 저장 키.
+// 왜 창별 데이터(winData)가 아니라 전역 키인가:
+//   1) 새 버전 정보는 창마다 다를 이유가 전혀 없는 "앱 단위" 정보입니다.
+//   2) 창별 데이터는 "유령 청소기"가 빈 창을 지울 때 함께 삭제되므로,
+//      사용자가 누른 "건너뛰기 / 나중에" 선택이 창을 닫는 순간 증발해 버립니다.
+const UPDATE_STATE_KEY = 'updateState';
 
 // 저장소를 읽지 못했을 때 끼워 넣는 "안전 스텁".
 // 왜 필요한가: get()이 예외를 던지면 init() 전체가 중단되어 IPC 이벤트 리스너 등록까지
@@ -174,6 +193,40 @@ export class AppState {
   selectedTodoIds = $state([]);
   hideWelcomeMessage = $state(false);
   isManager = false; // ✨ Phase 3: 매니저 창 권한 식별자
+
+  // ═══════════════════════════════════════════════════════════════════
+  // ✨ [업데이트 안내 시스템] 새 버전 감지 → 친절한 안내 → 공식 다운로드
+  //
+  // 설계 원칙 (기존 아키텍처를 그대로 재사용합니다):
+  //   · 네트워크 호출은 "매니저 창" 단 하나만 수행합니다.
+  //     창을 10개 띄워도 GitHub 호출은 1회 — 리마인더 체크와 완전히 같은 패턴입니다.
+  //   · 결과는 IPC(update-result) 이벤트로 모든 창에 방송합니다.
+  //   · 사용자 선택(건너뛰기/나중에)은 전역 키에 저장해 앱을 꺼도 유지됩니다.
+  // ═══════════════════════════════════════════════════════════════════
+
+  appVersion = $state('');          // tauri.conf.json의 version (설치된 내 버전)
+  updatePhase = $state('idle');     // idle | checking | available | uptodate | error
+  updateInfo = $state(null);        // buildUpdateInfo()가 만든 새 버전 정보
+  updateErrorCode = $state('');     // 실패 사유 코드 (사용자 안내 문구로 변환됨)
+  updateCheckedAt = $state(0);      // 마지막으로 확인에 성공한 시각
+  isUpdateBannerVisible = $state(false); // 상단 슬림 배너 표시 여부
+  isUpdateGuideOpen = $state(false);     // 단계별 안내 모달 표시 여부
+  showUpToDateToast = $state(false);      // "이미 최신입니다" 토스트
+
+  // 디스크에 보존되는 사용자 선택 (전역 키 updateState)
+  _updateSkippedVersion = '';
+  _updateLastCheckedAt = 0;
+  _updateSnoozeUntil = 0;
+
+  // 내부 관리용 핸들 (스냅샷/저장 대상이 아닌 순수 런타임 값)
+  _updateToastTimer = null;
+  _updateRelayTimer = null;
+  _updateScheduleStarted = false;
+  // 확인이 진행되는 동안 "나도 결과를 알려 달라"고 요청한 창들의 명단
+  _pendingUpdateRequesters = [];
+  _unlistenUpdateResult = null;
+  _unlistenUpdateDismissed = null;
+  _unlistenUpdateRequest = null;
 
 // ✨ [멀티 윈도우 명단 관리 변수]
   activeExtraWindows = $state([]);
@@ -417,6 +470,8 @@ async init() {
            this.isManager = true;
            this.setupManagerListeners();
            this.checkReminders(true);
+           // ✨ 매니저 권한을 물려받았으니 업데이트 확인 임무도 함께 이어받습니다.
+           this._startUpdateSchedule();
         }
       });
 
@@ -424,7 +479,13 @@ async init() {
         this.setupManagerListeners();
         setTimeout(() => this.checkReminders(true), 3000);
         setInterval(() => this.checkReminders(), 1000 * 60 * 60);
+        this._startUpdateSchedule();
       }
+
+      // ✨ [업데이트 안내] 버전 확인·리스너 등록.
+      // 왜 await하지 않는가: 여기서 기다리면 네트워크/IPC가 늦어질 때 isReady가 지연되어
+      //   "내용을 불러오는 중..." 화면이 길어집니다. 업데이트 안내는 조금 늦게 준비돼도 무방합니다.
+      this.initUpdater().catch((e) => console.warn('업데이트 확인 준비 실패:', e));
 
       listen('archive-reminder-item', async (e) => {
         const payload = e.payload;
@@ -486,6 +547,320 @@ async init() {
           this.saveNow(false);
         }
       });
+
+      // ✨ [업데이트] 다른 창(설정 창 등)이 "확인해 줘"라고 요청하면 매니저가 대신 확인합니다.
+      // 왜 매니저만 확인하는가: 창마다 호출하면 GitHub 호출 제한(시간당 60회)에 금방 걸리고,
+      //   같은 알림이 창 개수만큼 중복으로 뜨기 때문입니다.
+      if (this._unlistenUpdateRequest) this._unlistenUpdateRequest();
+      this._unlistenUpdateRequest = await listen('req-update-check', (event) => {
+        const requesterLabel = event?.payload?.requesterLabel || null;
+        this.checkForUpdates({ manual: true, requesterLabel });
+      });
+  }
+
+  // ═══════════════════════════════════════════════════════════════════
+  // ✨ [업데이트 안내] 초기화 · 확인 · 안내 · 사용자 선택 보존
+  // ═══════════════════════════════════════════════════════════════════
+
+  // init() 마지막에 호출됩니다. 모든 창이 공통으로 수행하는 준비 작업입니다.
+  async initUpdater() {
+    // 1) 지금 설치된 내 버전을 읽습니다 (tauri.conf.json의 version).
+    // 왜 하드코딩하지 않는가: 버전을 코드에 박아두면 배포 때 빠뜨려
+    //   "업데이트했는데 계속 알림이 뜨는" 무한 루프가 생깁니다.
+    try {
+      const { getVersion } = await import('@tauri-apps/api/app');
+      this.appVersion = await getVersion();
+    } catch (e) {
+      console.warn('앱 버전을 읽지 못했습니다:', e);
+      this.appVersion = '';
+    }
+
+    // 2) 지난번에 저장해 둔 사용자 선택과 마지막 확인 결과를 복원합니다.
+    //    왜 결과까지 저장하는가: 인터넷이 끊긴 환경에서도 "새 버전이 있었다"는 안내를
+    //    계속 보여줄 수 있어야 합니다.
+    try {
+      const saved = (await tauriStore.get(UPDATE_STATE_KEY)) || {};
+      this._updateSkippedVersion = saved.skippedVersion || '';
+      this._updateLastCheckedAt = Number(saved.lastCheckedAt) || 0;
+      this._updateSnoozeUntil = Number(saved.snoozeUntil) || 0;
+      this.updateCheckedAt = this._updateLastCheckedAt;
+
+      if (saved.latest && saved.latest.version) {
+        this.updateInfo = saved.latest;
+        // 저장된 정보가 여전히 새 버전이고, 사용자가 미루지 않았다면 매니저 창에서 다시 안내합니다.
+        if (isNewerVersion(saved.latest.version, this.appVersion)) {
+          this.updatePhase = 'available';
+          if (this.isManager && shouldNotifyUser({
+            latestVersion: saved.latest.version,
+            skippedVersion: this._updateSkippedVersion,
+            snoozeUntil: this._updateSnoozeUntil,
+            now: Date.now(),
+          })) {
+            this.isUpdateBannerVisible = true;
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('업데이트 상태를 불러오지 못했습니다:', e);
+    }
+
+    // 3) 모든 창: 매니저가 방송하는 확인 결과를 받습니다.
+    if (this._unlistenUpdateResult) this._unlistenUpdateResult();
+    this._unlistenUpdateResult = await listen('update-result', (event) => {
+      this._applyUpdateResult(event.payload);
+    });
+
+    // 4) 모든 창: 어느 창에서든 "나중에/건너뛰기"를 누르면 다 같이 조용해집니다.
+    if (this._unlistenUpdateDismissed) this._unlistenUpdateDismissed();
+    this._unlistenUpdateDismissed = await listen('update-dismissed', (event) => {
+      const payload = event?.payload || {};
+      if (payload.snoozeUntil !== undefined) this._updateSnoozeUntil = Number(payload.snoozeUntil) || 0;
+      if (payload.skippedVersion !== undefined) this._updateSkippedVersion = payload.skippedVersion || '';
+      this.isUpdateBannerVisible = false;
+      this.isUpdateGuideOpen = false;
+    });
+  }
+
+  // 매니저 창만 실행하는 백그라운드 확인 일정입니다.
+  // 왜 별도 메서드인가: 최초 기동(main)과 매니저 권한 승계(note-N) 두 경로에서
+  //   똑같이 호출돼야 하므로, 중복 실행 방지 플래그와 함께 한곳에 모았습니다.
+  _startUpdateSchedule() {
+    if (this._updateScheduleStarted) return;
+    this._updateScheduleStarted = true;
+
+    // 부팅 직후 바로 네트워크를 쓰면 앱이 느리게 켜지는 것처럼 보이므로 잠시 뒤에 확인합니다.
+    setTimeout(() => this.checkForUpdates(), BOOT_CHECK_DELAY_MS);
+    // 앱을 며칠씩 켜 두는 사용자를 위해 주기적으로도 확인합니다.
+    setInterval(() => this.checkForUpdates(), AUTO_CHECK_INTERVAL_MS);
+  }
+
+  // 실제 확인. manual=true면 사용자가 직접 버튼을 누른 경우입니다.
+  async checkForUpdates({ manual = false, requesterLabel = null } = {}) {
+    // 매니저가 아닌 창이 실수로 직접 호출해도 네트워크를 건드리지 않도록 막습니다.
+    if (!this.isManager) return;
+
+    // 직접 확인을 요청한 창을 명단에 올립니다.
+    // 왜 명단인가: 이미 확인이 진행 중일 때 들어온 요청을 그냥 버리면,
+    //   요청한 창은 "확인 중…"에 멈춘 채 답을 영영 못 받습니다.
+    //   진행 중인 확인에 요청자를 태워 보내면 한 번의 호출로 모두에게 답할 수 있습니다.
+    if (requesterLabel) this._pendingUpdateRequesters.push(requesterLabel);
+    if (this.updatePhase === 'checking') return;
+
+    // 자동 확인은 주기를 지킵니다(호출 제한 보호). 사용자가 직접 누른 확인은 항상 진행합니다.
+    if (!manual && !shouldAutoCheck({ lastCheckedAt: this._updateLastCheckedAt, now: Date.now() })) {
+      return;
+    }
+
+    this.updatePhase = 'checking';
+    this.updateErrorCode = '';
+
+    let result;
+    try {
+      const release = await fetchLatestRelease();
+      const info = buildUpdateInfo(release);
+
+      if (!info) {
+        result = { phase: 'error', errorCode: 'BAD_RESPONSE' };
+      } else {
+        this._updateLastCheckedAt = Date.now();
+        result = {
+          phase: isNewerVersion(info.version, this.appVersion) ? 'available' : 'uptodate',
+          info,
+          checkedAt: this._updateLastCheckedAt,
+        };
+      }
+    } catch (e) {
+      result = { phase: 'error', errorCode: e?.code || 'UNKNOWN' };
+    }
+
+    // 확인이 도는 동안 쌓인 요청자까지 모두 답을 받도록 여기서 명단을 확정합니다.
+    const requesterLabels = [...new Set(this._pendingUpdateRequesters)];
+    this._pendingUpdateRequesters = [];
+
+    const payload = {
+      ...result,
+      requesterLabels,
+      // 직접 요청한 창이 하나라도 있으면 "사용자가 부른 확인"으로 취급합니다.
+      manual: manual || requesterLabels.length > 0,
+    };
+
+    // 매니저 자신에게 먼저 반영한 뒤, 나머지 창에 방송합니다.
+    this._applyUpdateResult(payload);
+    await this._persistUpdateState();
+    emit('update-result', payload).catch(() => {});
+  }
+
+  // 어느 창에서든 부를 수 있는 "확인해 주세요" 진입점입니다.
+  async requestUpdateCheck() {
+    this.updateErrorCode = '';
+
+    // 매니저 창은 직접 확인합니다.
+    // 주의: 여기서 updatePhase를 미리 'checking'으로 바꾸면 checkForUpdates의
+    //   "이미 확인 중" 가드에 스스로 걸려 아무 일도 일어나지 않습니다. 상태 변경은 그쪽에 맡깁니다.
+    if (this.isManager) {
+      await this.checkForUpdates({ manual: true, requesterLabel: this.windowLabel });
+      return;
+    }
+
+    this.updatePhase = 'checking';
+
+    // 매니저에게 대신 확인해 달라고 요청합니다.
+    emit('req-update-check', { requesterLabel: this.windowLabel }).catch(() => {});
+
+    // 답이 영영 오지 않을 때 "확인 중..." 상태로 굳어버리지 않도록 안전장치를 겁니다.
+    if (this._updateRelayTimer) clearTimeout(this._updateRelayTimer);
+    this._updateRelayTimer = setTimeout(() => {
+      if (this.updatePhase === 'checking') {
+        this.updatePhase = 'error';
+        this.updateErrorCode = 'RELAY_TIMEOUT';
+      }
+    }, RELAY_TIMEOUT_MS);
+  }
+
+  // 확인 결과를 이 창의 화면 상태에 반영합니다(모든 창에서 실행됩니다).
+  _applyUpdateResult(payload) {
+    if (!payload) return;
+
+    // 이 창이 직접 확인을 요청했던 대상인지 판별합니다.
+    const isRequester = Array.isArray(payload.requesterLabels)
+      && payload.requesterLabels.includes(this.windowLabel);
+
+    // 내가 기다리던 답이거나 확실한 결과(성공)가 왔으면 릴레이 안전장치를 해제합니다.
+    // 왜 조건을 다는가: 남의 요청에 대한 실패 응답 때문에 내 대기 타이머가 풀리면,
+    //   정작 내 답이 오지 않았을 때 "확인 중…"에 그대로 멈춰버립니다.
+    if (this._updateRelayTimer && (isRequester || payload.phase !== 'error')) {
+      clearTimeout(this._updateRelayTimer);
+      this._updateRelayTimer = null;
+    }
+
+    if (payload.phase === 'error') {
+      // 자동 확인 실패는 사용자를 방해하지 않습니다(조용히 다음 주기를 기다립니다).
+      if (payload.manual && isRequester) {
+        this.updatePhase = 'error';
+        this.updateErrorCode = payload.errorCode || 'UNKNOWN';
+      } else if (this.updatePhase === 'checking' && !this._updateRelayTimer) {
+        // 내 요청을 기다리는 중(_updateRelayTimer 살아 있음)이 아니라면 원래 상태로 되돌립니다.
+        this.updatePhase = this.updateInfo ? 'available' : 'idle';
+      }
+      return;
+    }
+
+    this.updateErrorCode = '';
+    if (payload.info) this.updateInfo = payload.info;
+    if (payload.checkedAt) {
+      this.updateCheckedAt = payload.checkedAt;
+      this._updateLastCheckedAt = payload.checkedAt;
+    }
+    this.updatePhase = payload.phase;
+
+    if (payload.phase === 'available') {
+      // 사용자가 직접 누른 확인이라면 "건너뛰기/나중에" 설정을 넘어서 즉시 보여줍니다.
+      // (직접 확인했다는 것 자체가 "지금 알고 싶다"는 명확한 의사 표시이기 때문)
+      const allowed = payload.manual || shouldNotifyUser({
+        latestVersion: payload.info?.version,
+        skippedVersion: this._updateSkippedVersion,
+        snoozeUntil: this._updateSnoozeUntil,
+        now: Date.now(),
+      });
+
+      // 자동 발견은 매니저 창에만 배너를 띄웁니다(창 10개에 같은 배너가 뜨는 것 방지).
+      if (allowed && (this.isManager || isRequester)) {
+        this.isUpdateBannerVisible = true;
+      }
+      return;
+    }
+
+    if (payload.phase === 'uptodate') {
+      this.isUpdateBannerVisible = false;
+      this.isUpdateGuideOpen = false;
+      // 직접 확인을 누른 창에서만 "이미 최신입니다" 안내를 보여줍니다.
+      if (payload.manual && isRequester) this._flashUpToDateToast();
+    }
+  }
+
+  _flashUpToDateToast() {
+    if (this._updateToastTimer) clearTimeout(this._updateToastTimer);
+    this.showUpToDateToast = true;
+    this._updateToastTimer = setTimeout(() => { this.showUpToDateToast = false; }, 2600);
+  }
+
+  // 단계별 안내 모달 열기/닫기
+  openUpdateGuide() { this.isUpdateGuideOpen = true; }
+  closeUpdateGuide() { this.isUpdateGuideOpen = false; }
+
+  // 사용자가 [새 버전 내려받기]를 누르면 기본 브라우저로 공식 설치 파일을 엽니다.
+  // 왜 앱이 직접 받지 않는가: B 방식의 핵심은 "다운로드/설치는 사용자와 OS가 하게 두는 것"입니다.
+  //   앱이 파일을 만지지 않으므로 사용자의 메모·할 일 데이터가 위험해질 여지가 없습니다.
+  async openUpdateDownload() {
+    const url = this.updateInfo?.downloadUrl || RELEASES_PAGE_URL;
+    try {
+      const { openUrl } = await import('@tauri-apps/plugin-opener');
+      await openUrl(url);
+      return true;
+    } catch (e) {
+      console.error('다운로드 페이지를 열지 못했습니다:', e);
+      return false;
+    }
+  }
+
+  // 릴리스 페이지(설명 + 모든 파일 목록)를 엽니다. 직링크가 막힌 환경의 대안입니다.
+  async openReleasePage() {
+    const url = this.updateInfo?.pageUrl || RELEASES_PAGE_URL;
+    try {
+      const { openUrl } = await import('@tauri-apps/plugin-opener');
+      await openUrl(url);
+      return true;
+    } catch (e) {
+      console.error('릴리스 페이지를 열지 못했습니다:', e);
+      return false;
+    }
+  }
+
+  // "나중에 알림" — 하루 동안 조용히 있습니다.
+  async snoozeUpdate() {
+    this._updateSnoozeUntil = Date.now() + SNOOZE_DURATION_MS;
+    this.isUpdateBannerVisible = false;
+    this.isUpdateGuideOpen = false;
+    await this._persistUpdateState();
+    emit('update-dismissed', {
+      snoozeUntil: this._updateSnoozeUntil,
+      skippedVersion: this._updateSkippedVersion,
+    }).catch(() => {});
+  }
+
+  // "이 버전 건너뛰기" — 이 버전은 다시 알리지 않되, 더 새 버전이 나오면 다시 알립니다.
+  async skipUpdateVersion() {
+    this._updateSkippedVersion = this.updateInfo?.version || '';
+    this.isUpdateBannerVisible = false;
+    this.isUpdateGuideOpen = false;
+    await this._persistUpdateState();
+    emit('update-dismissed', {
+      snoozeUntil: this._updateSnoozeUntil,
+      skippedVersion: this._updateSkippedVersion,
+    }).catch(() => {});
+  }
+
+  // 업데이트 상태를 전역 키에 저장합니다.
+  // 왜 enqueueWrite를 쓰는가: 본문 저장과 동시에 실행되면 "읽기→쓰기" 경합으로
+  //   서로의 결과를 덮어쓸 수 있어, 기존 저장 엔진과 같은 줄에 세웁니다.
+  async _persistUpdateState() {
+    if (!tauriStore || !this._hydrated) return false;
+
+    return enqueueWrite(async () => {
+      try {
+        await tauriStore.set(UPDATE_STATE_KEY, {
+          skippedVersion: this._updateSkippedVersion,
+          lastCheckedAt: this._updateLastCheckedAt,
+          snoozeUntil: this._updateSnoozeUntil,
+          latest: this.updateInfo ? $state.snapshot(this.updateInfo) : null,
+        });
+        await tauriStore.save();
+        return true;
+      } catch (e) {
+        console.error(`❌ [${this.windowLabel}] 업데이트 상태 저장 실패:`, e);
+        return false;
+      }
+    });
   }
 
  async spawnNewWindow() {

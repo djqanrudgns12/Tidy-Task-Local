@@ -1,6 +1,7 @@
 <script>
-  import { X, Palette, Type, PenLine, Monitor, Layout, Upload, Moon, Archive, FileText, Database, RefreshCw, Bell, VolumeX } from 'lucide-svelte';
+  import { X, Palette, Type, PenLine, Monitor, Layout, Upload, Moon, Archive, FileText, Database, RefreshCw, Bell, VolumeX, Download } from 'lucide-svelte';
   import { appState } from '../lib/appState.svelte.js';
+  import { describeUpdateError, formatBytes } from '../lib/updateChecker.js';
   import { invoke, convertFileSrc } from '@tauri-apps/api/core';
   import { getCurrentWindow } from '@tauri-apps/api/window';
   import { emitTo, listen, emit } from '@tauri-apps/api/event';
@@ -29,6 +30,19 @@
   
   let showResetDataConfirm = $state(false);
   let showResetConfigConfirm = $state(false);
+
+  // ✨ [업데이트 확인] 설정 창의 테마 색을 그대로 따르도록 액센트를 계산합니다.
+  const updateAccent = $derived(getTidyTheme(localThemeColor).tidy[localIsDarkMode ? 'accentDark' : 'accent']);
+
+  // 설정 창은 매니저가 아니므로 직접 네트워크를 부르지 않습니다.
+  // requestUpdateCheck()가 매니저 창에 요청을 넘기고, 결과는 IPC로 되돌아옵니다.
+  function handleCheckUpdate() {
+    appState.requestUpdateCheck();
+  }
+
+  async function handleDownloadUpdate() {
+    await appState.openUpdateDownload();
+  }
 
   onMount(async () => {
     // ✨ 1. 무전을 받으면 타겟 이름과 그 창의 최신 설정값으로 화면을 덮어씁니다!
@@ -342,6 +356,73 @@
         </div>
       </div>
 
+      <!-- ✨ [앱 업데이트] 사용자가 직접 확인하고 싶을 때 쓰는 자리입니다.
+           왜 설정 안에 두는가: 자동 알림을 "나중에/건너뛰기"로 넘긴 사용자도
+           원할 때 스스로 확인할 수 있는 고정된 경로가 반드시 하나는 필요합니다. -->
+      <div class="p-3.5 rounded-xl border transition-all duration-300 shadow-sm" style="background-color: {localIsDarkMode ? 'rgba(0,0,0,0.2)' : 'rgba(255,255,255,0.6)'}; border-color: {localIsDarkMode ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.04)'};">
+        <label class="flex items-center gap-2.5 text-[0.85em] font-bold" style="color: {localIsDarkMode ? '#cbd5e1' : '#4b5563'};">
+          <span class="flex items-center justify-center w-6 h-6 rounded-md transition-colors" style="background-color: {localIsDarkMode ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)'}; color: {localIsDarkMode ? '#fbbf24' : '#d97706'};">
+            <Download size={14} strokeWidth={2.5} />
+          </span>
+          앱 업데이트
+        </label>
+
+        <div class="pl-[34px] mt-2 flex flex-col gap-2">
+          <div class="flex items-center justify-between gap-2">
+            <span class="text-[0.75em] font-bold" style="color: {localIsDarkMode ? '#94a3b8' : '#64748b'};">
+              지금 쓰는 버전 · v{appState.appVersion || '—'}
+            </span>
+            <button
+              onclick={handleCheckUpdate}
+              disabled={appState.updatePhase === 'checking'}
+              class="px-2.5 py-1 rounded-lg text-[0.75em] font-bold transition-all active:scale-95 disabled:opacity-50 disabled:cursor-wait shrink-0 border"
+              style="background-color: {localIsDarkMode ? 'rgba(255,255,255,0.06)' : '#ffffff'}; border-color: {localIsDarkMode ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.1)'}; color: {updateAccent};"
+            >
+              {appState.updatePhase === 'checking' ? '확인 중…' : '업데이트 확인'}
+            </button>
+          </div>
+
+          <!-- 확인 결과를 이 자리에서 바로 알려 줍니다(창을 옮겨 다니지 않아도 되도록). -->
+          {#if appState.updatePhase === 'available' && appState.updateInfo}
+            <div
+              class="rounded-lg px-2.5 py-2 border flex flex-col gap-2"
+              style="background-color: {localIsDarkMode ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.02)'}; border-color: {updateAccent}44;"
+            >
+              <p class="text-[0.75em] font-extrabold leading-[1.5]" style="color: {updateAccent};">
+                🎉 새 버전 v{appState.updateInfo.version} 이 나왔어요
+                {#if appState.updateInfo.assetSize}
+                  <span class="font-bold opacity-70">({formatBytes(appState.updateInfo.assetSize)})</span>
+                {/if}
+              </p>
+              <p class="text-[0.72em] font-medium leading-[1.5]" style="color: {localIsDarkMode ? '#94a3b8' : '#64748b'};">
+                아래 버튼을 누르면 인터넷 창이 열리며 설치 파일이 내려받아집니다.
+                작성하신 할 일과 메모는 그대로 유지됩니다.
+              </p>
+              <button
+                onclick={handleDownloadUpdate}
+                class="w-full py-1.5 rounded-lg text-[0.78em] font-extrabold text-white transition-all active:scale-[0.98] flex items-center justify-center gap-1.5"
+                style="background-color: {updateAccent};"
+              >
+                <Download size={12} strokeWidth={3} />
+                새 버전 내려받기
+              </button>
+            </div>
+          {:else if appState.updatePhase === 'uptodate'}
+            <p class="text-[0.75em] font-bold leading-[1.5]" style="color: {localIsDarkMode ? '#6ee7b7' : '#059669'};">
+              ✅ 이미 최신 버전을 쓰고 계세요.
+            </p>
+          {:else if appState.updatePhase === 'error'}
+            <p class="text-[0.75em] font-bold leading-[1.5]" style="color: {localIsDarkMode ? '#fca5a5' : '#dc2626'};">
+              {describeUpdateError(appState.updateErrorCode)}
+            </p>
+          {:else}
+            <p class="text-[0.72em] font-medium leading-[1.5] tracking-tight" style="color: {localIsDarkMode ? '#94a3b8' : '#64748b'};">
+              새 버전은 앱이 자동으로 확인해 알려 드립니다. 지금 바로 확인하시려면 위 버튼을 눌러 주세요.
+            </p>
+          {/if}
+        </div>
+      </div>
+
     </div>
 
     <div
@@ -362,7 +443,9 @@
             <span class="opacity-80 group-hover:opacity-100">설정 초기화</span>
           </button>
         </div>
-        <span class="text-[9px] font-medium opacity-30 select-none uppercase tracking-widest" style="color: {localIsDarkMode ? '#ffffff' : '#000000'};">v.5.0.0</span>
+        <!-- 버전을 코드에 박아두면 배포 때 갱신을 빠뜨려 실제 버전과 어긋납니다.
+             appState.appVersion은 tauri.conf.json의 version을 그대로 읽어옵니다. -->
+        <span class="text-[9px] font-medium opacity-30 select-none uppercase tracking-widest" style="color: {localIsDarkMode ? '#ffffff' : '#000000'};">v.{appState.appVersion || '5.0.0'}</span>
       </div>
 
       <div class="flex items-center justify-end px-5 py-4 gap-3">

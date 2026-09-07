@@ -5,6 +5,12 @@
   import { appState } from "./lib/appState.svelte.js";
   import { TINY_NOTE_MIN_WIDTH, TINY_NOTE_ROLLED_HEIGHT } from "./lib/tinyNoteWindow.js";
   import { getTidyTheme } from "./lib/themes.js";
+  import {
+    UPDATE_NOTICE_STORE_KEY,
+    UPDATE_NOTICE_WINDOW_LABEL,
+    getUpdateNoticeWindowOptions,
+    shouldShowUpdateNotice,
+  } from "./lib/updateNotice.js";
 
   import Titlebar from "./components/Titlebar.svelte";
   import MainToolbar from "./components/MainToolbar.svelte";
@@ -18,6 +24,9 @@
   import ReminderPopup from "./components/ReminderPopup.svelte";
   import StickerWindow from "./components/StickerWindow.svelte";
   import ArchiveWindow from "./components/ArchiveWindow.svelte";
+  import UpdateBanner from "./components/UpdateBanner.svelte";
+  import UpdateGuide from "./components/UpdateGuide.svelte";
+  import UpdateNotice from "./components/UpdateNotice.svelte";
 
   import { convertFileSrc } from "@tauri-apps/api/core";
   import { getCurrentWindow } from "@tauri-apps/api/window";
@@ -47,6 +56,38 @@
   // 설정·컨텍스트메뉴·환영 같은 임시 UI 창은 저장 플러시 대상이 아닙니다.
   function isDataWindow(label) {
     return label === "main" || label.startsWith("note-") || label.startsWith("tinynote-");
+  }
+
+  async function openUpdateNoticeWindow() {
+    try {
+      const store = new LazyStore("tidy-task-config.json");
+      const hiddenUntil = await store.get(UPDATE_NOTICE_STORE_KEY);
+      if (!shouldShowUpdateNotice(hiddenUntil)) return;
+
+      const existing = await WebviewWindow.getByLabel(UPDATE_NOTICE_WINDOW_LABEL);
+      if (existing) {
+        await existing.show();
+        await existing.setFocus();
+        return;
+      }
+
+      const noticeWindow = new WebviewWindow(
+        UPDATE_NOTICE_WINDOW_LABEL,
+        getUpdateNoticeWindowOptions(),
+      );
+
+      noticeWindow.once("tauri://created", async () => {
+        try {
+          await noticeWindow.show();
+          await noticeWindow.setFocus();
+        } catch (_) {}
+      });
+      noticeWindow.once("tauri://error", (event) => {
+        console.warn("업데이트 공지 창을 열지 못했습니다:", event.payload);
+      });
+    } catch (error) {
+      console.warn("업데이트 공지 노출 여부를 확인하지 못했습니다:", error);
+    }
   }
 
   // 창이 백그라운드로 가거나 언로드될 때 예약된 저장을 즉시 확정합니다.
@@ -495,7 +536,7 @@
     // appState.init()을 호출하면 windowLabel="archive"가 되어
     // performSave()가 "archive" 키에 유령 데이터를 생성합니다. 이를 방지합니다.
     const _label = getCurrentWindow().label;
-    if (_label === 'archive') return; // 아카이브 창은 여기서 종료
+    if (_label === 'archive' || _label === UPDATE_NOTICE_WINDOW_LABEL) return;
 
     await appState.init();
     applyCSSVars();
@@ -533,6 +574,11 @@
         resizable: false,
         skipTaskbar: false
       });
+    }
+
+    // 첫 실행 환영 창과 겹치지 않게, 기존 사용자에게만 독립 공지 창을 띄웁니다.
+    if (currentWindow.label === "main" && appState.hideWelcomeMessage) {
+      await openUpdateNoticeWindow();
     }
 
     const isValidPos = (val) =>
@@ -1369,6 +1415,8 @@
   <ContextMenu isStandalone={true} />
 {:else if getCurrentWindow().label === "welcome"}
   <WelcomeWindow />
+{:else if getCurrentWindow().label === UPDATE_NOTICE_WINDOW_LABEL}
+  <UpdateNotice />
 {:else if getCurrentWindow().label === "reminder"}
   <ReminderPopup />
 {:else if getCurrentWindow().label.startsWith("tinynote-") && appState.isReady}
@@ -1418,6 +1466,13 @@
       >
         <span>저장소를 읽지 못했습니다. 데이터 보호를 위해 저장을 잠시 멈췄어요 (자동 재시도 중)</span>
       </div>
+    {/if}
+
+    <!-- ✨ [업데이트 안내] 새 버전이 발견되면 뜨는 얇은 알림 띠입니다.
+         왜 매니저 창에서만 뜨는가: 메모장을 여러 개 켜 두어도 같은 알림이 겹쳐 뜨지 않도록,
+         리마인더와 동일하게 "매니저 권한을 가진 창 하나"만 사용자에게 말을 겁니다. -->
+    {#if appState.isUpdateBannerVisible && appState.updateInfo}
+      <UpdateBanner />
     {/if}
 
     {#if appState.isEditMode}
@@ -1700,6 +1755,42 @@
             </span>
           </div>
         {/if}
+      </div>
+    {/if}
+
+    <!-- ✨ [업데이트 안내] 배너를 누르면 열리는 단계별 안내 창 -->
+    {#if appState.isUpdateGuideOpen}
+      <UpdateGuide />
+    {/if}
+
+    <!-- ✨ [업데이트 안내] 설정에서 직접 확인했을 때의 "이미 최신" 응답 -->
+    {#if appState.showUpToDateToast}
+      <div
+        transition:scale={{ duration: 300, start: 0.8, opacity: 0 }}
+        class="absolute inset-0 flex items-center justify-center pointer-events-none px-4"
+        style="z-index: 99999;"
+      >
+        <div
+          class="px-4 py-2.5 rounded-[20px] shadow-xl flex items-center gap-2 border"
+          style="
+            background-color: {appState.isDarkMode
+            ? 'rgba(20, 83, 45, 0.95)'
+            : 'rgba(240, 253, 244, 0.95)'};
+            backdrop-filter: blur(4px);
+            border-color: {appState.isDarkMode
+            ? 'rgba(74, 222, 128, 0.2)'
+            : 'rgba(74, 222, 128, 0.4)'};
+            box-shadow: 0 8px 25px rgba(22, 163, 74, 0.15);
+          "
+        >
+          <span class="text-[14px] leading-none mb-[1px]">✅</span>
+          <span
+            class="text-[11px] font-extrabold tracking-tight"
+            style="color: {appState.isDarkMode ? '#86efac' : '#16a34a'};"
+          >
+            이미 최신 버전을 쓰고 계세요!
+          </span>
+        </div>
       </div>
     {/if}
   </div>
