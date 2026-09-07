@@ -104,6 +104,26 @@ test('normalizeReleaseNotes: 마크다운 기호를 걷어내고 읽기 쉬운 �
   ]);
 });
 
+test('normalizeReleaseNotes: "1)" 형식 번호 목록도 걷어낸다', () => {
+  // 실제 v5.0.0 릴리스 노트가 이 형식이었습니다. 남겨두면 UI 글머리 기호와 겹쳐 보입니다.
+  const notes = normalizeReleaseNotes([
+    '1) Tidy Task 테마 8종 추가',
+    '2) 글자 겹침 해소',
+    '3. 점 형식도 함께 처리',
+  ].join('\n'));
+
+  assert.deepEqual(notes, [
+    'Tidy Task 테마 8종 추가',
+    '글자 겹침 해소',
+    '점 형식도 함께 처리',
+  ]);
+});
+
+test('normalizeReleaseNotes: 괄호로 시작하는 일반 문장은 건드리지 않는다', () => {
+  // "(2026. 09. 07, v.5.0.0)" 같은 날짜 표기가 잘려나가면 안 됩니다.
+  assert.deepEqual(normalizeReleaseNotes('(2026. 09. 07, v.5.0.0)'), ['(2026. 09. 07, v.5.0.0)']);
+});
+
 test('normalizeReleaseNotes: 코드 블록과 HTML 주석은 통째로 지운다', () => {
   const notes = normalizeReleaseNotes('안내\n```\nnpm run build\n```\n<!-- 내부 메모 -->\n끝');
   assert.deepEqual(notes, ['안내', '끝']);

@@ -8,7 +8,9 @@
   import {
     UPDATE_NOTICE_STORE_KEY,
     UPDATE_NOTICE_WINDOW_LABEL,
+    calculateStartupWindowLayout,
     getUpdateNoticeWindowOptions,
+    getWelcomeWindowOptions,
     shouldShowUpdateNotice,
   } from "./lib/updateNotice.js";
 
@@ -29,7 +31,7 @@
   import UpdateNotice from "./components/UpdateNotice.svelte";
 
   import { convertFileSrc } from "@tauri-apps/api/core";
-  import { getCurrentWindow } from "@tauri-apps/api/window";
+  import { getCurrentWindow, primaryMonitor } from "@tauri-apps/api/window";
   import { enable, isEnabled } from "@tauri-apps/plugin-autostart";
   import { listen, emit, emitTo } from "@tauri-apps/api/event";
   import { WebviewWindow } from "@tauri-apps/api/webviewWindow";
@@ -58,7 +60,27 @@
     return label === "main" || label.startsWith("note-") || label.startsWith("tinynote-");
   }
 
-  async function openUpdateNoticeWindow() {
+  // 시작 시 뜨는 창들(환영 · 업데이트 공지)을 겹치지 않게 놓기 위한 화면 크기 조회입니다.
+  // 왜 논리 좌표(logical)로 계산하는가: WebviewWindow의 x/y도 논리 좌표라 단위를 맞춰야
+  //   고해상도(배율 150% 등) 화면에서 창이 엉뚱한 곳으로 날아가지 않습니다.
+  async function getStartupLayout() {
+    try {
+      const monitor = await primaryMonitor();
+      if (!monitor) return null;
+
+      const scale = monitor.scaleFactor || 1;
+      return calculateStartupWindowLayout({
+        screenWidth: monitor.size.width / scale,
+        screenHeight: monitor.size.height / scale,
+      });
+    } catch (error) {
+      // 화면 정보를 못 읽어도 앱은 그대로 동작해야 하므로, 배치만 포기하고 중앙 정렬로 넘깁니다.
+      console.warn("화면 크기를 읽지 못해 시작 창을 중앙에 배치합니다:", error);
+      return null;
+    }
+  }
+
+  async function openUpdateNoticeWindow(position = null) {
     try {
       const store = new LazyStore("tidy-task-config.json");
       const hiddenUntil = await store.get(UPDATE_NOTICE_STORE_KEY);
@@ -73,7 +95,7 @@
 
       const noticeWindow = new WebviewWindow(
         UPDATE_NOTICE_WINDOW_LABEL,
-        getUpdateNoticeWindowOptions(),
+        getUpdateNoticeWindowOptions(position),
       );
 
       noticeWindow.once("tauri://created", async () => {
@@ -560,25 +582,31 @@
       } catch(e) { console.warn('시작음 재생 실패:', e); }
     }
 
-    if (currentWindow.label === "main" && !appState.hideWelcomeMessage) {
-      new WebviewWindow('welcome', {
-        url: 'index.html',
-        title: 'Welcome to Tidy Task',
-        width: 320,
-        height: 480,
-        decorations: false,
-        transparent: true,
-        alwaysOnTop: true,
-        center: true,
-        visible: true,
-        resizable: false,
-        skipTaskbar: false
-      });
-    }
+    // ── [시작 창 배치] 환영 창과 업데이트 공지 창을 나란히 띄웁니다 ──
+    //
+    // 왜 이렇게 바뀌었는가:
+    //   예전에는 두 창이 모두 화면 정중앙(center:true)에 떠서 완전히 포개졌습니다.
+    //   그래서 "환영 창을 본 적 있는 기존 사용자에게만 공지를 띄운다"는 배타 조건으로
+    //   겹침을 피했는데, 그 결과 처음 설치한 사용자는 업데이트 공지를 영영 못 봤습니다.
+    //   이제 좌우로 나눠 놓기 때문에 신규 사용자도 두 안내를 한눈에 함께 볼 수 있습니다.
+    if (currentWindow.label === "main") {
+      const showWelcome = !appState.hideWelcomeMessage;
+      // 공지를 이미 닫은 사용자에게는 굳이 화면 크기를 조회하지 않습니다.
+      const layout = await getStartupLayout();
 
-    // 첫 실행 환영 창과 겹치지 않게, 기존 사용자에게만 독립 공지 창을 띄웁니다.
-    if (currentWindow.label === "main" && appState.hideWelcomeMessage) {
-      await openUpdateNoticeWindow();
+      if (showWelcome) {
+        // 환영 창만 뜨는 상황(공지를 이미 닫음)이면 굳이 옆으로 밀지 않고 중앙에 둡니다.
+        // 왜: 짝이 없는데 한쪽으로 치우쳐 뜨면 사용자에게 어색하게 보입니다.
+        const noticeHidden = !shouldShowUpdateNotice(
+          await new LazyStore("tidy-task-config.json").get(UPDATE_NOTICE_STORE_KEY),
+        );
+        const welcomePos = (layout && !noticeHidden) ? layout.welcome : null;
+        new WebviewWindow('welcome', getWelcomeWindowOptions(welcomePos));
+      }
+
+      // 공지 창은 신규·기존 사용자 모두에게 띄웁니다.
+      // 환영 창이 함께 뜰 때만 짝 배치 좌표를 쓰고, 혼자 뜰 때는 중앙에 둡니다.
+      await openUpdateNoticeWindow(showWelcome && layout ? layout.notice : null);
     }
 
     const isValidPos = (val) =>

@@ -53,6 +53,7 @@
     "store:allow-save",
     "opener:default",
     "opener:allow-open-url",
-    "core:app:allow-version"
+    "core:app:allow-version",
+    "core:window:allow-primary-monitor"
   ]
 }
