@@ -14,13 +14,11 @@
   } from "lucide-svelte";
   import { getCurrentWindow } from "@tauri-apps/api/window";
   import { dragRegion } from "../lib/dragRegion.js";
-  import { invoke } from "@tauri-apps/api/core";
   import { emit, emitTo, listen } from "@tauri-apps/api/event";
   import { onMount } from "svelte";
   import { appState } from "../lib/appState.svelte.js";
   import { WebviewWindow } from "@tauri-apps/api/webviewWindow";
 
-  let { onOpenSettings = () => {} } = $props();
   let showResetModal = $state(false);
 
   onMount(async () => {

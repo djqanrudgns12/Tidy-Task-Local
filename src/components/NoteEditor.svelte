@@ -96,13 +96,6 @@
     user-select: none;
   }
 
-  .note-title {
-    font-size: 0.72rem;
-    font-weight: 700;
-    letter-spacing: 0.04em;
-    text-transform: uppercase;
-  }
-
   .note-scroll {
     flex: 1 1 0;
     overflow-y: auto;

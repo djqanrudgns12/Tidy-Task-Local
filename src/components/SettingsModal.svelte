@@ -15,7 +15,6 @@
   let isUploading = $state(false);
   let isLoaded = $state(false);
   // ✨ initialSettings 삭제됨
-  let initialCustomFonts = []; 
 
   let localFontSize = $state(appState.fontSize || 10);
   let localUiFontSize = $state(appState.uiFontSize || 10);
@@ -68,7 +67,6 @@
 
     // 커스텀 폰트 목록은 공통으로 사용하므로 그대로 둡니다.
     // (appState.init()은 App.svelte onMount에서 이미 완료됨 — 재호출 불필요)
-    initialCustomFonts = [...appState.customFonts];
     isLoaded = true;
 
     // ✨ 2. 수신기 세팅이 완벽히 끝났으니, 메모장들에게 "나 준비됐어!" 라고 알립니다.
@@ -76,7 +74,6 @@
   });
 
   async function handleCancel() {
-    appState.customFonts = [...initialCustomFonts];
     await getCurrentWindow().close();
   }
 

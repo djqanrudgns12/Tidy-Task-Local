@@ -15,13 +15,31 @@
 
 ### 3.1. 멀티 윈도우 시스템 및 매니저 권한 (Manager System)
 - 단일 앱 내에서 여러 독립적인 창(`main`, `note-1`, `tinynote-1`, `settings`, `reminder` 등)을 생성 및 관리합니다.
-- **Manager Authority:** 다수의 창 중에서 단 하나의 창(보통 `main` 창, 닫히면 가장 오래된 생존 창으로 권한 승계)만이 전역 리마인더 체크 및 알림 등의 백그라운드 작업을 중앙 제어(`isManager = true`)하도록 설계되었습니다.
+- **Manager Authority:** 다수의 창 중에서 단 하나의 창만이 리마인더 점검·업데이트 확인·트레이 메뉴 요청·커스텀 폰트 등록을 중앙 제어(`isManager = true`)합니다.
+  - 선출 규칙(`src/lib/windows/managerElection.js`): **지금 열려 있는** 데이터 창 중 `main` → `note-1..10` → `tinynote-1..10` 순서로 1위가 매니저입니다.
+  - 권한은 `appState.becomeManager()` / `resignManager()` 두 함수로만 맡고 내려놓습니다(리스너·1시간 주기 점검·업데이트 일정이 함께 켜지고 꺼짐). `main`이 다시 뜨면 `manager-reclaim`으로 권한을 되찾습니다.
+- **보조 창**(`settings`, `ctx-menu`, `reminder`, `welcome`, `update-notice`, `help`, `archive`)은 저장소에 자기 데이터를 쓰지 않습니다. 판별은 `src/lib/windows/windowLabels.js`의 `isDataWindowLabel()` 하나를 씁니다.
 - 창 간 통신은 Tauri의 IPC API(`emit`, `listen`)를 통해 이벤트 기반으로 이루어집니다 (예: 테마 변경 동기화, 데이터 동기화).
 
 ### 3.2. 상태 관리와 영속성 (State Management & Persistence)
 - `src/lib/appState.svelte.js`가 애플리케이션의 "두뇌" 역할을 합니다.
 - **하이브리드 저장 엔진:** 모든 상태는 메모리 상의 Runes로 관리되는 동시에, 디바운스(Debounce) 처리를 통해 디스크의 JSON 스토어(`LazyStore`)로 지속적으로 자동 동기화됩니다.
 - 멀티 윈도우 간 상태 충돌을 방지하고 각 창 고유의 데이터(위치, 크기, 개별 메모 내용)를 무결하게 보존합니다.
+- **저장소 사실 (tauri-plugin-store 2.x):** 같은 파일을 여는 모든 창은 Rust 쪽 메모리 하나를 공유하므로 `get()`이 항상 최신입니다. `reload()`는 디스크 값으로 메모리를 덮어써 다른 창의 미저장 변경을 되돌리므로 **쓰지 않습니다**(유일한 예외: 읽기 실패 감지 시 `_ensureStoreLoaded`).
+- **데이터 안전장치:** Rust `setup`에서 시작 시 `tidy-task-config.json`을 백업(`.backup.json`, `.backup-prev.json`)하고, 손상 시 백업에서 복구합니다. `store_health` 명령으로 "파일엔 데이터가 있는데 저장소가 비어 있음"을 감지하면 저장을 잠급니다.
+
+### 3.2.1. 모듈 지도 (v5.0.2)
+| 위치 | 역할 |
+|---|---|
+| `src/lib/appState.svelte.js` | 상태(`$state`)와 공개 메서드를 가진 창구(facade). 컴포넌트는 여기만 부릅니다 |
+| `src/lib/storage/windowDataCodec.js` | **창 데이터 필드 표(`WINDOW_FIELDS`)** — 복원·저장·되돌리기 스냅샷 규칙의 단일 원천, 빈 창 판정 |
+| `src/lib/storage/serialQueue.js` | 저장 작업 직렬화 큐 (appState·archiveStore 공용) |
+| `src/lib/windows/` | 창 라벨 규칙, 매니저 선출, 빈 슬롯·창 옵션(`windowSlots`), Tauri 창 도우미(`windowRegistry`) |
+| `src/lib/reminders/reminderEngine.js` | 마감 임박 항목 수집 (점검·팝업 동기화 공용) |
+| `src/lib/io/txtPorter.js` | TXT 내보내기/가져오기 형식 |
+| `src/lib/dateUtils.js`, `ids.js`, `sound.js`, `fonts.js`, `icons.js`, `editorConstants.js`, `text.js` | 날짜 계산, 새 ID, 효과음, 커스텀 폰트 등록, 내장 아이콘, 툴바 공용 표, HTML→텍스트 |
+
+순수 로직 모듈은 모두 `node --test` 단위 테스트가 있습니다(`npm test`). 타입·접근성 검사는 `npm run check`.
 
 ### 3.3. 타임머신 (Undo/Redo) 및 유령 청소기
 - 사용자의 모든 액션을 스냅샷 형태로 기록하여 롤백할 수 있는 히스토리 스택(최대 20개)을 지원합니다.
@@ -36,6 +54,6 @@
 프로젝트 코드를 수정하거나 새로운 기능을 개발할 때, 어시스턴트(AI)와 개발자가 반드시 지켜야 할 원칙입니다.
 
 1. **Core Feature Analysis (핵심 기능 보존):** 코드를 수정하기 전, 원본 코드의 핵심 기능(특히 IPC 통신, 매니저 권한 승계 로직, 윈도우 Resize 락/언락)을 철저히 분석하여 기존 기능이 누락되지 않도록 해야 합니다.
-2. **State Persistence (상태 영속성 보장):** 새로운 상태값 추가 시, 반드시 `appState.svelte.js`의 `takeSnapshot`, `performSave`, `init` 및 초기화 로직(`resetContent` 등)에 빠짐없이 동기화되도록 반영해야 앱 재시작 시 상태가 유실되지 않습니다.
+2. **State Persistence (상태 영속성 보장):** 창별로 저장할 새 상태값은 `appState.svelte.js`에 `$state` 필드를 선언한 뒤, **`src/lib/storage/windowDataCodec.js`의 `WINDOW_FIELDS` 표에 한 줄을 추가**합니다(되돌리기 대상이면 `snapshot: true` + `SNAPSHOT_FIELDS`). `init`·`performSave`·`takeSnapshot`·`applySnapshot`은 이 표를 자동으로 따릅니다. 기본값 규칙(`||` vs `??`)을 지키고, `windowDataCodec.test.js`에 경계값 테스트를 추가하세요. 초기화 로직(`resetContent` 등)도 함께 점검합니다.
 3. **Execution Hierarchy:** 이 규칙은 모든 UI/비즈니스 로직 작업 시 최우선적으로 지켜져야 하며, 예기치 못한 데이터 유실 리스크(예: 초기화 버그, 잘못된 윈도우 라벨 기반 스토어 덮어쓰기)가 있을 경우 반드시 작업을 중단하고 사용자에게 대안을 제안해야 합니다.
 4. **가독성 및 주석 (Readability):** 변수명은 직관적으로 작성하고, 주석은 항상 '한국어'로 '왜(Why)' 이렇게 코드를 짰는지 의도를 명확하게 남깁니다.

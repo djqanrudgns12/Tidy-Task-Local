@@ -35,11 +35,6 @@ fn save_custom_font(app: tauri::AppHandle, name: String, bytes: Vec<u8>) -> Resu
     Ok(font_path.to_string_lossy().into_owned())
 }
 
-#[tauri::command]
-fn exit_app(app: tauri::AppHandle) {
-    app.exit(0);
-}
-
 // 파일을 읽어 "JSON 객체"로 해석되면 그 내용을 돌려줍니다. (읽기·해석 실패 시 None)
 fn read_json_object(path: &Path) -> Option<serde_json::Map<String, serde_json::Value>> {
     let bytes = fs::read(path).ok()?;
@@ -188,7 +183,7 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_opener::init())
-        .invoke_handler(tauri::generate_handler![save_custom_font, exit_app, store_health])
+        .invoke_handler(tauri::generate_handler![save_custom_font, store_health])
         .setup(|app| {
             // 어떤 창보다 먼저 저장 파일을 점검·백업합니다.
             protect_store_file(app.handle());

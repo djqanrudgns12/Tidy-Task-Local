@@ -251,7 +251,6 @@ export class AppState {
   _pendingUpdateRequesters = [];
   _unlistenUpdateResult = null;
   _unlistenUpdateDismissed = null;
-  _unlistenUpdateRequest = null;
 
 // ✨ [멀티 윈도우 명단 관리 변수]
   activeExtraWindows = $state([]);

@@ -50,7 +50,6 @@
   let unlistenApplySettings,
     unlistenResetData,
     unlistenResetConfig,
-    unlistenAddFont,
     unlistenClose,
     unlistenMove,
     unlistenFocus,
@@ -1200,7 +1199,6 @@
     if (unlistenApplySettings) unlistenApplySettings();
     if (unlistenResetData) unlistenResetData();
     if (unlistenResetConfig) unlistenResetConfig();
-    if (unlistenAddFont) unlistenAddFont();
     if (unlistenClose) unlistenClose();
     if (unlistenMove) unlistenMove();
     if (unlistenFocus) unlistenFocus();
@@ -1404,7 +1402,7 @@
       ></div>
     {/if}
 
-    <Titlebar onOpenSettings={() => {}} />
+    <Titlebar />
 
     <MainToolbar />
 
