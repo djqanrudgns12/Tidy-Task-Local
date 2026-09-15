@@ -6,8 +6,15 @@ import { convertFileSrc } from '@tauri-apps/api/core';
 //   부작용(windowLabel 세팅, 디스크 IO)이 전혀 없습니다. 아카이브 툴바의 글꼴 목록 구성에만 사용합니다.
 import { BUILTIN_FONTS } from './appState.svelte.js';
 
+import { createSerialQueue } from './storage/serialQueue.js';
+
 // 전역 스토어 인스턴스 (appState와 동일한 파일 사용)
 let tauriStore = null;
+
+// 아카이브 수정 작업을 한 줄로 세웁니다.
+// 왜: 제목 저장과 본문 저장이 거의 동시에 일어나면 둘 다 같은 옛 목록을 읽고
+//     서로의 결과를 덮어써 한쪽 수정이 사라졌습니다.
+const archiveQueue = createSerialQueue();
 
 class ArchiveState {
   // Svelte 5 반응형 상태 선언
@@ -105,22 +112,34 @@ class ArchiveState {
   //   따라서 "디스크에서 최신값 읽기 → 변환 함수 적용 → 메모리 동기화 → 저장"을
   //   하나의 끊김 없는 체인으로 묶어 데이터 유실을 원천 차단합니다.
   // ═══════════════════════════════════════════════════════════
+  // 성공하면 true, 실패하면 false를 돌려줍니다.
+  // 왜 결과를 돌려주는가: 예전에는 오류를 삼키고 아무것도 알려 주지 않아서,
+  //   Tiny Note가 "보관 실패"를 알 수 없었고 내용을 지운 채 창을 닫았습니다.
   async _safeModify(transformFn) {
-    if (!tauriStore) return;
-    try {
-      // 1단계: 최신 상태 읽기 (공유 메모리라 다른 창이 쓴 변경사항이 이미 들어 있습니다)
-      const diskNotes = await tauriStore.get('archivedNotes') || [];
+    if (!tauriStore) return false;
+    return archiveQueue.enqueue(async () => {
+      try {
+        // 1단계: 최신 상태 읽기 (공유 메모리라 다른 창이 쓴 변경사항이 이미 들어 있습니다)
+        const diskNotes = await tauriStore.get('archivedNotes') || [];
 
-      // 2단계: 변환 함수 적용 (추가, 삭제, 수정 등 — 디스크 최신값 기반)
-      const updatedNotes = transformFn(Array.isArray(diskNotes) ? diskNotes : []);
+        // 2단계: 변환 함수 적용 (추가, 삭제, 수정 등 — 최신값 기반)
+        const updatedNotes = transformFn(Array.isArray(diskNotes) ? diskNotes : []);
 
-      // 3단계: 메모리 상태 동기화 + 디스크 저장
-      this.notes = updatedNotes;
-      await tauriStore.set('archivedNotes', $state.snapshot(this.notes));
-      await tauriStore.save();
-    } catch(e) {
-      console.error("아카이브 안전 저장 오류:", e);
-    }
+        // 3단계: 메모리 상태 동기화 + 디스크 저장
+        this.notes = updatedNotes;
+        await tauriStore.set('archivedNotes', $state.snapshot(this.notes));
+        await tauriStore.save();
+        return true;
+      } catch(e) {
+        console.error("아카이브 안전 저장 오류:", e);
+        return false;
+      }
+    });
+  }
+
+  // 대기 중인 아카이브 저장이 모두 끝날 때까지 기다립니다 (아카이브 창을 닫기 전 사용).
+  whenSettled() {
+    return archiveQueue.settled();
   }
 
   // ✨ [Phase 3: 안전 장치] 기존 save()를 _safeModify 래퍼로 유지
@@ -165,10 +184,26 @@ class ArchiveState {
       sourceLabel: item.sourceLabel || 'unknown'
     };
 
-    // 🚀 [Zero-Loss] 디스크 최신 목록에 새 메모를 맨 앞에 추가
-    await this._safeModify((diskNotes) => [newNote, ...diskNotes]);
-    emit('archive-updated');
-    return true;
+    // 🚀 [Zero-Loss] 최신 목록에 새 메모를 맨 앞에 추가하고, 다시 읽어 실제로 들어갔는지 확인합니다.
+    // 왜 확인까지 하는가: 이 결과가 true면 Tiny Note가 자기 내용을 지우고 창을 닫습니다.
+    //   다른 창이 거의 동시에 아카이브를 저장하면 서로 옛 목록을 덮어쓸 수 있으므로,
+    //   "저장했다"가 아니라 "들어가 있는 것을 눈으로 확인했다"일 때만 성공으로 봅니다.
+    let confirmed = false;
+    for (let attempt = 1; attempt <= 3 && !confirmed; attempt++) {
+      const written = await this._safeModify((diskNotes) =>
+        diskNotes.some((n) => n.id === newNote.id) ? diskNotes : [newNote, ...diskNotes]
+      );
+      if (!written) continue;
+      try {
+        const latest = await tauriStore.get('archivedNotes');
+        confirmed = Array.isArray(latest) && latest.some((n) => n.id === newNote.id);
+      } catch (e) {
+        confirmed = false;
+      }
+    }
+
+    if (confirmed) emit('archive-updated');
+    return confirmed;
   }
 
   // ✨ [Phase 1: 결함 C 해결] 노트 영구 삭제 (단일) — _safeModify 기반
@@ -194,7 +229,7 @@ class ArchiveState {
   // ✨ [Phase 1: 결함 C 해결] 노트 정보 수정 (편집 모달용) — _safeModify 기반
   async updateNote(id, updates) {
     let found = false;
-    await this._safeModify((diskNotes) =>
+    const written = await this._safeModify((diskNotes) =>
       diskNotes.map(n => {
         if (n.id === id) {
           found = true;
@@ -203,8 +238,8 @@ class ArchiveState {
         return n;
       })
     );
-    if (found) emit('archive-updated');
-    return found;
+    if (found && written) emit('archive-updated');
+    return found && written;
   }
 
   // ✨ [Phase 1: 결함 C 해결] 북마크 토글 — _safeModify 기반

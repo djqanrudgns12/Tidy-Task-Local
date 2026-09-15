@@ -9,7 +9,7 @@
   import { getCurrentWindow } from "@tauri-apps/api/window";
   import { listen } from "@tauri-apps/api/event";
   import { archiveState } from "../lib/archiveStore.svelte.js";
-  import { editable } from "../lib/editable.js";
+  import { editable, sanitizeForDisplay } from "../lib/editable.js";
   import { clampFontSizeHtml, STABLE_MAX_PT } from "../lib/fontSize.js";
   import { TINY_NOTE_THEMES, getTinyNoteTheme } from "../lib/themes.js";
   import ArchiveToolbar from "./ArchiveToolbar.svelte";
@@ -103,6 +103,7 @@
 
   onDestroy(() => {
     if (toastTimer) clearTimeout(toastTimer);
+    if (masonryFrame) cancelAnimationFrame(masonryFrame);
     if (unlistenArchiveUpdate) unlistenArchiveUpdate();
     // 디바운스 대기 중이던 본문 저장 타이머 정리
     for (const t of contentTimers.values()) clearTimeout(t);
@@ -183,9 +184,38 @@
     const _vm = viewMode;
     tick().then(() => {
       recalcMasonry();
-      requestAnimationFrame(recalcMasonry);
+      scheduleMasonry();
     });
   });
+
+  // ✨ [성능] 재계산 요청을 한 프레임에 한 번으로 묶습니다.
+  // 왜: 카드마다 크기 감시기가 따로 전체 재계산을 예약하면 카드 N개일 때 한 프레임에 N번,
+  //     즉 카드 수의 제곱만큼 레이아웃 계산이 일어나 보관함이 커질수록 버벅였습니다.
+  //     결과(각 카드의 gridRowEnd)는 마지막 한 번의 계산과 같습니다.
+  let masonryFrame = null;
+  function scheduleMasonry() {
+    if (masonryFrame) return;
+    masonryFrame = requestAnimationFrame(() => {
+      masonryFrame = null;
+      recalcMasonry();
+    });
+  }
+
+  // ✨ [성능·보안] 카드 본문 표시용 HTML을 내용 문자열 기준으로 한 번만 만들어 재사용합니다.
+  // 왜 캐시인가: 화면을 다시 그릴 때마다 카드 전체의 HTML을 파싱하던 비용을 없앱니다.
+  // 왜 정제(sanitize)까지 하는가: 선택 모드는 {@html}로 바로 그리기 때문에,
+  //   편집기(editable)와 똑같이 허용된 태그·속성만 남겨야 안전합니다. (편집 모드 결과와 동일)
+  const displayHtmlCache = new Map();
+  function displayHtml(content) {
+    const key = content || '';
+    let html = displayHtmlCache.get(key);
+    if (html === undefined) {
+      html = sanitizeForDisplay(clampFontSizeHtml(key, STABLE_MAX_PT));
+      if (displayHtmlCache.size > 300) displayHtmlCache.clear();
+      displayHtmlCache.set(key, html);
+    }
+    return html;
+  }
 
   // 검색 중이거나 선택 모드에서는 드래그 재정렬을 막습니다(순서 꼬임/클릭 충돌 방지).
   let dndDisabledByContext = $derived(!!searchQuery || isSelectionMode);
@@ -240,8 +270,8 @@
     apply();
     const ro = new ResizeObserver(() => {
       apply();
-      // 높이 변화 후 전체 메이슨리도 재계산 (다른 카드 위치 보정)
-      requestAnimationFrame(recalcMasonry);
+      // 높이 변화 후 전체 메이슨리도 재계산 (다른 카드 위치 보정) — 프레임당 1회로 합쳐 예약
+      scheduleMasonry();
     });
     ro.observe(node);
     return { destroy() { ro.disconnect(); } };
@@ -287,6 +317,12 @@
   }
 
   async function handleClose() {
+    // 닫기 전에 아직 저장 대기(0.5초 디바운스) 중인 본문을 모두 확정하고,
+    // 아카이브 저장 줄이 완전히 빌 때까지 기다립니다.
+    // 왜: 창이 먼저 사라지면 진행 중이던 저장 요청이 끊겨 마지막 수정이 유실될 수 있습니다.
+    const pending = [...pendingContent.keys()].map((id) => flushContent(id));
+    await Promise.allSettled(pending);
+    await archiveState.whenSettled();
     await getCurrentWindow().close();
   }
 
@@ -356,8 +392,10 @@
     if (pendingContent.has(id)) {
       const html = pendingContent.get(id);
       pendingContent.delete(id);
-      archiveState.updateNote(id, { content: html });
+      // 저장 완료를 기다릴 수 있도록 Promise를 돌려줍니다 (창 닫기 전 확정에 사용).
+      return archiveState.updateNote(id, { content: html });
     }
+    return Promise.resolve();
   }
   // 제목은 짧으므로 blur/change 시점에 저장
   function saveTitle(id, title) {
@@ -476,7 +514,8 @@
     // ✨ [TCREI: Integrity] sourceLabel 충돌 방지를 위한 마커 부착
     await archiveState.addNote({
       title: addTitle || '제목 없음',
-      content: addContent,
+      // 저장 전에 허용된 서식만 남깁니다 (다른 편집기와 같은 기준).
+      content: sanitizeForDisplay(addContent),
       themeColor: addThemeColor,
       isDarkMode: false, // 생성 시점엔 라이트 모드로 통일 (Tiny Note 로직)
       sourceLabel: `archive-created-${Date.now()}`
@@ -575,7 +614,7 @@
           <span class="text-[11px] font-bold block mb-1 opacity-70">내용</span>
           <div 
             contenteditable="true"
-            bind:innerHTML={addContent}
+            use:editable={{ html: addContent, onUpdate: (v) => { addContent = v; } }}
             class="w-full border rounded-lg px-3 py-2 text-[12px] outline-none transition-all focus:ring-2 focus:ring-amber-400/50 min-h-[80px] max-h-[150px] overflow-y-auto"
             style="background-color: {archiveState.globalSettings.isDarkMode ? '#2d333b' : '#ffffff'}; color: {archiveState.globalSettings.isDarkMode ? '#e2e8f0' : '#374151'}; border-color: {archiveState.globalSettings.isDarkMode ? 'rgba(255,255,255,0.1)' : '#e5e7eb'};"
           ></div>
@@ -856,13 +895,13 @@
               <!-- ✨ 본문: Tiny Note와 동일 규격(.rte-faithful)으로 렌더 + 클릭 즉시 편집 -->
               <div class="relative">
                 {#if isSelectionMode}
-                  <div class="text-[11px] rte-faithful archive-clamp" style="color: {archiveState.globalSettings.isDarkMode ? '#cbd5e1' : '#4b5563'};">{@html clampFontSizeHtml(note.content, STABLE_MAX_PT)}</div>
+                  <div class="text-[11px] rte-faithful archive-clamp" style="color: {archiveState.globalSettings.isDarkMode ? '#cbd5e1' : '#4b5563'};">{@html displayHtml(note.content)}</div>
                 {:else}
                   <!-- svelte-ignore a11y_no_static_element_interactions -->
                   <div
                     contenteditable="true"
                     spellcheck="false"
-                    use:editable={{ html: clampFontSizeHtml(note.content, STABLE_MAX_PT), onUpdate: (v) => queueContentSave(note.id, v), onSave: () => flushContent(note.id) }}
+                    use:editable={{ html: displayHtml(note.content), onUpdate: (v) => queueContentSave(note.id, v), onSave: () => flushContent(note.id) }}
                     use:measureOverflow={note.id}
                     onfocus={() => handleCardFocusIn(note.id)}
                     class="text-[11px] rte-faithful outline-none rounded {isOpen(note.id) ? '' : 'archive-clamp'} focus:bg-black/5"
@@ -1011,13 +1050,13 @@
                   <!-- 본문: 충실 렌더 + 인라인 편집 + 접기/펼치기 -->
                   <div class="relative mt-0.5">
                     {#if isSelectionMode}
-                      <div class="text-[10px] rte-faithful archive-clamp" style="color: {archiveState.globalSettings.isDarkMode ? '#9ca3af' : '#6b7280'};">{@html clampFontSizeHtml(note.content, STABLE_MAX_PT)}</div>
+                      <div class="text-[10px] rte-faithful archive-clamp" style="color: {archiveState.globalSettings.isDarkMode ? '#9ca3af' : '#6b7280'};">{@html displayHtml(note.content)}</div>
                     {:else}
                       <!-- svelte-ignore a11y_no_static_element_interactions -->
                       <div
                         contenteditable="true"
                         spellcheck="false"
-                        use:editable={{ html: clampFontSizeHtml(note.content, STABLE_MAX_PT), onUpdate: (v) => queueContentSave(note.id, v), onSave: () => flushContent(note.id) }}
+                        use:editable={{ html: displayHtml(note.content), onUpdate: (v) => queueContentSave(note.id, v), onSave: () => flushContent(note.id) }}
                         use:measureOverflow={note.id}
                         onfocus={() => handleCardFocusIn(note.id)}
                         class="text-[10px] rte-faithful outline-none rounded {isOpen(note.id) ? '' : 'archive-clamp'} focus:bg-black/5"
