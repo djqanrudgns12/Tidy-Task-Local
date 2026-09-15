@@ -5,6 +5,15 @@ import { emit, listen } from '@tauri-apps/api/event';
 import { LogicalPosition } from '@tauri-apps/api/dpi';
 import { TINY_NOTE_MIN_WIDTH, TINY_NOTE_ROLLED_HEIGHT } from './tinyNoteWindow.js';
 import { isDataWindowLabel } from './windows/windowLabels.js';
+import { invoke } from '@tauri-apps/api/core';
+import {
+  SNAPSHOT_FIELDS,
+  decodeWindowData,
+  encodeWindowData,
+  hasWindowContent,
+  pickSnapshot,
+  restoreSnapshotValue,
+} from './storage/windowDataCodec.js';
 import { getThemeAccent, isTinyNoteDarkTheme, nextTinyNoteThemeState, normalizeThemeId } from './themes.js';
 import {
   AUTO_CHECK_INTERVAL_MS,
@@ -284,7 +293,9 @@ export class AppState {
   isProgrammaticResize = $state(false); // ✨ [TCREI] 강제 리사이즈로 인한 스냅 해제 방지 락(Lock)
 
   // ✨ [타임머신 엔진] Undo / Redo 상태 관리
-  historyStack = $state([]);
+  // $state.raw: 스냅샷은 한 번 찍으면 바뀌지 않는 기록이라 속까지 추적할 필요가 없습니다.
+  // (깊은 추적을 끄면 스냅샷 20개 × 할 일 전체에 프록시를 씌우던 비용이 사라집니다)
+  historyStack = $state.raw([]);
   currentIndex = $state(-1);
   isRestoring = false; // 복원 중 무한루프 방지 락(Lock)
   historyTimeout = null; // 타자 입력 디바운스용
@@ -396,52 +407,20 @@ async init() {
       }
 
       // 🏠 각 창의 독립된 데이터로 화면 구성
-      this.todos = winData.todos || [];
-      this.archivedTodos = winData.archivedTodos || [];
-      this.notes = winData.notes || '';
+      // 필드별 복원 규칙(기본값, `||`/`??` 차이, 테마 정규화, 전체화면·롤업 상태 등)은
+      // windowDataCodec.js의 필드 표 한 곳에서 관리합니다. 저장·되돌리기도 같은 표를 씁니다.
+      this.hideWelcomeMessage = await tauriStore.get('hideWelcomeMessage') || false;
+      const decoded = decodeWindowData(winData, {
+        label: this.windowLabel,
+        globalMuteSound: await tauriStore.get('globalMuteSound'),
+      });
+      for (const [name, value] of Object.entries(decoded)) {
+        this[name] = value;
+      }
       // 디스크에서 실제 내용을 읽어왔다면, 이 창은 "내용을 가졌던 창"으로 표시합니다.
-      if (this.todos.length > 0 || this.archivedTodos.length > 0 || (this.notes || '').trim().length > 0) {
+      if (hasWindowContent(decoded)) {
         this._everHadContent = true;
       }
-      this.themeColor = normalizeThemeId(
-        winData.themeColor,
-        this.windowLabel.startsWith('tinynote-') ? 'tiny-note' : 'tidy',
-      );
-      this.opacity = winData.opacity ?? 1.0;
-      if (typeof this.opacity !== 'number' || this.opacity < 0.1) this.opacity = 1.0;
-      this.reminderOpacity = winData.reminderOpacity ?? 1.0;
-      this.hideWelcomeMessage = await tauriStore.get('hideWelcomeMessage') || false;
-      this.globalMuteSound = await tauriStore.get('globalMuteSound') || false;
-
-      this.fontFamily = winData.fontFamily || '메이플스토리 L';
-      this.uiFontFamily = winData.uiFontFamily || '메이플스토리 L';
-      this.fontSize = winData.fontSize || 10;
-      this.uiFontSize = winData.uiFontSize || 10;
-      this.letterSpacing = winData.letterSpacing ?? 0;
-
-      this.isPinned = winData.isPinned || false;
-      this.title = winData.title || '';
-      this.isDarkMode = isTinyNoteDarkTheme(this.themeColor) || winData.isDarkMode || false;
-      this.showArchived = winData.showArchived ?? true;
-      this.showNotes = winData.showNotes ?? true;
-      this.showReminders = winData.showReminders ?? true;
-      this.reminderSuppressUntil = winData.reminderSuppressUntil || 0;
-      
-      this.windowPosX = winData.windowPosX;
-      this.windowPosY = winData.windowPosY;
-      this.windowWidth = winData.windowWidth;
-      this.windowHeight = winData.windowHeight;
-      // ✨ 전체화면 상태 복원: 다음 부팅 시 setFullscreen(true) 호출의 근거가 됩니다
-      this.isFullscreen = winData.isFullscreen || false;
-      this.todoHeight = winData.todoHeight ?? 145;
-      this.notesHeight = winData.notesHeight ?? 140;
-      this.isNotesLocked = winData.isNotesLocked ?? false;
-
-      this.isRolledUp = winData.isRolledUp || false;
-      this.previousHeight = winData.previousHeight || 280;
-      this.isVerticalSnapped = winData.isVerticalSnapped || false;
-      this.preSnapPosY = winData.preSnapPosY ?? null;
-      this.preSnapHeight = winData.preSnapHeight ?? null;
 
       if (this.windowLabel === 'main') {
         this.isManager = true; // ✨ Phase 3: 최초 기동 시 main 창이 매니저
@@ -1155,7 +1134,18 @@ async init() {
     for (let i = 1; i <= attempts; i++) {
       const candidate = new LazyStore(STORE_FILE);
       try {
-        await candidate.keys();
+        const keys = await candidate.keys();
+        // 저장소가 비어 있는데 디스크 파일에는 데이터가 있다면 "읽기 실패"입니다.
+        // 왜 이 확인이 필요한가: 저장 플러그인은 파일을 못 읽어도 오류 없이 빈 저장소로 시작하므로,
+        //   keys() 성공만으로는 실패를 알 수 없습니다. 이 상태로 저장하면 모든 창의 데이터가 빈 값으로 덮입니다.
+        // 왜 이 경우에만 reload()를 쓰는가: 메모리가 완전히 비어 있어 되돌려질 내용이 없고,
+        //   디스크를 다시 읽는 것만이 데이터를 살리는 방법이기 때문입니다.
+        if (keys.length === 0 && await this._diskHasData()) {
+          await candidate.reload();
+          if ((await candidate.keys()).length === 0) {
+            throw new Error('디스크에는 데이터가 있지만 저장소를 읽지 못했습니다.');
+          }
+        }
         // 읽기가 검증된 인스턴스만 실제 저장소로 채택합니다.
         tauriStore = candidate;
         return true;
@@ -1166,6 +1156,16 @@ async init() {
       }
     }
     return false;
+  }
+
+  // 디스크의 저장 파일에 실제 데이터가 있는지 Rust에 물어봅니다. (확인할 수 없으면 false)
+  async _diskHasData() {
+    try {
+      const health = await invoke('store_health');
+      return Boolean(health && health.parse_ok && health.key_count > 0);
+    } catch (e) {
+      return false;
+    }
   }
 
   // 읽기가 실패한 창은 저장이 잠긴 채로 방치되지 않고, 살아날 때까지 스스로 재시도합니다.
@@ -1192,10 +1192,11 @@ async init() {
       const winData = await tauriStore.get(this.windowLabel);
       if (!winData) return;
 
-      const isEmptyNow =
-        (this.todos?.length || 0) === 0 &&
-        (this.archivedTodos?.length || 0) === 0 &&
-        this._stripHtml(this.notes || '').length === 0;
+      const isEmptyNow = !hasWindowContent({
+        todos: this.todos,
+        archivedTodos: this.archivedTodos,
+        notes: this.notes,
+      });
       if (!isEmptyNow) return;
 
       this.isRestoring = true;
@@ -1212,25 +1213,11 @@ async init() {
     }
   }
 
+  // 되돌리기 기록용 사진을 찍습니다. (대상 필드는 windowDataCodec.js의 SNAPSHOT_FIELDS)
+  // 왜 JSON 왕복 복사를 없앴는가: $state.snapshot()이 이미 프록시 없는 깊은 복사본을 돌려주므로
+  //   예전의 JSON.parse(JSON.stringify(...))는 같은 복사를 한 번 더 하는 낭비였습니다.
   takeSnapshot() {
-    return {
-      todos: JSON.parse(JSON.stringify($state.snapshot(this.todos))),
-      archivedTodos: JSON.parse(JSON.stringify($state.snapshot(this.archivedTodos))),
-      notes: this.notes,
-      themeColor: this.themeColor,
-      opacity: this.opacity,
-      fontFamily: this.fontFamily,
-      uiFontFamily: this.uiFontFamily,
-      fontSize: this.fontSize,
-      uiFontSize: this.uiFontSize,
-      letterSpacing: this.letterSpacing,
-      isDarkMode: this.isDarkMode,
-      showArchived: this.showArchived,
-      showNotes: this.showNotes,
-      showReminders: this.showReminders,
-      reminderSuppressUntil: this.reminderSuppressUntil,
-      title: this.title,
-    };
+    return pickSnapshot((name) => $state.snapshot(this[name]));
   }
 
   // ✨ [엔진 코어 2] 사진(스냅샷)을 역사 앨범에 끼워넣기 (최대 20개)
@@ -1247,13 +1234,16 @@ async init() {
     }
 
     // 만약 '이전'으로 돌아온 상태에서 새로운 행동을 했다면, 미래의 기록은 지워버림
-    this.historyStack = this.historyStack.slice(0, this.currentIndex + 1);
-    this.historyStack.push(snap);
+    // 왜 새 배열을 만들어 통째로 바꾸는가: historyStack은 $state.raw(깊은 추적 없음)라서
+    //   push/shift 같은 제자리 수정은 화면(되돌리기 버튼 활성화)에 전달되지 않기 때문입니다.
+    const next = [...this.historyStack.slice(0, this.currentIndex + 1), snap];
 
     // 🚀 과부하 방지: 히스토리가 20개를 넘어가면 제일 오래된 것 폐기
-    if (this.historyStack.length > 20) {
-      this.historyStack.shift(); 
+    if (next.length > 20) {
+      next.shift();
+      this.historyStack = next;
     } else {
+      this.historyStack = next;
       this.currentIndex++;
     }
   }
@@ -1278,23 +1268,12 @@ async init() {
   async applySnapshot(snap) {
     this.isRestoring = true; // 무한 루프 락(Lock) ON
 
-    // 상태 덮어쓰기
-    this.todos = JSON.parse(JSON.stringify(snap.todos));
-    this.archivedTodos = JSON.parse(JSON.stringify(snap.archivedTodos));
-    this.notes = snap.notes;
-    this.themeColor = snap.themeColor;
-    this.opacity = snap.opacity;
-    this.fontFamily = snap.fontFamily;
-    this.uiFontFamily = snap.uiFontFamily;
-    this.fontSize = snap.fontSize;
-    this.uiFontSize = snap.uiFontSize;
-    this.letterSpacing = snap.letterSpacing ?? 0;
-    this.isDarkMode = snap.isDarkMode;
-    this.showArchived = snap.showArchived;
-    this.showNotes = snap.showNotes;
-    this.showReminders = snap.showReminders ?? true;
-    this.reminderSuppressUntil = snap.reminderSuppressUntil || 0;
-    this.title = snap.title;
+    // 상태 덮어쓰기 (필드 목록·옛 스냅샷 보정 규칙은 windowDataCodec.js를 따릅니다)
+    for (const name of SNAPSHOT_FIELDS) {
+      const value = restoreSnapshotValue(name, snap[name]);
+      // 배열(할 일 목록)은 복사해서 넣어, 화면에서 고쳐도 기록 앨범의 원본이 바뀌지 않게 합니다.
+      this[name] = Array.isArray(value) ? structuredClone(value) : value;
+    }
 
     // 화면엔 반영되었으니, 하드디스크에도 조용히 저장 (역사에 남기진 않음)
     await this.performSave(); 
@@ -1308,7 +1287,7 @@ async init() {
   // 왜 분리했는가:
   //   ① 저장소 읽기가 검증되지 않은 창(_hydrated=false)은 아예 쓰기를 못 하게 막아야 하고,
   //   ② 동시에 들어온 저장 요청은 큐에 세워 하나씩 처리해야 서로 덮어쓰지 않기 때문입니다.
-  async performSave(snap_ignored = null, keys = null) {
+  async performSave() {
     if (!tauriStore) return false;
 
     // 보조 창(리마인더·환영·우클릭 메뉴·설정)은 자기 데이터가 없으므로 절대 쓰지 않습니다.
@@ -1324,64 +1303,18 @@ async init() {
       return false;
     }
 
-    return enqueueWrite(() => this._writeToDisk(keys));
+    return enqueueWrite(() => this._writeToDisk());
   }
 
   // 실제 디스크 기록 본체 (항상 큐를 통해서만 호출됩니다)
-  async _writeToDisk(keys = null) {
+  async _writeToDisk() {
     try {
-      let winDataToSave;
+      // 저장할 필드 목록·순서는 windowDataCodec.js의 표 하나를 따릅니다 (init·되돌리기와 같은 목록).
+      // 전체화면·롤업·세로 스냅·창 위치 같은 창 상태도 모두 이 표에 들어 있습니다.
+      const winDataToSave = encodeWindowData((name) => $state.snapshot(this[name]));
 
-      if (keys) {
-        const existingData = await tauriStore.get(this.windowLabel) || {};
-        winDataToSave = { ...existingData };
-        for (const k of keys) {
-          winDataToSave[k] = $state.snapshot(this[k]);
-        }
-      } else {
-        winDataToSave = {
-          todos: $state.snapshot(this.todos),
-          archivedTodos: $state.snapshot(this.archivedTodos),
-          notes: this.notes,
-          themeColor: this.themeColor,
-          opacity: this.opacity,
-          reminderOpacity: this.reminderOpacity,
-          fontFamily: this.fontFamily,
-          uiFontFamily: this.uiFontFamily,
-          fontSize: this.fontSize,
-          uiFontSize: this.uiFontSize,
-          letterSpacing: this.letterSpacing,
-          isPinned: this.isPinned,
-          title: this.title,
-          isDarkMode: this.isDarkMode,
-          showArchived: this.showArchived,
-          showNotes: this.showNotes,
-          showReminders: this.showReminders,
-          reminderSuppressUntil: this.reminderSuppressUntil,
-          windowPosX: this.windowPosX,
-          windowPosY: this.windowPosY,
-          windowWidth: this.windowWidth,
-          windowHeight: this.windowHeight,
-          // ✨ 전체화면 상태도 디스크에 보존: 재시작 시 복원의 근거
-          isFullscreen: this.isFullscreen,
-          todoHeight: this.todoHeight,
-          notesHeight: this.notesHeight,
-          isNotesLocked: this.isNotesLocked,
-          globalMuteSound: this.globalMuteSound,
-          isRolledUp: this.isRolledUp,
-          previousHeight: this.previousHeight,
-          isVerticalSnapped: this.isVerticalSnapped,
-          preSnapPosY: this.preSnapPosY,
-          preSnapHeight: this.preSnapHeight
-        };
-      }
-
-      const currentTodos = $state.snapshot(this.todos) || [];
-      const currentArchived = $state.snapshot(this.archivedTodos) || [];
-      const currentNotes = this.notes || '';
-      // ✨ HTML 찌꺼기(<br>, <p> 등)를 완전히 제거한 순수 텍스트만 추출하여 진짜 빈 창인지 판별합니다.
-      const cleanNotes = this._stripHtml ? this._stripHtml(currentNotes) : currentNotes.replace(/<[^>]*>?/gm, '').trim();
-      const hasContent = currentTodos.length > 0 || currentArchived.length > 0 || cleanNotes.length > 0;
+      // ✨ HTML 찌꺼기(<br>, &nbsp; 등)만 남은 창은 "빈 창"으로 봅니다 (판정 기준은 코덱과 공유).
+      const hasContent = hasWindowContent(winDataToSave);
 
       // ⏳ [부팅 유예] 창이 열린 직후 1.5초 동안은 빈 창이어도 아무것도 건드리지 않습니다.
       // 왜: 시작 직후에는 아직 사용자가 아무 조작도 하지 않은 시점이라,
@@ -1412,10 +1345,8 @@ async init() {
         // 🚨 [핵심 방어 2] 오직 '내 창의 데이터(winDataToSave)'만 저장합니다.
         await tauriStore.set(this.windowLabel, winDataToSave);
 
-        // ✨ globalMuteSound는 전역 공유 키로 별도 저장
-        if ('globalMuteSound' in winDataToSave || !keys) {
-          await tauriStore.set('globalMuteSound', this.globalMuteSound);
-        }
+        // ✨ globalMuteSound는 전역 공유 키로도 저장 (모든 창이 이 값을 읽습니다)
+        await tauriStore.set('globalMuteSound', this.globalMuteSound);
 
         // ✨ [핵심 방어 3] 내용이 추가되어 유효한 창이 되었으므로, 명부에 내가 확실히 존재하는지 강제 확인합니다.
         // init() 시점에 일시적으로 빈 창으로 판정되어 명부에서 삭제되었을 경우를 완벽히 롤백합니다.
@@ -1443,31 +1374,6 @@ async init() {
       console.error(`❌ [${this.windowLabel}] 저장 엔진 오류:`, e);
       return false;
     }
-  }
-
-  // ✨ [설정 전용 경량 저장] 테마·폰트·창 크기처럼 자주 바뀌는 값만 부분 저장합니다.
-  // 왜 별도 타이머인가: 예전에는 본문 저장과 타이머를 공유해서, 설정이 바뀌면
-  //   예약돼 있던 "본문 저장"이 취소되고 설정 키만 저장 → 마지막 입력분이 유실됐습니다.
-  async saveSettingsOnly() {
-    if (!this.isReady) return;
-    if (settingsSaveTimer) clearTimeout(settingsSaveTimer);
-
-    settingsSaveTimer = setTimeout(async () => {
-      settingsSaveTimer = null;
-
-      // 본문 저장이 예약돼 있다면 부분 저장 대신 전체 저장으로 합칩니다(내용 유실 원천 차단).
-      if (contentSaveTimer) {
-        await this.saveNow(false);
-        return;
-      }
-
-      const settingKeys = [
-        'themeColor', 'opacity', 'fontFamily', 'uiFontFamily',
-        'fontSize', 'uiFontSize', 'isDarkMode', 'showArchived', 'showNotes', 'showReminders', 'reminderSuppressUntil',
-        'windowPosX', 'windowPosY', 'windowWidth', 'windowHeight', 'todoHeight'
-      ];
-      await this.performSave(null, settingKeys);
-    }, 200);
   }
 
   // ✨ [본문 디바운스 저장] 타자 입력용. 타임머신 기록은 조금 더 늦게 남깁니다.
