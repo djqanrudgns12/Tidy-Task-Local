@@ -6,6 +6,7 @@
   import { TINY_NOTE_MIN_WIDTH, TINY_NOTE_ROLLED_HEIGHT } from "./lib/tinyNoteWindow.js";
   import { getTidyTheme } from "./lib/themes.js";
   import { isDataWindowLabel } from "./lib/windows/windowLabels.js";
+  import { hasWindowContent } from "./lib/storage/windowDataCodec.js";
   import {
     UPDATE_NOTICE_STORE_KEY,
     UPDATE_NOTICE_WINDOW_LABEL,
@@ -762,15 +763,11 @@
 
             if (!winData) continue;
 
-            const hasTodos = (winData.todos || []).length > 0;
-            const hasArchived = (winData.archivedTodos || []).length > 0;
+            // 빈 창 판정은 저장 엔진·새 창 생성과 같은 기준(hasWindowContent)을 씁니다.
+            const hasContent = hasWindowContent(winData);
             
             // ✨ 1. 시작할 때도 HTML 찌꺼기 필터링을 거쳐 진짜 빈 창은 명부에서 영구 삭제
-            const rawNotes = winData.notes || "";
-            const cleanNotes = rawNotes.replace(/<[^>]*>?/gm, '').replace(/&nbsp;/g, '').trim();
-            const hasNotes = cleanNotes.length > 0;
-
-            if (hasTodos || hasArchived || hasNotes) {
+            if (hasContent) {
               validWindows.push(label);
               const tX = winData.windowPosX ?? null;
               const tY = winData.windowPosY ?? null;
@@ -888,9 +885,10 @@
       }
 
       // ✨ Phase 3: 매니저 창이 닫힐 때 권한 승계를 위한 이벤트 송신
+      // 권한과 점검 타이머를 내려놓은 뒤, 누가 닫히는지(라벨)를 함께 알려 후보에서 빼게 합니다.
       if (appState.isManager) {
-        appState.isManager = false;
-        await emit('manager-closing');
+        appState.resignManager();
+        await emit('manager-closing', { label: win.label });
       }
 
       try {
@@ -1068,97 +1066,8 @@
       );
     }
 
-    if (currentWindow.label === "main") {
-      unlistenAddFont = await listen("req-add-custom-font", async (event) => {
-        const { name, path } = event.payload;
-
-        if (!appState.customFonts.find((f) => f.name === name)) {
-          appState.customFonts.push({ name, path });
-
-          const fontStore = new LazyStore("tidy-task-config.json");
-          let latestFonts = (await fontStore.get("customFonts")) || [];
-          if (!latestFonts.find((f) => f.name === name)) {
-            latestFonts.push({ name, path });
-            await fontStore.set("customFonts", latestFonts);
-            await fontStore.save();
-          }
-
-          try {
-            const assetUrl = convertFileSrc(path);
-            const font = new FontFace(name, `url(${assetUrl})`);
-            const loadedFont = await font.load();
-            document.fonts.add(loadedFont);
-          } catch (e) {}
-        }
-      });
-
-      const unlistenSpawnMain = await listen("spawn-new-window", () => {
-        appState.spawnNewWindow();
-      });
-
-      const unlistenSpawnTiny = await listen("spawn-tiny-note", () => {
-        appState.spawnTinyNote();
-      });
-
-      const unlistenResetCoordinates = await listen("req-reset-coordinates", async () => {
-        let offsetX = 100;
-        let offsetY = 100;
-        const mainWin = await WebviewWindow.getByLabel('main');
-        if (mainWin) {
-          try {
-            const factor = await mainWin.scaleFactor();
-            await mainWin.setPosition(new LogicalPosition(offsetX, offsetY));
-            await mainWin.show();
-            await mainWin.unminimize();
-            await mainWin.setFocus();
-            
-            // App.svelte 내부 상태와 동기화 (main 창 한정)
-            appState.windowPosX = offsetX;
-            appState.windowPosY = offsetY;
-            appState.saveNow();
-            
-            offsetX += 30;
-            offsetY += 30;
-          } catch(e) {}
-        }
-
-        const mainStore = new LazyStore('tidy-task-config.json');
-        const activeWindows = await mainStore.get('activeExtraWindows') || [];
-        
-        for (const label of activeWindows) {
-           const win = await WebviewWindow.getByLabel(label);
-           if (win) {
-             try {
-                const factor = await win.scaleFactor();
-                await win.setPosition(new LogicalPosition(offsetX, offsetY));
-                await win.show();
-                await win.unminimize();
-                await win.setFocus();
-
-                // 디스크에도 새 위치 저장 (StickerWindow/NoteWindow가 다시 켤 때 참고하도록)
-                let winData = await mainStore.get(label);
-                if (winData) {
-                   winData.windowPosX = offsetX;
-                   winData.windowPosY = offsetY;
-                   await mainStore.set(label, winData);
-                }
-
-                offsetX += 30;
-                offsetY += 30;
-             } catch(e) {}
-           }
-        }
-        await mainStore.save();
-      });
-
-      // Cleanup
-      const originalOnDestroy = onDestroy;
-      unlistenAddFont = () => {
-          unlistenSpawnMain();
-          unlistenSpawnTiny();
-          unlistenResetCoordinates();
-      };
-    }
+    // 트레이 요청(새 창·새 Tiny Note·좌표 초기화)과 커스텀 폰트 등록은 이제 매니저 창이 처리합니다.
+    // (appState.setupManagerListeners 참고 — main이 닫혀 있어도 동작하도록 옮겼습니다)
 
     if (currentWindow.label !== "ctx-menu") {
       ctxWin = await WebviewWindow.getByLabel('ctx-menu');

@@ -1,5 +1,4 @@
 import { LazyStore } from '@tauri-apps/plugin-store';
-import { WebviewWindow } from '@tauri-apps/api/webviewWindow';
 import { emit } from '@tauri-apps/api/event';
 import { convertFileSrc } from '@tauri-apps/api/core';
 // ✨ [Full Toolbar] BUILTIN_FONTS는 순수 데이터 상수라 import해도 appState.init() 같은
@@ -7,6 +6,9 @@ import { convertFileSrc } from '@tauri-apps/api/core';
 import { BUILTIN_FONTS } from './appState.svelte.js';
 
 import { createSerialQueue } from './storage/serialQueue.js';
+import { TINY_NOTE_PREFIX } from './windows/windowLabels.js';
+import { archivedNoteToWindowData, findSlot, isSlotLimitReached, tinyNoteWindowOptions } from './windows/windowSlots.js';
+import { getOpenWindowLabels, openWindow } from './windows/windowRegistry.js';
 
 // 전역 스토어 인스턴스 (appState와 동일한 파일 사용)
 let tauriStore = null;
@@ -290,75 +292,40 @@ class ArchiveState {
     if (!tauriStore) return false;
 
     try {
-      let activeWindows = await tauriStore.get('activeExtraWindows') || [];
-
-      let emptyLabel = null;
-      let activeCount = 0;
+      const openLabels = await getOpenWindowLabels();
 
       // 현재 떠 있는 Tiny Note 수 확인
-      for (let i = 1; i <= 10; i++) {
-        const win = await WebviewWindow.getByLabel(`tinynote-${i}`);
-        if (win) activeCount++;
-      }
-
-      if (activeCount >= 10) {
+      if (isSlotLimitReached(TINY_NOTE_PREFIX, openLabels)) {
         return false; // 최대 개수 초과
       }
 
-      // 데이터를 덮어쓰지 않도록 '완전히 비어있는' 라벨 찾기
-      for (let i = 1; i <= 10; i++) {
-        const label = `tinynote-${i}`;
-        const win = await WebviewWindow.getByLabel(label);
-        
-        if (!win) {
-          const winData = await tauriStore.get(label);
-          const hasData = winData && (
-            (winData.todos && winData.todos.length > 0) ||
-            (winData.archivedTodos && winData.archivedTodos.length > 0) ||
-            (winData.notes && winData.notes.trim().length > 0)
-          );
-
-          if (!hasData) {
-            emptyLabel = label;
-            break;
-          }
-        }
-      }
+      // 데이터를 덮어쓰지 않도록 '완전히 비어있는' 번호만 고릅니다 (windowSlots.js).
+      const emptyLabel = await findSlot({
+        prefix: TINY_NOTE_PREFIX,
+        openLabels,
+        getData: (label) => tauriStore.get(label),
+        mode: 'empty-only',
+      });
 
       // 🚀 [Resilience] 모든 슬롯이 차있으면 복원 불가
       if (!emptyLabel) {
         return false;
       }
 
-      // 빈방에 아카이브 데이터 주입
-      const restoreData = {
-        title: noteData.title,
-        notes: noteData.content,
-        themeColor: noteData.themeColor,
-        isDarkMode: noteData.isDarkMode,
-        todos: [],
-        archivedTodos: []
-      };
+      // 빈방에 아카이브 데이터 주입 (Tiny Note용 테마 정규화 + 기본 크기 명시)
+      const restoreData = archivedNoteToWindowData(noteData);
       await tauriStore.set(emptyLabel, restoreData);
 
+      const activeWindows = (await tauriStore.get('activeExtraWindows')) || [];
       if (!activeWindows.includes(emptyLabel)) {
         activeWindows.push(emptyLabel);
         await tauriStore.set('activeExtraWindows', activeWindows);
       }
       await tauriStore.save();
 
-      // 윈도우 생성 (복원된 데이터가 담겨서 로드됨)
-      const newWin = new WebviewWindow(emptyLabel, { 
-        url: "index.html", title: `Tiny Note ${emptyLabel.split('-')[1]}`, 
-        width: 250, height: 280, minWidth: 160, minHeight: 45,
-        transparent: false, decorations: false, alwaysOnTop: false,
-        maximizable: false, visible: false 
-      });
-
-      newWin.once('tauri://created', async () => {
-        await newWin.show();
-        await newWin.setFocus();
-      });
+      // 윈도우 생성 (복원된 데이터가 담겨서 로드됨) — 최소 폭 200px 등 Tiny Note 공통 옵션을 씁니다.
+      // (예전에는 이 경로만 최소 폭이 160px이라 헤더 버튼이 잘릴 수 있었습니다)
+      openWindow(emptyLabel, tinyNoteWindowOptions(emptyLabel, restoreData));
 
       return true; // 복원 성공
     } catch (e) {

@@ -4,7 +4,11 @@ import { WebviewWindow } from '@tauri-apps/api/webviewWindow';
 import { emit, listen } from '@tauri-apps/api/event';
 import { LogicalPosition } from '@tauri-apps/api/dpi';
 import { TINY_NOTE_MIN_WIDTH, TINY_NOTE_ROLLED_HEIGHT } from './tinyNoteWindow.js';
-import { isDataWindowLabel } from './windows/windowLabels.js';
+import { NOTE_PREFIX, TINY_NOTE_PREFIX, isDataWindowLabel } from './windows/windowLabels.js';
+import { pickManager } from './windows/managerElection.js';
+import { findSlot, isSlotLimitReached, noteWindowOptions, tinyNoteWindowOptions } from './windows/windowSlots.js';
+import { getOpenWindowLabels, openWindow } from './windows/windowRegistry.js';
+import { registerFontFace } from './fonts.js';
 import { invoke } from '@tauri-apps/api/core';
 import {
   SNAPSHOT_FIELDS,
@@ -32,6 +36,15 @@ let tauriStore = null;
 
 // 모든 창이 공유하는 통합 저장 파일
 const STORE_FILE = 'tidy-task-config.json';
+
+// 창 명부·폰트 목록처럼 "모든 창이 함께 쓰는 키"를 읽고 쓸 때 사용하는 실제 저장소입니다.
+// 왜 tauriStore를 쓰지 않는가: 이 창의 읽기 검증이 실패하면 tauriStore는 빈 값을 돌려주는 안전 스텁으로
+//   바뀌는데, 그 상태로 빈 번호를 찾으면 내용이 있는 창을 빈 창으로 오판할 수 있습니다. (5.0.0과 같은 방식)
+let sharedStoreInstance = null;
+function sharedStore() {
+  if (!sharedStoreInstance) sharedStoreInstance = new LazyStore(STORE_FILE);
+  return sharedStoreInstance;
+}
 
 // ✨ [업데이트 안내] 앱 전체가 공유하는 저장 키.
 // 왜 창별 데이터(winData)가 아니라 전역 키인가:
@@ -250,7 +263,6 @@ export class AppState {
   showPasteLimitToast = $state(false);
   toastTimer = null;
   reminderTitle = $state('통합 리마인더');
-  showTinyNoteToast = $state(false);
 
   triggerToast(type) {
     this.showCopySuccessToast = false;
@@ -422,43 +434,31 @@ async init() {
         this._everHadContent = true;
       }
 
-      if (this.windowLabel === 'main') {
-        this.isManager = true; // ✨ Phase 3: 최초 기동 시 main 창이 매니저
-      }
-
-      // ✨ Phase 3: 매니저 창 종료 시 생존 창 중 가장 빠른 번호가 승계
-      listen('manager-closing', async () => {
+      // ── 매니저 선출·승계 ─────────────────────────────────────────────
+      // 매니저 창이 닫히면, 지금 "열려 있는" 데이터 창 중 우선순위 1위가 권한을 이어받습니다.
+      // (우선순위: main → note-1..10 → tinynote-1..10 — windows/managerElection.js)
+      // 왜 열린 창에서 고르는가: 예전에는 저장 명부(닫힌 창 포함)에서 골라서, 번호가 가장 작은 창이
+      //   닫혀 있으면 아무도 매니저가 되지 못해 리마인더와 업데이트 확인이 조용히 멈췄습니다.
+      listen('manager-closing', async (event) => {
         if (this.isManager) return;
-        const mainStore = new LazyStore('tidy-task-config.json');
-        const extraWindows = await mainStore.get('activeExtraWindows') || [];
-        
-        let minId = Infinity;
-        let candidateLabel = null;
-        for (const lbl of extraWindows) {
-           const match = lbl.match(/^note-(\d+)$/);
-           if (match) {
-              const id = parseInt(match[1], 10);
-              if (id < minId) {
-                 minId = id;
-                 candidateLabel = lbl;
-              }
-           }
-        }
-        
-        if (candidateLabel === this.windowLabel) {
-           this.isManager = true;
-           this.setupManagerListeners();
-           this.checkReminders(true);
-           // ✨ 매니저 권한을 물려받았으니 업데이트 확인 임무도 함께 이어받습니다.
-           this._startUpdateSchedule();
+        const closingLabel = event?.payload?.label || null;
+        const openLabels = await getOpenWindowLabels();
+        if (pickManager(openLabels, { exclude: closingLabel }) === this.windowLabel) {
+          // 이어받는 즉시 한 번 점검합니다 (5.0.0과 같은 동작)
+          await this.becomeManager({ bootDelay: 0 });
         }
       });
 
-      if (this.isManager) {
-        this.setupManagerListeners();
-        setTimeout(() => this.checkReminders(true), 3000);
-        setInterval(() => this.checkReminders(), 1000 * 60 * 60);
-        this._startUpdateSchedule();
+      // main 창이 새로 뜨면(트레이 "열기" 등) 임시로 권한을 맡던 창은 권한을 돌려줍니다.
+      // 왜: 돌려주지 않으면 매니저가 둘이 되어 리마인더 팝업과 업데이트 확인이 중복됩니다.
+      listen('manager-reclaim', () => {
+        if (this.windowLabel !== 'main') this.resignManager();
+      });
+
+      if (this.windowLabel === 'main') {
+        emit('manager-reclaim').catch(() => {});
+        // ✨ 최초 기동 시 main 창이 매니저 (부팅 3초 뒤 첫 점검)
+        await this.becomeManager({ bootDelay: 3000 });
       }
 
       // ✨ [업데이트 안내] 버전 확인·리스너 등록.
@@ -473,6 +473,42 @@ async init() {
         }
       });
 
+      // ── 데이터 창 전용 수신기 ──
+      if (isDataWindowLabel(this.windowLabel)) {
+        // 매니저가 "이 할 일은 오늘 알림을 보냈다"고 알려 오면 내 목록에 직접 기록합니다.
+        // 왜 매니저가 대신 쓰지 않는가: 열린 창의 데이터를 밖에서 고치면 이 창이 다음에 저장할 때
+        //   기록이 없는 옛 목록으로 덮어써, 같은 할 일이 매시간 다시 알림을 울렸습니다.
+        listen('reminder-mark-notified', (event) => {
+          const payload = event?.payload;
+          if (!payload || payload.label !== this.windowLabel || !Array.isArray(payload.ids)) return;
+          const ids = new Set(payload.ids);
+          let changed = false;
+          for (const todo of this.todos) {
+            if (ids.has(todo.id) && todo.lastNotified !== payload.date) {
+              todo.lastNotified = payload.date;
+              changed = true;
+            }
+          }
+          if (changed) this.saveNow(false);
+        });
+
+        // 트레이 "종료" 직전: 예약만 되어 있고 아직 기록되지 않은 입력을 즉시 저장합니다.
+        listen('before-quit', () => {
+          this.flushPendingSaves(true);
+        });
+      }
+
+      // 새 커스텀 폰트가 등록되면 모든 창이 목록에 추가하고 글꼴을 불러옵니다.
+      // 왜: 예전에는 main 창만 폰트를 불러와서, 메모 창에서 등록한 폰트가 그 창에서는 재시작 전까지 보이지 않았습니다.
+      listen('custom-font-added', async (event) => {
+        const { name, path } = event?.payload || {};
+        if (!name || !path) return;
+        if (!this.customFonts.find((f) => f.name === name)) {
+          this.customFonts.push({ name, path });
+        }
+        await registerFontFace(name, path);
+      });
+
     } catch (e) {
       console.error(e);
     } finally {
@@ -482,61 +518,201 @@ async init() {
     }
   }
 
-  // 이벤트를 담아둘 임시 변수 선언
-  _unlistenReminderReady = null;
-  _unlistenDismissReminder = null;
-  _unlistenUpdateTitle = null;
-  _unlistenReminderSync = null;
-  _unlistenUpdateReminderOpacity = null;
+  // ═══════════════════════════════════════════════════════════════════
+  // ✨ [매니저 권한] 리마인더 점검·업데이트 확인·트레이 요청을 맡는 창 하나
+  // ═══════════════════════════════════════════════════════════════════
+
+  // 매니저 전용 이벤트 수신기 해제 함수 모음 (권한을 내려놓을 때 한 번에 해제)
+  _managerUnlisteners = [];
+  _reminderBootTimer = null;
+  _reminderIntervalTimer = null;
+  _updateBootTimer = null;
+  _updateIntervalTimer = null;
+  _opacitySaveTimer = null;
+  _isSpawningWindow = false;
+  _isCreatingReminder = false;
+
+  // 매니저 권한을 맡습니다. 최초 기동(main)과 승계 두 경로가 모두 이 함수 하나를 씁니다.
+  // 왜 하나로 모았는가: 예전에는 승계 경로에서 "1시간마다 점검" 타이머가 빠져 있어서,
+  //   main을 닫은 뒤로는 리마인더가 딱 한 번만 점검되고 멈췄습니다.
+  async becomeManager({ bootDelay = 3000 } = {}) {
+    if (this.isManager) return;
+    this.isManager = true;
+    await this.setupManagerListeners();
+    this._reminderBootTimer = setTimeout(() => this.checkReminders(true), bootDelay);
+    this._reminderIntervalTimer = setInterval(() => this.checkReminders(), 1000 * 60 * 60);
+    // ✨ 매니저 권한을 맡았으니 업데이트 확인 임무도 함께 맡습니다.
+    this._startUpdateSchedule();
+  }
+
+  // 매니저 권한을 내려놓습니다 (창이 닫히거나 main이 권한을 되찾을 때).
+  // 왜 타이머까지 멈추는가: 멈추지 않으면 권한이 없는 창의 타이머가 계속 돌아 점검이 중복됩니다.
+  resignManager() {
+    if (!this.isManager) return;
+    this.isManager = false;
+    this._clearManagerListeners();
+    if (this._reminderBootTimer) { clearTimeout(this._reminderBootTimer); this._reminderBootTimer = null; }
+    if (this._reminderIntervalTimer) { clearInterval(this._reminderIntervalTimer); this._reminderIntervalTimer = null; }
+    this._stopUpdateSchedule();
+  }
+
+  _clearManagerListeners() {
+    for (const unlisten of this._managerUnlisteners) {
+      try { unlisten(); } catch (e) {}
+    }
+    this._managerUnlisteners = [];
+  }
+
+  async _listenAsManager(eventName, handler) {
+    this._managerUnlisteners.push(await listen(eventName, handler));
+  }
 
   // ✨ Phase 3: 매니저 특화 이벤트 리스너 통합 관리
   async setupManagerListeners() {
-      // 기존 리스너가 있다면 먼저 청소(해제)합니다.
-      if (this._unlistenReminderReady) this._unlistenReminderReady();
-      if (this._unlistenDismissReminder) this._unlistenDismissReminder();
-      if (this._unlistenUpdateTitle) this._unlistenUpdateTitle();
-      if (this._unlistenReminderSync) this._unlistenReminderSync();
-      if (this._unlistenUpdateReminderOpacity) this._unlistenUpdateReminderOpacity();
+    // 기존 수신기가 있다면 먼저 모두 해제합니다 (중복 등록 방지).
+    this._clearManagerListeners();
 
-      this._unlistenReminderReady = await listen('reminder-ready', () => {
-        this.syncReminderWindow();
-      });
+    await this._listenAsManager('reminder-ready', () => {
+      this.syncReminderWindow();
+    });
 
-      this._unlistenDismissReminder = await listen('dismiss-reminder', (event) => {
-        if (event.payload && event.payload.mode) {
-          this.dismissReminderPopup(event.payload.mode, event.payload);
-        }
-      });
+    await this._listenAsManager('dismiss-reminder', (event) => {
+      if (event.payload && event.payload.mode) {
+        this.dismissReminderPopup(event.payload.mode, event.payload);
+      }
+    });
 
-      this._unlistenUpdateTitle = await listen('update-reminder-title', (event) => {
-        if (event.payload && event.payload.title !== undefined) {
-          this.reminderTitle = event.payload.title;
-          this.saveNow(false); 
-        }
-      });
-      
-      // 다른 창의 할 일이 바뀌었으니 팝업 내용만 새로 맞춥니다.
-      // 왜 미루기(reminderSuppressUntil)를 건드리지 않는가: 예전에는 여기서 0으로 초기화해서,
-      //   다른 창에서 글자만 입력해도 사용자가 고른 "1시간 뒤/오늘은 그만"이 즉시 풀렸습니다.
-      this._unlistenReminderSync = await listen('req-reminder-sync', () => {
-          this.syncReminderWindow();
-      });
+    // 다른 창의 할 일이 바뀌었으니 팝업 내용만 새로 맞춥니다.
+    // 왜 미루기(reminderSuppressUntil)를 건드리지 않는가: 예전에는 여기서 0으로 초기화해서,
+    //   다른 창에서 글자만 입력해도 사용자가 고른 "1시간 뒤/오늘은 그만"이 즉시 풀렸습니다.
+    await this._listenAsManager('req-reminder-sync', () => {
+      this.syncReminderWindow();
+    });
 
-      this._unlistenUpdateReminderOpacity = await listen('update-reminder-opacity', (event) => {
-        if (event.payload && event.payload.opacity !== undefined) {
-          this.reminderOpacity = event.payload.opacity;
+    await this._listenAsManager('update-reminder-opacity', (event) => {
+      if (event.payload && event.payload.opacity !== undefined) {
+        this.reminderOpacity = event.payload.opacity;
+        // 슬라이더를 움직이는 동안 칸마다 전체 저장하지 않도록, 멈춘 뒤 한 번만 저장합니다.
+        if (this._opacitySaveTimer) clearTimeout(this._opacitySaveTimer);
+        this._opacitySaveTimer = setTimeout(() => {
+          this._opacitySaveTimer = null;
           this.saveNow(false);
+        }, 300);
+      }
+    });
+
+    // ✨ [업데이트] 다른 창(설정 창 등)이 "확인해 줘"라고 요청하면 매니저가 대신 확인합니다.
+    // 왜 매니저만 확인하는가: 창마다 호출하면 GitHub 호출 제한(시간당 60회)에 금방 걸리고,
+    //   같은 알림이 창 개수만큼 중복으로 뜨기 때문입니다.
+    await this._listenAsManager('req-update-check', (event) => {
+      const requesterLabel = event?.payload?.requesterLabel || null;
+      this.checkForUpdates({ manual: true, requesterLabel });
+    });
+
+    // ✨ 트레이 메뉴 요청 (Rust가 모든 창에 방송하고, 매니저만 처리합니다)
+    // 왜 매니저가 받는가: 예전에는 main 창만 받아서, main을 닫으면 트레이의
+    //   "새 Tidy Task / 새 Tiny Note / 좌표 초기화"가 아무 반응이 없었습니다.
+    await this._listenAsManager('spawn-new-window', () => this.spawnNewWindow());
+    await this._listenAsManager('spawn-tiny-note', () => this.spawnTinyNote());
+    await this._listenAsManager('req-reset-coordinates', () => this.resetAllCoordinates());
+
+    // 설정 창의 커스텀 폰트 등록 요청 (저장은 매니저 한 곳에서만 합니다)
+    await this._listenAsManager('req-add-custom-font', (event) => this._handleAddCustomFont(event.payload));
+
+    // 리마인더에서 ✓(마감)를 눌렀는데 원래 창이 닫혀 있으면 매니저가 대신 처리합니다.
+    await this._listenAsManager('archive-reminder-item', (event) => this._archiveTodoOfClosedWindow(event.payload));
+  }
+
+  // 트레이 "좌표 초기화": 열린 창들을 화면 왼쪽 위부터 계단식으로 모읍니다.
+  // 위치 저장은 각 창의 "창 이동" 처리기가 스스로 합니다.
+  // 왜 여기서 다른 창의 데이터를 직접 쓰지 않는가: 열려 있는 창의 데이터를 밖에서 덮어쓰면
+  //   그 창이 막 입력한 내용과 경합해 한쪽이 사라질 수 있기 때문입니다.
+  async resetAllCoordinates() {
+    let offsetX = 100;
+    let offsetY = 100;
+
+    const bringHere = async (win) => {
+      await win.setPosition(new LogicalPosition(offsetX, offsetY));
+      await win.show();
+      await win.unminimize();
+      await win.setFocus();
+      offsetX += 30;
+      offsetY += 30;
+    };
+
+    const mainWin = await WebviewWindow.getByLabel('main');
+    if (mainWin) {
+      try {
+        await bringHere(mainWin);
+        // main 창 자신의 상태와 동기화 (main이 매니저일 때)
+        if (this.windowLabel === 'main') {
+          this.windowPosX = 100;
+          this.windowPosY = 100;
+          this.saveNow();
+        }
+      } catch (e) {}
+    }
+
+    const activeWindows = (await sharedStore().get('activeExtraWindows')) || [];
+    for (const label of activeWindows) {
+      const win = await WebviewWindow.getByLabel(label);
+      if (!win) continue;
+      try {
+        await bringHere(win);
+      } catch (e) {}
+    }
+  }
+
+  // 커스텀 폰트를 전역 목록에 저장한 뒤 모든 창에 알립니다.
+  async _handleAddCustomFont(payload) {
+    const { name, path } = payload || {};
+    if (!name || !path) return;
+    try {
+      await enqueueWrite(async () => {
+        const store = sharedStore();
+        const latestFonts = (await store.get('customFonts')) || [];
+        if (!latestFonts.find((f) => f.name === name)) {
+          latestFonts.push({ name, path });
+          await store.set('customFonts', latestFonts);
+          await store.save();
         }
       });
+    } catch (e) {
+      console.error('커스텀 폰트 목록을 저장하지 못했습니다:', e);
+    }
+    emit('custom-font-added', { name, path }).catch(() => {});
+  }
 
-      // ✨ [업데이트] 다른 창(설정 창 등)이 "확인해 줘"라고 요청하면 매니저가 대신 확인합니다.
-      // 왜 매니저만 확인하는가: 창마다 호출하면 GitHub 호출 제한(시간당 60회)에 금방 걸리고,
-      //   같은 알림이 창 개수만큼 중복으로 뜨기 때문입니다.
-      if (this._unlistenUpdateRequest) this._unlistenUpdateRequest();
-      this._unlistenUpdateRequest = await listen('req-update-check', (event) => {
-        const requesterLabel = event?.payload?.requesterLabel || null;
-        this.checkForUpdates({ manual: true, requesterLabel });
+  // 리마인더의 ✓(마감) 처리 — 원래 창이 닫혀 있을 때만 매니저가 저장소를 직접 고칩니다.
+  // (열린 창은 그 창이 toggleTodo로 처리합니다. 닫힌 창은 경합할 상대가 없어 안전합니다.)
+  async _archiveTodoOfClosedWindow(payload) {
+    const { id, sourceLabel } = payload || {};
+    if (!id || !sourceLabel || sourceLabel === this.windowLabel) return;
+
+    const openLabels = await getOpenWindowLabels();
+    if (openLabels.includes(sourceLabel)) return;
+
+    try {
+      await enqueueWrite(async () => {
+        const store = sharedStore();
+        const winData = await store.get(sourceLabel);
+        const todos = Array.isArray(winData?.todos) ? winData.todos : [];
+        const index = todos.findIndex((t) => t.id === id);
+        if (index === -1) return;
+
+        // toggleTodo와 같은 규칙: 완료 표시 후 마감된 일 맨 앞으로 이동
+        const moved = { ...todos[index], completed: true };
+        await store.set(sourceLabel, {
+          ...winData,
+          todos: todos.filter((_, i) => i !== index),
+          archivedTodos: [moved, ...(winData.archivedTodos || [])],
+        });
+        await store.save();
       });
+    } catch (e) {
+      console.error('닫힌 창의 할 일을 마감 처리하지 못했습니다:', e);
+    }
+    this.syncReminderWindow().catch(() => {});
   }
 
   // ═══════════════════════════════════════════════════════════════════
@@ -610,9 +786,16 @@ async init() {
     this._updateScheduleStarted = true;
 
     // 부팅 직후 바로 네트워크를 쓰면 앱이 느리게 켜지는 것처럼 보이므로 잠시 뒤에 확인합니다.
-    setTimeout(() => this.checkForUpdates(), BOOT_CHECK_DELAY_MS);
+    this._updateBootTimer = setTimeout(() => this.checkForUpdates(), BOOT_CHECK_DELAY_MS);
     // 앱을 며칠씩 켜 두는 사용자를 위해 주기적으로도 확인합니다.
-    setInterval(() => this.checkForUpdates(), AUTO_CHECK_INTERVAL_MS);
+    this._updateIntervalTimer = setInterval(() => this.checkForUpdates(), AUTO_CHECK_INTERVAL_MS);
+  }
+
+  // 매니저 권한을 내려놓을 때 확인 일정도 함께 멈춥니다 (두 창이 동시에 확인하지 않도록).
+  _stopUpdateSchedule() {
+    if (this._updateBootTimer) { clearTimeout(this._updateBootTimer); this._updateBootTimer = null; }
+    if (this._updateIntervalTimer) { clearInterval(this._updateIntervalTimer); this._updateIntervalTimer = null; }
+    this._updateScheduleStarted = false;
   }
 
   // 실제 확인. manual=true면 사용자가 직접 버튼을 누른 경우입니다.
@@ -844,261 +1027,78 @@ async init() {
     });
   }
 
- async spawnNewWindow() {
-    const mainStore = new LazyStore('tidy-task-config.json');
-    let activeWindows = await mainStore.get('activeExtraWindows') || [];
-
-    let targetLabel = null;
-    let emptyLabel = null;
-    let activeCount = 0;
-
-    // ✨ 1. 논리적 공간 분리: 현재 화면에 떠 있는 '일반 메모장' 개수만 독립적으로 셉니다.
-    for (let i = 1; i <= 10; i++) {
-      const win = await WebviewWindow.getByLabel(`note-${i}`);
-      if (win) activeCount++;
-    }
-
-    if (activeCount >= 10) {
-      this.showMaxWindowToast = true;
-      if (this.maxWindowToastTimer) clearTimeout(this.maxWindowToastTimer);
-      this.maxWindowToastTimer = setTimeout(() => {
-        this.showMaxWindowToast = false;
-      }, 2500);
-      return;
-    }
-
-    // ✨ 2. 데이터 우선 복구 시스템: 닫혀있는 번호 중 '데이터가 있는 방'을 1순위로 찾습니다.
-    for (let i = 1; i <= 10; i++) {
-      const label = `note-${i}`;
-      const win = await WebviewWindow.getByLabel(label);
-      
-      if (!win) {
-        // 하드디스크를 뒤져서 데이터가 살아있는지 검사합니다.
-        const winData = await mainStore.get(label);
-        const hasData = winData && (
-          (winData.todos && winData.todos.length > 0) ||
-          (winData.archivedTodos && winData.archivedTodos.length > 0) ||
-          (winData.notes && winData.notes.trim().length > 0)
-        );
-
-        if (hasData) {
-          targetLabel = label; // 1순위 발견! 즉시 중단하고 이 방을 엽니다.
-          break; 
-        } else if (!emptyLabel) {
-          emptyLabel = label; // 2순위: 데이터가 없는 빈 방 (1순위가 없을 때를 대비)
-        }
-      }
-    }
-
-    targetLabel = targetLabel || emptyLabel;
-
-    // 명부에 없으면 기존 데이터 손실 없이 안전하게 추가
-    if (!activeWindows.includes(targetLabel)) {
-      activeWindows.push(targetLabel);
-      await mainStore.set('activeExtraWindows', activeWindows);
-      await mainStore.save();
-    }
-
-    // ✨ [버그 #2 수정] 저장된 크기/위치를 디스크에서 읽어옵니다.
-    // 왜: 이전에는 항상 380×500 하드코딩이라 사용자가 조절한 크기가 복원되지 않았습니다.
-    const winData = await mainStore.get(targetLabel);
-    const savedW = (winData?.windowWidth && winData.windowWidth > 0) ? Math.round(winData.windowWidth) : 380;
-    const savedH = (winData?.windowHeight && winData.windowHeight > 0) ? Math.round(winData.windowHeight) : 500;
-
-    const isValidPos = (v) => v !== null && v !== undefined && !isNaN(v) && typeof v === 'number';
-    let winOpts = {
-      url: "index.html", title: `Tidy Task Note ${targetLabel.split('-')[1]}`,
-      width: savedW, height: savedH, decorations: false,
-      transparent: true, visible: false
-    };
-
-    // 저장된 위치가 유효하면 해당 좌표에서 열기, 없으면 중앙 배치
-    if (isValidPos(winData?.windowPosX) && isValidPos(winData?.windowPosY)) {
-      winOpts.x = Math.round(winData.windowPosX);
-      winOpts.y = Math.round(winData.windowPosY);
-    } else {
-      winOpts.center = true;
-    }
-
-    const newWin = new WebviewWindow(targetLabel, winOpts);
-
-    newWin.once('tauri://created', async () => {
-      await newWin.show();
-      await newWin.setFocus();
-    });
+  // ═══════════════════════════════════════════════════════════
+  // ✨ 새 노트 창 / 새 Tiny Note
+  // 빈 번호 찾기·창 옵션 규칙은 windows/windowSlots.js(단위 테스트됨) 한 곳에 있습니다.
+  // 왜 한 곳인가: 예전에는 거의 같은 코드가 세 벌(새 창·새 Tiny Note·꺼내기) 복사돼 있어서
+  //   한쪽만 고쳐진 채 남는 문제가 있었습니다.
+  // ═══════════════════════════════════════════════════════════
+  async spawnNewWindow() {
+    await this._spawnSlotWindow(NOTE_PREFIX, noteWindowOptions);
   }
 
   async spawnTinyNote() {
-    this.showTinyNoteToast = true;
-    setTimeout(() => this.showTinyNoteToast = false, 2000);
+    await this._spawnSlotWindow(TINY_NOTE_PREFIX, tinyNoteWindowOptions);
+  }
 
-    const mainStore = new LazyStore('tidy-task-config.json');
-    let activeWindows = await mainStore.get('activeExtraWindows') || [];
+  async _spawnSlotWindow(prefix, buildOptions) {
+    // 버튼을 빠르게 두 번 눌러도 같은 번호의 창을 두 번 만들지 않도록 잠급니다.
+    if (this._isSpawningWindow) return;
+    this._isSpawningWindow = true;
 
-    let targetLabel = null;
-    let emptyLabel = null;
-    let activeCount = 0;
+    try {
+      const store = sharedStore();
 
-    // ✨ 1. 논리적 공간 분리: 현재 화면에 떠 있는 'Tiny Note' 개수만 독립적으로 셉니다.
-    for (let i = 1; i <= 10; i++) {
-      const win = await WebviewWindow.getByLabel(`tinynote-${i}`);
-      if (win) activeCount++;
-    }
-
-    if (activeCount >= 10) {
-      this.showMaxWindowToast = true;
-      if (this.maxWindowToastTimer) clearTimeout(this.maxWindowToastTimer);
-      this.maxWindowToastTimer = setTimeout(() => {
-        this.showMaxWindowToast = false;
-      }, 2500);
-      return;
-    }
-
-    // ✨ 2. 데이터 우선 복구 시스템: 닫혀있는 번호 중 '데이터가 있는 방'을 1순위로 찾습니다.
-    for (let i = 1; i <= 10; i++) {
-      const label = `tinynote-${i}`;
-      const win = await WebviewWindow.getByLabel(label);
-      
-      if (!win) {
-        // 하드디스크를 뒤져서 데이터가 살아있는지 검사합니다.
-        const winData = await mainStore.get(label);
-        const hasData = winData && (
-          (winData.todos && winData.todos.length > 0) ||
-          (winData.archivedTodos && winData.archivedTodos.length > 0) ||
-          (winData.notes && winData.notes.trim().length > 0)
-        );
-
-        if (hasData) {
-          targetLabel = label; // 1순위 발견!
-          break; 
-        } else if (!emptyLabel) {
-          emptyLabel = label; // 2순위: 빈 방 예약
-        }
+      // ✨ 1. 논리적 공간 분리: 지금 떠 있는 같은 종류의 창만 셉니다 (열린 창 목록은 한 번만 조회).
+      const openLabels = await getOpenWindowLabels();
+      if (isSlotLimitReached(prefix, openLabels)) {
+        this._flashMaxWindowToast();
+        return;
       }
+
+      // ✨ 2. 데이터 우선 복구: 닫혀 있는 번호 중 내용이 남은 창을 먼저 되살리고, 없으면 첫 빈 번호.
+      const targetLabel = await findSlot({
+        prefix,
+        openLabels,
+        getData: (label) => store.get(label),
+        mode: 'reuse-data-first',
+      });
+      if (!targetLabel) return;
+
+      // 명부에 없으면 기존 데이터 손실 없이 안전하게 추가
+      await this._addToWindowRegistry(targetLabel);
+
+      // ✨ 저장된 크기/위치로 엽니다 (없으면 기본 크기, 롤업 상태면 띠 높이)
+      const winData = await store.get(targetLabel);
+      openWindow(targetLabel, buildOptions(targetLabel, winData));
+    } catch (e) {
+      console.error('새 창을 열지 못했습니다:', e);
+    } finally {
+      this._isSpawningWindow = false;
     }
+  }
 
-    targetLabel = targetLabel || emptyLabel;
-
-    // 명부에 없으면 기존 데이터 손실 없이 안전하게 추가
-    if (!activeWindows.includes(targetLabel)) {
-      activeWindows.push(targetLabel);
-      await mainStore.set('activeExtraWindows', activeWindows);
-      await mainStore.save();
-    }
-
-    // ✨ [버그 #1 수정] 저장된 크기/위치를 디스크에서 읽어옵니다.
-    // 왜: 이전에는 항상 250×280 하드코딩이라 사용자가 조절한 크기가 복원되지 않았습니다.
-    const winData = await mainStore.get(targetLabel);
-    const isRolledUp = winData?.isRolledUp || false;
-    const savedW = (winData?.windowWidth && winData.windowWidth > 0) ? Math.round(winData.windowWidth) : 250;
-    const savedH = isRolledUp ? 35 : ((winData?.windowHeight && winData.windowHeight > 0) ? Math.round(winData.windowHeight) : 280);
-
-    const isValidPos = (v) => v !== null && v !== undefined && !isNaN(v) && typeof v === 'number';
-    let winOpts = {
-      url: "index.html", title: `Tiny Note ${targetLabel.split('-')[1]}`,
-      width: savedW, height: savedH, minWidth: TINY_NOTE_MIN_WIDTH, minHeight: isRolledUp ? TINY_NOTE_ROLLED_HEIGHT : 45,
-      transparent: false, decorations: false, alwaysOnTop: false,
-      maximizable: false, visible: false
-    };
-
-    // 저장된 위치가 유효하면 해당 좌표에서 열기
-    if (isValidPos(winData?.windowPosX) && isValidPos(winData?.windowPosY)) {
-      winOpts.x = Math.round(winData.windowPosX);
-      winOpts.y = Math.round(winData.windowPosY);
-    }
-
-    const newWin = new WebviewWindow(targetLabel, winOpts);
-
-    newWin.once('tauri://created', async () => {
-      await newWin.show();
-      await newWin.setFocus();
+  // 다음 실행 때 되살릴 창 명부에 라벨을 추가합니다.
+  // 왜 쓰기 줄(enqueueWrite)에 태우는가: 이 창의 본문 저장도 같은 명부를 고치므로, 순서대로 실행해야
+  //   서로 옛 명부로 덮어쓰지 않습니다.
+  async _addToWindowRegistry(label) {
+    await enqueueWrite(async () => {
+      const store = sharedStore();
+      const activeWindows = (await store.get('activeExtraWindows')) || [];
+      if (!activeWindows.includes(label)) {
+        activeWindows.push(label);
+        await store.set('activeExtraWindows', activeWindows);
+        await store.save();
+      }
     });
   }
 
-  // ✨ TCREI: Integrity - 보관함에서 꺼낼 때 새 창을 할당하고 데이터를 주입하는 전용 로직
-  async restoreTinyNote(noteData) {
-    const mainStore = new LazyStore('tidy-task-config.json');
-    let activeWindows = await mainStore.get('activeExtraWindows') || [];
-
-    let emptyLabel = null;
-    let activeCount = 0;
-
-    for (let i = 1; i <= 10; i++) {
-      const win = await WebviewWindow.getByLabel(`tinynote-${i}`);
-      if (win) activeCount++;
-    }
-
-    if (activeCount >= 10) {
-      this.showMaxWindowToast = true;
-      if (this.maxWindowToastTimer) clearTimeout(this.maxWindowToastTimer);
-      this.maxWindowToastTimer = setTimeout(() => {
-        this.showMaxWindowToast = false;
-      }, 2500);
-      return false; // 최대 개수 초과로 복원 실패
-    }
-
-    // 데이터를 덮어쓰지 않도록 '완전히 비어있는' 라벨 찾기
-    for (let i = 1; i <= 10; i++) {
-      const label = `tinynote-${i}`;
-      const win = await WebviewWindow.getByLabel(label);
-      
-      if (!win) {
-        const winData = await mainStore.get(label);
-        const hasData = winData && (
-          (winData.todos && winData.todos.length > 0) ||
-          (winData.archivedTodos && winData.archivedTodos.length > 0) ||
-          (winData.notes && winData.notes.trim().length > 0)
-        );
-
-        if (!hasData) {
-          emptyLabel = label;
-          break;
-        }
-      }
-    }
-
-    // 만약 10개의 창이 다 떠있진 않지만, 숨겨진 10개 창에 모두 각자의 데이터가 들어있다면 꺼낼 수 없음.
-    // (데이터 유실 방지 - Resilience)
-    if (!emptyLabel) {
-       console.warn('[Archive] 복원 실패: 사용 가능한 빈 슬롯 없음');
-       return false;
-    }
-
-    // 빈방에 아카이브 데이터 주입
-    const restoreData = {
-      title: noteData.title,
-      notes: noteData.content,
-      themeColor: normalizeThemeId(noteData.themeColor, 'tiny-note'),
-      isDarkMode: isTinyNoteDarkTheme(noteData.themeColor) || noteData.isDarkMode,
-      todos: [],
-      archivedTodos: [],
-      // ✨ [버그 #5 수정] 아카이브 복원 시 기본 크기를 명시합니다.
-      // 왜: windowWidth/Height가 undefined면 init()에서 null로 로드되어 setSize가 건너뛰어집니다.
-      windowWidth: 250,
-      windowHeight: 280
-    };
-    await mainStore.set(emptyLabel, restoreData);
-
-    if (!activeWindows.includes(emptyLabel)) {
-      activeWindows.push(emptyLabel);
-      await mainStore.set('activeExtraWindows', activeWindows);
-    }
-    await mainStore.save();
-
-    // 윈도우 생성 (복원된 데이터가 담겨서 로드됨)
-    const newWin = new WebviewWindow(emptyLabel, { 
-      url: "index.html", title: `Tiny Note ${emptyLabel.split('-')[1]}`, 
-      width: 250, height: 280, minWidth: TINY_NOTE_MIN_WIDTH, minHeight: 45,
-      transparent: false, decorations: false, alwaysOnTop: false,
-      maximizable: false, visible: false 
-    });
-
-    newWin.once('tauri://created', async () => {
-      await newWin.show();
-      await newWin.setFocus();
-    });
-
-    return true; // 복원 성공
+  _flashMaxWindowToast() {
+    this.showMaxWindowToast = true;
+    if (this.maxWindowToastTimer) clearTimeout(this.maxWindowToastTimer);
+    this.maxWindowToastTimer = setTimeout(() => {
+      this.showMaxWindowToast = false;
+    }, 2500);
   }
 
   cycleTinyNoteTheme() {
@@ -1108,17 +1108,6 @@ async init() {
     this.saveNow();
   }
 
-  async removeWindowFromRegistry(label) {
-    if (label === 'main' || label === 'settings') return;
-    const mainStore = new LazyStore('tidy-task-config.json');
-    await mainStore.delete(label); 
-    
-    let activeWindows = await mainStore.get('activeExtraWindows') || [];
-    activeWindows = activeWindows.filter(l => l !== label);
-    await mainStore.set('activeExtraWindows', activeWindows);
-    await mainStore.save();
-  }
- 
   // ═══════════════════════════════════════════════════════════
   // ✨ [영속성 안전장치] 저장소 읽기 검증 & 자동 복구
   // ═══════════════════════════════════════════════════════════
@@ -1698,6 +1687,8 @@ async init() {
     const todoMap = new Map();
     let hasUnnotified = false;
     let needsSave = false;
+    // 열린 창 목록 (다른 창의 알림 기록을 누가 쓸지 정하는 데 사용)
+    const openLabels = await getOpenWindowLabels();
 
     // ✨ Phase 1: LazyStore에서 모든 창의 데이터를 읽어온다 (Merge Logic)
     for (const label of labels) {
@@ -1711,6 +1702,7 @@ async init() {
       const wTodos = winData.todos || [];
 
       let winNeedsSave = false;
+      const notifiedIds = [];
       for (let i = 0; i < wTodos.length; i++) {
         const todo = wTodos[i];
         if (!todo.deadline || todo.completed) continue;
@@ -1743,6 +1735,7 @@ async init() {
                  needsSave = true;
                } else {
                  wTodos[i].lastNotified = todayStr;
+                 notifiedIds.push(todo.id);
                  winNeedsSave = true;
                }
             }
@@ -1750,11 +1743,20 @@ async init() {
         }
       }
       
-      // 타 창의 lastNotified 업데이트 저장 (원본 리스트 구조 유지)
+      // 타 창의 lastNotified 기록 (원본 리스트 구조 유지)
+      // 열린 창은 그 창이 직접 기록하도록 알리고, 닫힌 창만 매니저가 저장소에 씁니다.
+      // 왜: 열린 창의 데이터를 밖에서 고치면 그 창이 다음에 저장할 때 옛 목록으로 덮어써
+      //     기록이 사라지고, 같은 할 일이 매시간 다시 알림을 울렸습니다.
       if (winNeedsSave && label !== this.windowLabel) {
-         winData.todos = wTodos;
-         await mainStore.set(label, winData);
-         await mainStore.save();
+        if (openLabels.includes(label)) {
+          emit('reminder-mark-notified', { label, ids: notifiedIds, date: todayStr }).catch(() => {});
+        } else {
+          winData.todos = wTodos;
+          await enqueueWrite(async () => {
+            await mainStore.set(label, winData);
+            await mainStore.save();
+          });
+        }
       }
     }
 
@@ -1794,7 +1796,19 @@ async init() {
     }
   }
 
+  // 리마인더 창을 동시에 두 번 만들지 않도록 잠급니다.
+  // 왜 1초 동안 잠그는가: 창 생성은 비동기라, 만들자마자 "이미 있나?"를 물으면 아직 없다고 답할 수 있습니다.
   async _showFloatingReminder(imminentList) {
+    if (this._isCreatingReminder) return;
+    this._isCreatingReminder = true;
+    try {
+      await this._openFloatingReminder(imminentList);
+    } finally {
+      setTimeout(() => { this._isCreatingReminder = false; }, 1000);
+    }
+  }
+
+  async _openFloatingReminder(imminentList) {
     const existingWindow = await WebviewWindow.getByLabel('reminder');
     if (existingWindow) {
       this.syncReminderWindow(true);

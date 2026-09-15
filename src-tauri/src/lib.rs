@@ -1,6 +1,6 @@
 use std::fs;
 use std::path::Path;
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tauri::{Manager, Emitter};
 use tauri_plugin_autostart::MacosLauncher;
 
@@ -8,6 +8,9 @@ use tauri_plugin_autostart::MacosLauncher;
 const STORE_FILE: &str = "tidy-task-config.json";
 const BACKUP_FILE: &str = "tidy-task-config.backup.json";
 const BACKUP_PREV_FILE: &str = "tidy-task-config.backup-prev.json";
+
+// 트레이 "종료" 후 창들이 마지막 입력을 저장할 수 있도록 기다리는 시간
+const QUIT_FLUSH_WAIT: Duration = Duration::from_millis(800);
 
 #[tauri::command]
 fn save_custom_font(app: tauri::AppHandle, name: String, bytes: Vec<u8>) -> Result<String, String> {
@@ -30,6 +33,11 @@ fn save_custom_font(app: tauri::AppHandle, name: String, bytes: Vec<u8>) -> Resu
     fs::write(&font_path, bytes).map_err(|e| e.to_string())?;
 
     Ok(font_path.to_string_lossy().into_owned())
+}
+
+#[tauri::command]
+fn exit_app(app: tauri::AppHandle) {
+    app.exit(0);
 }
 
 // 파일을 읽어 "JSON 객체"로 해석되면 그 내용을 돌려줍니다. (읽기·해석 실패 시 None)
@@ -118,9 +126,27 @@ fn store_health(app: tauri::AppHandle) -> StoreHealth {
     }
 }
 
-#[tauri::command]
-fn exit_app(app: tauri::AppHandle) {
-    app.exit(0);
+// main 창을 앞으로 가져오거나, 닫혀 있으면 새로 만듭니다.
+// 왜 함수로 모았는가: 두 번째 실행·트레이 "열기"·트레이 더블클릭 세 곳에 같은 코드가 복사돼 있었습니다.
+fn show_or_create_main(app: &tauri::AppHandle) {
+    if let Some(window) = app.get_webview_window("main") {
+        let _ = window.show();
+        let _ = window.unminimize();
+        let _ = window.set_focus();
+    } else {
+        let _ = tauri::WebviewWindowBuilder::new(
+            app,
+            "main",
+            tauri::WebviewUrl::App("index.html".into())
+        )
+        .title("Tidy Task")
+        .inner_size(350.0, 500.0)
+        .min_inner_size(250.0, 300.0)
+        .decorations(false)
+        .transparent(true)
+        .resizable(true)
+        .build();
+    }
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -133,11 +159,13 @@ pub fn run() {
                 let windows = app.webview_windows();
                 let destroyed_label = window.label();
 
-                // 살아있는 메모장(main 또는 note-x)이나 리마인더가 있는지 확인합니다.
+                // 살아있는 메모장(main 또는 note-x)이나 리마인더·아카이브가 있는지 확인합니다.
+                // 왜 아카이브를 포함하는가: 아카이브만 남기고 마지막 메모 창을 닫으면 앱이 바로 종료되어
+                //   아카이브에서 편집 중이던 내용이 저장되기 전에 사라질 수 있었습니다.
                 let mut has_active_notes = false;
                 for label in windows.keys() {
                     // 삭제 중인 창 자신은 제외하고 남은 창이 있는지 검사합니다.
-                    if label != destroyed_label && (label == "main" || label.starts_with("note-") || label.starts_with("tinynote-") || label == "reminder") {
+                    if label != destroyed_label && (label == "main" || label.starts_with("note-") || label.starts_with("tinynote-") || label == "reminder" || label == "archive") {
                         has_active_notes = true;
                         break;
                     }
@@ -149,25 +177,8 @@ pub fn run() {
             }
         })
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
-            if let Some(window) = app.get_webview_window("main") {
-                let _ = window.show();
-                let _ = window.unminimize();
-                let _ = window.set_focus();
-            } else {
-                // ✨ 2. 메인 창이 없을 때 새로 띄워주는 방어 로직 추가
-                let _ = tauri::WebviewWindowBuilder::new(
-                    app,
-                    "main",
-                    tauri::WebviewUrl::App("index.html".into())
-                )
-                .title("Tidy Task")
-                .inner_size(350.0, 500.0)
-                .min_inner_size(250.0, 300.0)
-                .decorations(false)
-                .transparent(true)
-                .resizable(true)
-                .build();
-            }
+            // ✨ 2. 두 번째 실행 시 main 창을 보여 주고, 없으면 새로 띄웁니다.
+            show_or_create_main(app);
         }))
         .plugin(tauri_plugin_autostart::init(
             MacosLauncher::LaunchAgent,
@@ -194,7 +205,6 @@ pub fn run() {
             {
                 use tauri::menu::{Menu, MenuItem};
                 use tauri::tray::TrayIconBuilder;
-                use tauri::Manager;
 
                 let open_i = MenuItem::with_id(app, "open", "열기 (Open)", true, None::<&str>)?;
                 let new_main_i = MenuItem::with_id(app, "new_main", "새 Tidy Task", true, None::<&str>)?;
@@ -208,64 +218,35 @@ pub fn run() {
                     .menu(&menu)
                     .tooltip("Tidy Task")
                     .on_menu_event(|app, event| match event.id.as_ref() {
-                        "quit" => app.exit(0),
-                        "open" => {
-                            if let Some(window) = app.get_webview_window("main") {
-                                let _ = window.show();
-                                let _ = window.set_focus();
-                            } else {
-                                // ✨ 3. 트레이 메뉴 '열기' 시에도 방어 로직 추가
-                                let _ = tauri::WebviewWindowBuilder::new(
-                                    app,
-                                    "main",
-                                    tauri::WebviewUrl::App("index.html".into())
-                                )
-                                .title("Tidy Task")
-                                .inner_size(350.0, 500.0)
-                                .min_inner_size(250.0, 300.0)
-                                .decorations(false)
-                                .transparent(true)
-                                .resizable(true)
-                                .build();
-                            }
+                        "quit" => {
+                            // 종료 직전 모든 창에 "지금 저장하세요"를 알리고, 기록할 시간을 잠시 준 뒤 종료합니다.
+                            // 왜: 바로 종료하면 입력 후 0.5초 안에 예약돼 있던 저장이 사라질 수 있습니다.
+                            let _ = app.emit("before-quit", ());
+                            let handle = app.clone();
+                            std::thread::spawn(move || {
+                                std::thread::sleep(QUIT_FLUSH_WAIT);
+                                handle.exit(0);
+                            });
                         }
+                        // ✨ 3. 트레이 메뉴 '열기' 시에도 방어 로직
+                        "open" => show_or_create_main(app),
+                        // 아래 요청은 모든 창에 방송하고, 매니저 창 하나만 처리합니다.
+                        // 왜: 예전에는 main 창에만 보내서 main을 닫으면 메뉴가 아무 반응이 없었습니다.
                         "new_main" => {
-                            if let Some(main_win) = app.get_webview_window("main") {
-                                let _ = main_win.emit("spawn-new-window", ());
-                            }
+                            let _ = app.emit("spawn-new-window", ());
                         }
                         "new_tiny" => {
-                            if let Some(main_win) = app.get_webview_window("main") {
-                                let _ = main_win.emit("spawn-tiny-note", ());
-                            }
+                            let _ = app.emit("spawn-tiny-note", ());
                         }
                         "reset_coord" => {
-                            if let Some(main_win) = app.get_webview_window("main") {
-                                let _ = main_win.emit("req-reset-coordinates", ());
-                            }
+                            let _ = app.emit("req-reset-coordinates", ());
                         }
                         _ => (),
                     })
                     .on_tray_icon_event(|tray, event| {
                         if let tauri::tray::TrayIconEvent::DoubleClick { .. } = event {
-                            if let Some(window) = tray.app_handle().get_webview_window("main") {
-                                let _ = window.show();
-                                let _ = window.set_focus();
-                            } else {
-                                // ✨ 4. 트레이 아이콘 '더블 클릭' 시에도 방어 로직 추가
-                                let _ = tauri::WebviewWindowBuilder::new(
-                                    tray.app_handle(),
-                                    "main",
-                                    tauri::WebviewUrl::App("index.html".into())
-                                )
-                                .title("Tidy Task")
-                                .inner_size(350.0, 500.0)
-                                .min_inner_size(250.0, 300.0)
-                                .decorations(false)
-                                .transparent(true)
-                                .resizable(true)
-                                .build();
-                            }
+                            // ✨ 4. 트레이 아이콘 '더블 클릭' 시에도 방어 로직
+                            show_or_create_main(tray.app_handle());
                         }
                     })
                     .build(app)?;
