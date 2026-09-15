@@ -15,6 +15,7 @@
   import { listen, emit } from "@tauri-apps/api/event";
   import { getThemeAccent, getTidyTheme } from "../lib/themes.js";
   import { htmlToText } from "../lib/text.js";
+  import { playChime } from "../lib/sound.js";
 
   let isDarkMode = $state(false);
   let uiFontFamily = $state('"Gulim", sans-serif');
@@ -33,28 +34,6 @@
 
   let unlistenUpdate;
 
-  function _playNotificationSound() {
-    try {
-      const AudioContext = window.AudioContext || window.webkitAudioContext;
-      if (!AudioContext) return;
-      const ctx = new AudioContext();
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
-      osc.type = "sine";
-      osc.frequency.setValueAtTime(600, ctx.currentTime);
-      osc.frequency.exponentialRampToValueAtTime(800, ctx.currentTime + 0.1);
-      gain.gain.setValueAtTime(0, ctx.currentTime);
-      gain.gain.linearRampToValueAtTime(0.5, ctx.currentTime + 0.05);
-      gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.3);
-      osc.connect(gain);
-      gain.connect(ctx.destination);
-      osc.start();
-      osc.stop(ctx.currentTime + 0.3);
-    } catch (e) {
-      console.warn("사운드 재생 실패:", e);
-    }
-  }
-
   onMount(async () => {
     unlistenUpdate = await listen("reminder-update", (event) => {
       const payload = event.payload;
@@ -70,7 +49,7 @@
 
       if (todos.length === 0) getCurrentWindow().close();
 
-      if (payload.playSound && !globalMuteSound) _playNotificationSound();
+      if (payload.playSound && !globalMuteSound) playChime("alert");
     });
 
     await emit("reminder-ready");
@@ -91,7 +70,8 @@
   }
 
   async function archiveItem(id, sourceLabel) {
-    todos = todos.filter((t) => t.id !== id);
+    // 창 이름까지 함께 비교합니다. (다른 창의 같은 ID 할 일이 함께 사라지지 않도록)
+    todos = todos.filter((t) => !(t.id === id && t.sourceLabel === sourceLabel));
     await emit("archive-reminder-item", { id, sourceLabel });
     if (todos.length === 0) await getCurrentWindow().close();
   }
@@ -100,10 +80,6 @@
     emit("update-reminder-opacity", { opacity });
   }
 
-  function handleTitleChange(e) {
-    reminderTitle = e.target.innerText;
-    emit("update-reminder-title", { title: reminderTitle });
-  }
   function getAccentColor() {
     return getThemeAccent(themeColor, isDarkMode);
   }

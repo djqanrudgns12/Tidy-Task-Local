@@ -1,21 +1,19 @@
 <script>
   import { appState } from '../lib/appState.svelte.js';
   import { getCurrentWindow } from '@tauri-apps/api/window';
-  import { onMount } from 'svelte';
+  import { LazyStore } from '@tauri-apps/plugin-store';
 
   let hideNextTime = $state(false);
 
   function closeWindow() {
     if (hideNextTime) {
       appState.hideWelcomeMessage = true;
-      appState.setHideWelcomeMessage?.(true); // Optional if using the helper
     }
     getCurrentWindow().close();
   }
 
   // Helper inside WelcomeWindow if not in appState
   async function savePreference() {
-    const { LazyStore } = await import('@tauri-apps/plugin-store');
     const store = new LazyStore('tidy-task-config.json');
     if (hideNextTime) {
       await store.set('hideWelcomeMessage', true);

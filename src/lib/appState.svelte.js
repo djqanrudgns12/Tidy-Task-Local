@@ -9,6 +9,12 @@ import { pickManager } from './windows/managerElection.js';
 import { findSlot, isSlotLimitReached, noteWindowOptions, tinyNoteWindowOptions } from './windows/windowSlots.js';
 import { getOpenWindowLabels, openWindow } from './windows/windowRegistry.js';
 import { registerFontFace } from './fonts.js';
+import { createSerialQueue } from './storage/serialQueue.js';
+import { collectImminentTodos } from './reminders/reminderEngine.js';
+import { buildExportText, escapeHtml, htmlToLines, linesToHtml, parseExportText } from './io/txtPorter.js';
+import { newId } from './ids.js';
+import { playChime } from './sound.js';
+import { openUrl } from '@tauri-apps/plugin-opener';
 import { invoke } from '@tauri-apps/api/core';
 import {
   SNAPSHOT_FIELDS,
@@ -146,15 +152,12 @@ let settingsSaveTimer = null;
 // 왜: performSave()는 "읽기 → 병합 → 쓰기" 구조라, 두 번의 저장이 겹치면
 //     나중 작업이 옛 스냅샷을 읽어 방금 저장한 내용을 덮어씁니다.
 //     큐에 태워 한 번에 하나씩만 실행하면 이 경합(race)이 원천 차단됩니다.
-let writeQueue = Promise.resolve();
+const writeQueue = createSerialQueue();
 function enqueueWrite(task) {
-  // 실패해도 큐가 멈추지 않도록 성공/실패 양쪽 모두에서 체인을 이어줍니다.
-  const run = writeQueue.then(task, task);
-  writeQueue = run.then(() => {}, () => {});
-  return run;
+  return writeQueue.enqueue(task);
 }
 export function whenWritesSettled() {
-  return writeQueue;
+  return writeQueue.settled();
 }
 
 export class AppState {
@@ -199,7 +202,6 @@ export class AppState {
   showReminders = $state(true);
   globalMuteSound = $state(false);
   reminderSuppressUntil = $state(0);
-  isReminderPopupVisible = $state(false);
   popupImminentTodos = $state([]);
   isEditMode = $state(false);
 
@@ -264,20 +266,26 @@ export class AppState {
   toastTimer = null;
   reminderTitle = $state('통합 리마인더');
 
+  // Ctrl+S 즉시 저장 안내 (도움말에 적힌 단축키)
+  showSaveToast = $state(false);
+
   triggerToast(type) {
     this.showCopySuccessToast = false;
     this.showPasteSuccessToast = false;
     this.showPasteLimitToast = false;
+    this.showSaveToast = false;
     if (this.toastTimer) clearTimeout(this.toastTimer);
 
     if (type === 'copy') this.showCopySuccessToast = true;
     else if (type === 'paste') this.showPasteSuccessToast = true;
     else if (type === 'limit') this.showPasteLimitToast = true;
+    else if (type === 'save') this.showSaveToast = true;
 
     this.toastTimer = setTimeout(() => {
       this.showCopySuccessToast = false;
       this.showPasteSuccessToast = false;
       this.showPasteLimitToast = false;
+      this.showSaveToast = false;
     }, 2500);
   }
 
@@ -958,7 +966,6 @@ async init() {
   async openUpdateDownload() {
     const url = this.updateInfo?.downloadUrl || RELEASES_PAGE_URL;
     try {
-      const { openUrl } = await import('@tauri-apps/plugin-opener');
       await openUrl(url);
       return true;
     } catch (e) {
@@ -971,7 +978,6 @@ async init() {
   async openReleasePage() {
     const url = this.updateInfo?.pageUrl || RELEASES_PAGE_URL;
     try {
-      const { openUrl } = await import('@tauri-apps/plugin-opener');
       await openUrl(url);
       return true;
     } catch (e) {
@@ -1352,10 +1358,16 @@ async init() {
       await tauriStore.save(); 
       
       // ✨ Phase 1: 파일 쓰기가 완전히 완료된 직후 동기화 트리거
-      if (this.isManager) {
-         this.syncReminderWindow().catch(console.error);
-      } else {
-         emit('req-reminder-sync');
+      // 단, 리마인더 팝업에 보이는 내용이 바뀌었을 때만 합니다.
+      // 왜: 메모 입력·창 이동처럼 팝업과 무관한 저장에도 매번 매니저가 모든 창을 다시 읽었습니다.
+      const reminderSignature = this._reminderSignature(winDataToSave);
+      if (reminderSignature !== this._lastReminderSignature) {
+        this._lastReminderSignature = reminderSignature;
+        if (this.isManager) {
+          this.syncReminderWindow().catch(console.error);
+        } else {
+          emit('req-reminder-sync');
+        }
       }
       
       return true;
@@ -1363,6 +1375,23 @@ async init() {
       console.error(`❌ [${this.windowLabel}] 저장 엔진 오류:`, e);
       return false;
     }
+  }
+
+  // 리마인더 팝업에 보이는 내용의 "요약값". 이 값이 바뀔 때만 팝업 동기화를 요청합니다.
+  _lastReminderSignature = null;
+  _reminderSignature(data) {
+    const base = {
+      title: data.title,
+      todos: (data.todos || []).map((t) => [t.id, t.text, t.deadline, Boolean(t.completed)]),
+    };
+    // 매니저는 팝업의 모양(테마·글꼴·투명도)과 표시 여부(켜기·미루기)도 결정하므로 함께 봅니다.
+    if (this.isManager) {
+      base.manager = [
+        this.themeColor, this.isDarkMode, this.uiFontFamily, this.uiFontSize, this.letterSpacing,
+        this.reminderOpacity, this.reminderTitle, this.globalMuteSound, this.showReminders, this.reminderSuppressUntil,
+      ];
+    }
+    return JSON.stringify(base);
   }
 
   // ✨ [본문 디바운스 저장] 타자 입력용. 타임머신 기록은 조금 더 늦게 남깁니다.
@@ -1456,7 +1485,7 @@ async init() {
   }
 
   addTodo(text, deadline = "") {
-    this.todos.push({ id: Date.now().toString(), text, completed: false, deadline });
+    this.todos.push({ id: newId(), text, completed: false, deadline });
     // ✨ 마감일이 있든 없든, 정렬 유틸리티를 호출하여 올바른 위치에 배치
     this._sortTodosByDeadline();
     this.saveNow();
@@ -1465,9 +1494,8 @@ async init() {
 
   addMultipleTodos(texts) {
     if (!texts || texts.length === 0) return;
-    const now = Date.now();
-    const newItems = texts.map((text, i) => ({
-      id: (now + i).toString(),
+    const newItems = texts.map((text) => ({
+      id: newId(),
       text,
       completed: false
     }));
@@ -1666,97 +1694,46 @@ async init() {
   }
 
   async checkReminders(force = false) {
-    if (!this.isManager || !this.showReminders) {
-      this.isReminderPopupVisible = false;
+    if (!this.isManager || !this.showReminders) return;
+
+    if (!force && this.reminderSuppressUntil && Date.now() < this.reminderSuppressUntil) {
       return;
     }
 
-    if (!force && this.reminderSuppressUntil && new Date().getTime() < this.reminderSuppressUntil) {
-      return;
+    // ✨ Phase 1: 모든 창의 할 일을 읽어 마감 임박 항목을 모읍니다 (계산은 reminders/reminderEngine.js)
+    const store = sharedStore();
+    const entries = await this._readReminderEntries(store);
+    const { list: imminentList, unnotified, today } = collectImminentTodos(entries);
+
+    // 오늘 처음 알리는 항목에 "알림 보냄" 표시를 남깁니다 (같은 날 다시 울리지 않도록).
+    // 열린 창은 그 창이 직접 기록하도록 알리고, 닫힌 창만 매니저가 저장소에 씁니다.
+    // 왜: 열린 창의 데이터를 밖에서 고치면 그 창이 다음에 저장할 때 옛 목록으로 덮어써
+    //     기록이 사라지고, 같은 할 일이 매시간 다시 알림을 울렸습니다.
+    const byLabel = new Map();
+    for (const item of unnotified) {
+      if (!byLabel.has(item.label)) byLabel.set(item.label, []);
+      byLabel.get(item.label).push(item);
     }
-
-    const mainStore = new LazyStore('tidy-task-config.json');
-    let labels = ['main'];
-    const extra = await mainStore.get('activeExtraWindows') || [];
-    labels = labels.concat(extra);
-
-    const now = new Date();
-    const todayStr = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
-    const nowStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-
-    const todoMap = new Map();
-    let hasUnnotified = false;
+    const openLabels = byLabel.size > 0 ? await getOpenWindowLabels() : [];
     let needsSave = false;
-    // 열린 창 목록 (다른 창의 알림 기록을 누가 쓸지 정하는 데 사용)
-    const openLabels = await getOpenWindowLabels();
 
-    // ✨ Phase 1: LazyStore에서 모든 창의 데이터를 읽어온다 (Merge Logic)
-    for (const label of labels) {
-      let winData;
+    for (const [label, items] of byLabel) {
       if (label === this.windowLabel) {
-         winData = { todos: this.todos, title: this.title };
+        for (const { index } of items) {
+          if (this.todos[index]) this.todos[index].lastNotified = today;
+        }
+        needsSave = true;
+      } else if (openLabels.includes(label)) {
+        emit('reminder-mark-notified', { label, ids: items.map((item) => item.id), date: today }).catch(() => {});
       } else {
-         winData = await mainStore.get(label) || {};
-      }
-      const title = winData.title || '제목 없음';
-      const wTodos = winData.todos || [];
-
-      let winNeedsSave = false;
-      const notifiedIds = [];
-      for (let i = 0; i < wTodos.length; i++) {
-        const todo = wTodos[i];
-        if (!todo.deadline || todo.completed) continue;
-        
-        const dt = new Date(todo.deadline);
-        let diffDays;
-        let isInvalid = isNaN(dt.getTime());
-        
-        if (isInvalid) {
-          diffDays = Infinity; // ✨ 비정상 데이터는 맨 뒤로
-        } else {
-          const dtStart = new Date(dt.getFullYear(), dt.getMonth(), dt.getDate());
-          diffDays = Math.ceil((dtStart - nowStart) / (1000 * 60 * 60 * 24));
-        }
-
-        if (diffDays <= 3 || isInvalid) {
-          if (!todoMap.has(todo.id)) {
-            // ✨ 중복 방어 및 독립 속성(sourceLabel, sourceTitle) 부여
-            todoMap.set(todo.id, {
-               ...todo,
-               diffDays,
-               sourceLabel: label,
-               sourceTitle: title
-            });
-
-            if (todo.lastNotified !== todayStr && !isInvalid) {
-               hasUnnotified = true;
-               if (label === this.windowLabel) { 
-                 this.todos[i].lastNotified = todayStr;
-                 needsSave = true;
-               } else {
-                 wTodos[i].lastNotified = todayStr;
-                 notifiedIds.push(todo.id);
-                 winNeedsSave = true;
-               }
-            }
-          }
-        }
-      }
-      
-      // 타 창의 lastNotified 기록 (원본 리스트 구조 유지)
-      // 열린 창은 그 창이 직접 기록하도록 알리고, 닫힌 창만 매니저가 저장소에 씁니다.
-      // 왜: 열린 창의 데이터를 밖에서 고치면 그 창이 다음에 저장할 때 옛 목록으로 덮어써
-      //     기록이 사라지고, 같은 할 일이 매시간 다시 알림을 울렸습니다.
-      if (winNeedsSave && label !== this.windowLabel) {
-        if (openLabels.includes(label)) {
-          emit('reminder-mark-notified', { label, ids: notifiedIds, date: todayStr }).catch(() => {});
-        } else {
-          winData.todos = wTodos;
-          await enqueueWrite(async () => {
-            await mainStore.set(label, winData);
-            await mainStore.save();
-          });
-        }
+        const raw = entries.find((entry) => entry.label === label)?.raw;
+        if (!raw) continue;
+        const indexes = new Set(items.map((item) => item.index));
+        const todos = (raw.todos || []).map((todo, i) => (indexes.has(i) ? { ...todo, lastNotified: today } : todo));
+        await enqueueWrite(async () => {
+          await store.set(label, { ...raw, todos });
+          await store.save();
+        });
       }
     }
 
@@ -1764,36 +1741,31 @@ async init() {
       this.saveNow(false);
     }
 
-    let imminentList = Array.from(todoMap.values());
-    imminentList.sort((a, b) => a.diffDays - b.diffDays);
-
-    if (force || (imminentList.length > 0 && hasUnnotified)) {
+    if (force || (imminentList.length > 0 && unnotified.length > 0)) {
       this.popupImminentTodos = imminentList;
       this._showFloatingReminder(imminentList);
     }
   }
 
+  // 리마인더 계산에 쓸 "창별 할 일" 목록을 읽습니다.
+  // 내 창은 아직 저장 전일 수 있으므로 디스크가 아니라 지금 화면의 값을 씁니다.
+  async _readReminderEntries(store) {
+    const labels = ['main', ...((await store.get('activeExtraWindows')) || [])];
+    const entries = [];
+    for (const label of labels) {
+      if (label === this.windowLabel) {
+        entries.push({ label, title: this.title, todos: this.todos, raw: null });
+        continue;
+      }
+      const raw = (await store.get(label)) || {};
+      entries.push({ label, title: raw.title, todos: raw.todos || [], raw });
+    }
+    return entries;
+  }
+
   _playNotificationSound() {
     if (this.globalMuteSound) return;
-    try {
-      const AudioContext = window.AudioContext || window.webkitAudioContext;
-      if (!AudioContext) return;
-      const ctx = new AudioContext();
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
-      osc.type = 'sine';
-      osc.frequency.setValueAtTime(600, ctx.currentTime);
-      osc.frequency.exponentialRampToValueAtTime(800, ctx.currentTime + 0.1);
-      gain.gain.setValueAtTime(0, ctx.currentTime);
-      gain.gain.linearRampToValueAtTime(0.5, ctx.currentTime + 0.05);
-      gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.3);
-      osc.connect(gain);
-      gain.connect(ctx.destination);
-      osc.start();
-      osc.stop(ctx.currentTime + 0.3);
-    } catch (e) {
-      console.warn("사운드 재생 실패:", e);
-    }
+    playChime('alert');
   }
 
   // 리마인더 창을 동시에 두 번 만들지 않도록 잠급니다.
@@ -1862,71 +1834,16 @@ async init() {
   async syncReminderWindow(playSound = false) {
     if (!this.isManager) return;
 
-    if (!this.showReminders || (this.reminderSuppressUntil && new Date().getTime() < this.reminderSuppressUntil)) {
-      try {
-        const { WebviewWindow } = await import('@tauri-apps/api/webviewWindow');
-        const win = await WebviewWindow.getByLabel('reminder');
-        if (win) await win.close();
-      } catch(e) {}
+    if (!this.showReminders || (this.reminderSuppressUntil && Date.now() < this.reminderSuppressUntil)) {
+      await this._closeReminderWindow();
       return;
     }
 
-    const mainStore = new LazyStore('tidy-task-config.json');
-    let labels = ['main'];
-    const extra = await mainStore.get('activeExtraWindows') || [];
-    labels = labels.concat(extra);
-
-    const now = new Date();
-    const nowStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    
-    // ✨ Phase 1: 중복 방어 Map
-    const todoMap = new Map();
-
-    for (const label of labels) {
-      let winData;
-      if (label === this.windowLabel) {
-         winData = { todos: this.todos, title: this.title };
-      } else {
-         winData = await mainStore.get(label) || {};
-      }
-      const title = winData.title || '제목 없음';
-      const wTodos = winData.todos || [];
-
-      for (let i = 0; i < wTodos.length; i++) {
-        const todo = wTodos[i];
-        if (!todo.deadline || todo.completed) continue;
-        const dt = new Date(todo.deadline);
-        
-        let diffDays;
-        if (isNaN(dt.getTime())) {
-          diffDays = Infinity;
-        } else {
-          const dtStart = new Date(dt.getFullYear(), dt.getMonth(), dt.getDate());
-          diffDays = Math.ceil((dtStart - nowStart) / (1000 * 60 * 60 * 24));
-        }
-
-        if (diffDays <= 3 || diffDays === Infinity) {
-           if (!todoMap.has(todo.id)) {
-              todoMap.set(todo.id, { 
-                ...todo, 
-                diffDays, 
-                sourceLabel: label, 
-                sourceTitle: title 
-              });
-           }
-        }
-      }
-    }
-
-    let imminentList = Array.from(todoMap.values());
-    imminentList.sort((a, b) => a.diffDays - b.diffDays);
+    // ✨ 점검(checkReminders)과 같은 계산 함수를 써서 두 경로의 결과가 항상 같게 합니다.
+    const { list: imminentList } = collectImminentTodos(await this._readReminderEntries(sharedStore()));
 
     if (imminentList.length === 0) {
-      try {
-        const { WebviewWindow } = await import('@tauri-apps/api/webviewWindow');
-        const win = await WebviewWindow.getByLabel('reminder');
-        if (win) await win.close();
-      } catch(e) {}
+      await this._closeReminderWindow();
       return;
     }
 
@@ -1944,7 +1861,13 @@ async init() {
       globalMuteSound: this.globalMuteSound,
     };
     await emit('reminder-update', payload);
+  }
 
+  async _closeReminderWindow() {
+    try {
+      const win = await WebviewWindow.getByLabel('reminder');
+      if (win) await win.close();
+    } catch (e) {}
   }
 
   dismissReminderPopup(mode, payload = {}) {
@@ -1978,7 +1901,6 @@ async init() {
       this.reminderSuppressUntil = tomorrow.getTime();
     }
     
-    this.isReminderPopupVisible = false;
     this.saveNow();
   }
 
@@ -2075,110 +1997,37 @@ async init() {
     return cleanText;
   }
 
-  // ✨ TXT 내보내기 — Tidy Task 양식
+  // ✨ TXT 내보내기 — Tidy Task 양식 (형식 변환은 io/txtPorter.js)
   exportToTxt() {
-    const todos = $state.snapshot(this.todos) || [];
-    const archived = $state.snapshot(this.archivedTodos) || [];
-
-    const lines = [];
-    lines.push('=== Tidy Task 내보내기 ===');
-    lines.push('');
-
-    lines.push('[할 일 목록]');
-    if (todos.length === 0) {
-      lines.push('(없음)');
-    } else {
-      todos.forEach(t => {
-        const datePart = t.deadline ? `[${t.deadline}] ` : '';
-        lines.push(`- ${datePart}${this._stripHtml(t.text)}`);
-      });
-    }
-    lines.push('');
-
-    lines.push('[마감된 일]');
-    if (archived.length === 0) {
-      lines.push('(없음)');
-    } else {
-      archived.forEach(t => {
-        const datePart = t.deadline ? `[${t.deadline}] ` : '';
-        lines.push(`- ${datePart}${this._stripHtml(t.text)}`);
-      });
-    }
-    lines.push('');
-
-    lines.push('[중요한 일 메모]');
-    const notesText = this._stripHtml(this.notes);
-    if (!notesText) {
-      lines.push('(없음)');
-    } else {
-      lines.push(notesText);
-    }
-    lines.push('');
-    lines.push('===========================');
-
-    return lines.join('\n');
+    const toItem = (t) => ({ text: this._stripHtml(t.text), deadline: t.deadline });
+    return buildExportText({
+      todos: ($state.snapshot(this.todos) || []).map(toItem),
+      archived: ($state.snapshot(this.archivedTodos) || []).map(toItem),
+      // 메모는 줄바꿈을 살려 내보냅니다. (예전에는 한 줄로 합쳐져 백업 파일의 문단이 모두 붙었습니다)
+      notesLines: htmlToLines(this.notes),
+    });
   }
 
-  // ✨ TXT 가져오기 — 위 양식 파싱
+  // ✨ TXT 가져오기 — 위 양식 파싱 (5.0.0이 만든 파일도 읽습니다)
   async importFromTxt(content) {
     if (!content) return false;
+    const { todos, archived, notesLines } = parseExportText(content);
 
-    const sectionTodo    = '[할 일 목록]';
-    const sectionDone    = '[마감된 일]';
-    const sectionNotes   = '[중요한 일 메모]';
-    const sectionEnd     = '===========================';
-
-    const allLines = content.split(/\r?\n/);
-
-    let mode = null;
-    const newTodos    = [];
-    const newArchived = [];
-    const notesLines  = [];
-
-    for (const rawLine of allLines) {
-      const line = rawLine.trimEnd();
-
-      if (line.startsWith(sectionTodo))   { mode = 'todo';    continue; }
-      if (line.startsWith(sectionDone))   { mode = 'done';    continue; }
-      if (line.startsWith(sectionNotes))  { mode = 'notes';   continue; }
-      if (line.startsWith(sectionEnd))    { mode = null;      continue; }
-      if (line.startsWith('=== Tidy Task')) { continue; }
-
-      if (mode === 'todo' || mode === 'done') {
-        if (line.startsWith('- ')) {
-          let fullText = line.slice(2).trim();
-          let deadline = "";
-          
-          // ✨ 정규표현식으로 줄 시작 부분의 [YYYY-MM-DD] 패턴을 찾아 분리합니다.
-          const dateMatch = fullText.match(/^\[(\d{4}-\d{2}-\d{2})\]\s*(.*)/);
-          if (dateMatch) {
-            deadline = dateMatch[1];
-            fullText = dateMatch[2];
-          }
-
-          if (mode === 'todo') newTodos.push({ text: fullText, deadline });
-          else newArchived.push({ text: fullText, deadline });
-        } else if (line === '(없음)') { /* skip */ }
-      } else if (mode === 'notes') {
-        if (line !== '(없음)') notesLines.push(line);
-      }
-    }
-
-    const now = Date.now();
-    // ✨ 추출된 날짜 정보(deadline)를 포함하여 할 일 객체 리스트를 재생성합니다.
-    this.todos = newTodos.map((item, i) => ({ 
-      id: (now + i).toString(), 
-      text: item.text, 
-      completed: false, 
-      deadline: item.deadline 
+    // 가져온 글은 "글자 그대로" 보이도록 HTML 특수문자를 바꿔 넣습니다.
+    // (예전에는 "<b>" 같은 글자가 실제 서식으로 해석되었습니다)
+    this.todos = todos.map((item) => ({
+      id: newId(),
+      text: escapeHtml(item.text),
+      completed: false,
+      deadline: item.deadline,
     }));
-    this.archivedTodos = newArchived.map((item, i) => ({ 
-      id: (now + 10000 + i).toString(), 
-      text: item.text, 
-      completed: true, 
-      deadline: item.deadline 
+    this.archivedTodos = archived.map((item) => ({
+      id: newId(),
+      text: escapeHtml(item.text),
+      completed: true,
+      deadline: item.deadline,
     }));
-    this.notes = notesLines.join('\n').trim();
+    this.notes = linesToHtml(notesLines);
 
     await this.saveNow();
     return true;

@@ -9,6 +9,7 @@
   import clsx from "clsx";
   import { flushSync } from "svelte";
   import Icon from "@iconify/svelte";
+  import { CALENDAR_BOLD_DUOTONE } from "../lib/icons.js";
 
   let newTaskText = $state("");
   let newTaskDeadline = $state("");
@@ -213,7 +214,7 @@
               title="마감일 설정"
             >
               {#if dlInfo.isIcon}
-                <Icon icon="solar:calendar-bold-duotone" width="16" height="16" />
+                <Icon icon={CALENDAR_BOLD_DUOTONE} width="16" height="16" />
               {:else}
                 {dlInfo.label}
               {/if}
@@ -280,7 +281,7 @@
             {parseInt(newTaskDeadline.split('-')[1])}/{parseInt(newTaskDeadline.split('-')[2])}({['일', '월', '화', '수', '목', '금', '토'][new Date(newTaskDeadline).getDay()]})
           </span>
         {:else}
-          <Icon icon="solar:calendar-bold-duotone" width="16" height="16" class="pointer-events-none shrink-0" />
+          <Icon icon={CALENDAR_BOLD_DUOTONE} width="16" height="16" class="pointer-events-none shrink-0" />
         {/if}
       </button>
 

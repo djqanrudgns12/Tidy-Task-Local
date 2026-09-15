@@ -7,6 +7,7 @@
   import { getTidyTheme } from "./lib/themes.js";
   import { isDataWindowLabel } from "./lib/windows/windowLabels.js";
   import { hasWindowContent } from "./lib/storage/windowDataCodec.js";
+  import { playChime } from "./lib/sound.js";
   import {
     UPDATE_NOTICE_STORE_KEY,
     UPDATE_NOTICE_WINDOW_LABEL,
@@ -151,7 +152,16 @@
         x: screenX,
         y: screenY,
         type: type,
-        state: { ...appState.takeSnapshot(), isEditMode: appState.isEditMode },
+        // 우클릭 메뉴가 쓰는 설정값만 보냅니다. (예전에는 할 일 전체를 깊은 복사해 매번 전송했습니다)
+        state: {
+          themeColor: appState.themeColor,
+          isDarkMode: appState.isDarkMode,
+          uiFontFamily: appState.uiFontFamily,
+          uiFontSize: appState.uiFontSize,
+          showArchived: appState.showArchived,
+          showNotes: appState.showNotes,
+          isEditMode: appState.isEditMode,
+        },
         requester: getCurrentWindow().label
       });
     }
@@ -567,19 +577,7 @@
 
     // ✨ 메인 창 최초 실행 시진 레모 탄산 시작음 (1회만)
     if (currentWindow.label === 'main' && !appState.globalMuteSound) {
-      try {
-        const _ac = new (window.AudioContext || window.webkitAudioContext)();
-        const _o = _ac.createOscillator();
-        const _g = _ac.createGain();
-        _o.type = 'sine';
-        _o.frequency.setValueAtTime(1200, _ac.currentTime);
-        _o.frequency.exponentialRampToValueAtTime(3600, _ac.currentTime + 0.15);
-        _g.gain.setValueAtTime(0, _ac.currentTime);
-        _g.gain.linearRampToValueAtTime(0.45, _ac.currentTime + 0.01);
-        _g.gain.exponentialRampToValueAtTime(0.0001, _ac.currentTime + 0.4);
-        _o.connect(_g); _g.connect(_ac.destination);
-        _o.start(); _o.stop(_ac.currentTime + 0.42);
-      } catch(e) { console.warn('시작음 재생 실패:', e); }
+      playChime('start');
     }
 
     // ── [시작 창 배치] 환영 창과 업데이트 공지 창을 나란히 띄웁니다 ──
@@ -949,7 +947,8 @@
       }
     }
 
-    if (currentWindow.label !== "settings") {
+    // 시작프로그램 등록 확인은 데이터 창만 합니다. (리마인더·우클릭 메뉴 같은 보조 창까지 매번 확인할 필요가 없습니다)
+    if (isDataWindow(currentWindow.label)) {
       try {
         const autostartEnabled = await isEnabled();
         if (!autostartEnabled) {
@@ -1272,6 +1271,13 @@
     }
 
     if (e.ctrlKey || e.metaKey) {
+      // ✨ Ctrl+S: 예약된 저장을 기다리지 않고 지금 바로 디스크에 기록합니다. (도움말에 안내된 단축키)
+      if (e.key.toLowerCase() === 's') {
+        e.preventDefault();
+        appState.flushPendingSaves(true).then((ok) => { if (ok) appState.triggerToast('save'); });
+        return;
+      }
+
       if (appState.isEditMode && appState.selectedTodoIds.length > 0) {
         const key = e.key.toLowerCase();
         if (key === 'b') { e.preventDefault(); appState.applyStyleToSelected('format', 'bold'); return; }
@@ -1625,7 +1631,7 @@
       </div>
     {/if}
 
-    {#if appState.showPasteLimitToast || appState.showCopySuccessToast || appState.showPasteSuccessToast}
+    {#if appState.showPasteLimitToast || appState.showCopySuccessToast || appState.showPasteSuccessToast || appState.showSaveToast}
       <div
         transition:scale={{ duration: 300, start: 0.8, opacity: 0 }}
         class="absolute inset-x-0 top-1/2 -translate-y-1/2 flex items-center justify-center pointer-events-none px-4"
@@ -1700,6 +1706,29 @@
               style="color: {appState.isDarkMode ? '#86efac' : '#16a34a'};"
             >
               할 일 목록에 추가되었습니다!
+            </span>
+          </div>
+        {:else if appState.showSaveToast}
+          <!-- Ctrl+S 즉시 저장 안내 (붙여넣기 완료 안내와 같은 디자인) -->
+          <div
+            class="px-4 py-2.5 rounded-[20px] shadow-xl flex items-center gap-2 border"
+            style="
+              background-color: {appState.isDarkMode
+              ? 'rgba(20, 83, 45, 0.95)'
+              : 'rgba(240, 253, 244, 0.95)'};
+              backdrop-filter: blur(4px);
+              border-color: {appState.isDarkMode
+              ? 'rgba(74, 222, 128, 0.2)'
+              : 'rgba(74, 222, 128, 0.4)'};
+              box-shadow: 0 8px 25px rgba(22, 163, 74, 0.15);
+            "
+          >
+            <span class="text-[14px] leading-none mb-[1px]">💾</span>
+            <span
+              class="text-[11px] font-extrabold tracking-tight"
+              style="color: {appState.isDarkMode ? '#86efac' : '#16a34a'};"
+            >
+              지금 내용을 저장했습니다!
             </span>
           </div>
         {/if}
