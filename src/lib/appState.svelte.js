@@ -4,6 +4,7 @@ import { WebviewWindow } from '@tauri-apps/api/webviewWindow';
 import { emit, listen } from '@tauri-apps/api/event';
 import { LogicalPosition } from '@tauri-apps/api/dpi';
 import { TINY_NOTE_MIN_WIDTH, TINY_NOTE_ROLLED_HEIGHT } from './tinyNoteWindow.js';
+import { isDataWindowLabel } from './windows/windowLabels.js';
 import { getThemeAccent, isTinyNoteDarkTheme, nextTinyNoteThemeState, normalizeThemeId } from './themes.js';
 import {
   AUTO_CHECK_INTERVAL_MS,
@@ -450,7 +451,6 @@ async init() {
       listen('manager-closing', async () => {
         if (this.isManager) return;
         const mainStore = new LazyStore('tidy-task-config.json');
-        try { await mainStore.reload(); } catch(e) {}
         const extraWindows = await mainStore.get('activeExtraWindows') || [];
         
         let minId = Infinity;
@@ -536,8 +536,10 @@ async init() {
         }
       });
       
+      // 다른 창의 할 일이 바뀌었으니 팝업 내용만 새로 맞춥니다.
+      // 왜 미루기(reminderSuppressUntil)를 건드리지 않는가: 예전에는 여기서 0으로 초기화해서,
+      //   다른 창에서 글자만 입력해도 사용자가 고른 "1시간 뒤/오늘은 그만"이 즉시 풀렸습니다.
       this._unlistenReminderSync = await listen('req-reminder-sync', () => {
-          this.reminderSuppressUntil = 0; 
           this.syncReminderWindow();
       });
 
@@ -1309,6 +1311,11 @@ async init() {
   async performSave(snap_ignored = null, keys = null) {
     if (!tauriStore) return false;
 
+    // 보조 창(리마인더·환영·우클릭 메뉴·설정)은 자기 데이터가 없으므로 절대 쓰지 않습니다.
+    // 왜: 보조 창이 저장하면 매니저에게 동기화 신호가 가고, 빈 키를 지우는 청소 작업까지 돌아
+    //     불필요한 디스크 쓰기와 리마인더 미루기 초기화가 발생했습니다.
+    if (!isDataWindowLabel(this.windowLabel)) return true;
+
     // 🛑 [데이터 보호] 디스크 읽기가 검증되지 않았으면 단 한 글자도 쓰지 않습니다.
     //    이 방어가 없으면 "부팅 직후 읽기 실패 → 빈 상태 저장 → 메모 영구 삭제"가 발생합니다.
     if (!this._hydrated) {
@@ -2029,8 +2036,9 @@ async init() {
     } else if (mode === '1hour') {
       this.reminderSuppressUntil = now.getTime() + 1000 * 60 * 60;
     } else if (mode === 'custom') {
-      const h = payload.hours || 0;
-      const m = payload.minutes || 0;
+      // 입력칸이 비었거나 음수면 0으로 봅니다. (음수가 들어가면 과거 시각이 되어 미루기가 무시됐습니다.)
+      const h = Math.max(0, Number(payload.hours) || 0);
+      const m = Math.max(0, Number(payload.minutes) || 0);
       this.reminderSuppressUntil = now.getTime() + (h * 3600000) + (m * 60000);
     } else if (mode === 'today') {
       let needsSave = false;

@@ -14,6 +14,7 @@
   import { getCurrentWindow } from "@tauri-apps/api/window";
   import { listen, emit } from "@tauri-apps/api/event";
   import { getThemeAccent, getTidyTheme } from "../lib/themes.js";
+  import { htmlToText } from "../lib/text.js";
 
   let isDarkMode = $state(false);
   let uiFontFamily = $state('"Gulim", sans-serif');
@@ -269,11 +270,7 @@
           class="text-[0.95em] leading-snug font-medium"
           style="color: {isDarkMode ? '#cbd5e1' : '#475569'}"
         >
-          {todo.text
-            .replace(/<[^>]*>?/gm, "")
-            .replace(/&nbsp;/g, " ")
-            .replace(/&[a-zA-Z]+;/g, "")
-            .trim()}
+          {htmlToText(todo.text)}
         </span>
       </div>
     {/each}

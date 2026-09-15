@@ -27,15 +27,11 @@ class ArchiveState {
   async init() {
     try {
       // 🚀 [Compatibility] 기존 설정 파일 공유, 단 독립적인 키 'archivedNotes'만 사용
+      // reload()를 부르지 않습니다.
+      // 왜: 같은 파일을 쓰는 모든 창은 Rust 쪽 저장소 메모리 하나를 공유하므로 get()이 항상 최신입니다.
+      //     reload()는 "디스크 내용으로 메모리를 덮어쓰기"라서, 다른 창이 막 set()하고
+      //     아직 파일에 쓰지 못한 내용을 옛 값으로 되돌려 버립니다.
       tauriStore = new LazyStore('tidy-task-config.json');
-      
-      try {
-        if (typeof tauriStore.reload === 'function') {
-          await tauriStore.reload();
-        }
-      } catch (e) {
-        console.warn("스토어 리로드 실패 (아카이브 초기화 중):", e);
-      }
 
       // 🚀 [Resilience] 데이터가 없을 경우 빈 배열로 안전하게 초기화
       const savedNotes = await tauriStore.get('archivedNotes');
@@ -112,8 +108,7 @@ class ArchiveState {
   async _safeModify(transformFn) {
     if (!tauriStore) return;
     try {
-      // 1단계: 디스크 최신 상태 읽기 (다른 창이 쓴 변경사항 포함)
-      try { await tauriStore.reload(); } catch(e) {}
+      // 1단계: 최신 상태 읽기 (공유 메모리라 다른 창이 쓴 변경사항이 이미 들어 있습니다)
       const diskNotes = await tauriStore.get('archivedNotes') || [];
 
       // 2단계: 변환 함수 적용 (추가, 삭제, 수정 등 — 디스크 최신값 기반)
@@ -144,7 +139,6 @@ class ArchiveState {
   async refreshFromDisk() {
     if (!tauriStore) return;
     try {
-      try { await tauriStore.reload(); } catch(e) {}
       const diskNotes = await tauriStore.get('archivedNotes');
       if (Array.isArray(diskNotes)) {
         this.notes = diskNotes;
@@ -261,9 +255,6 @@ class ArchiveState {
     if (!tauriStore) return false;
 
     try {
-      // 최신 디스크 상태 읽기
-      try { await tauriStore.reload(); } catch(e) {}
-
       let activeWindows = await tauriStore.get('activeExtraWindows') || [];
 
       let emptyLabel = null;

@@ -608,6 +608,11 @@
           const payload = appState.takeSnapshot();
           payload.globalFont = appState.fontFamily; // ✨ Prevent font reset
           payload.showReminders = !appState.showReminders;
+          // 대상 창을 반드시 밝힙니다.
+          // 왜: targetWindow가 없으면 모든 창이 "나에게 온 설정"으로 받아들여
+          //     이 창의 테마·글꼴이 다른 창 전체(Tiny Note 포함)에 덮어써졌습니다.
+          //     다른 창들은 리마인더 켜기/끄기(매니저 전용 분기)만 반영합니다.
+          payload.targetWindow = appState.windowLabel;
           emit('req-apply-settings', payload);
         }}
         onmousedown={(e) => e.preventDefault()}

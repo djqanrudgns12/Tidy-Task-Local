@@ -5,6 +5,7 @@
   import { appState } from "./lib/appState.svelte.js";
   import { TINY_NOTE_MIN_WIDTH, TINY_NOTE_ROLLED_HEIGHT } from "./lib/tinyNoteWindow.js";
   import { getTidyTheme } from "./lib/themes.js";
+  import { isDataWindowLabel } from "./lib/windows/windowLabels.js";
   import {
     UPDATE_NOTICE_STORE_KEY,
     UPDATE_NOTICE_WINDOW_LABEL,
@@ -40,7 +41,6 @@
   import { writeTextFile, readTextFile } from "@tauri-apps/plugin-fs";
   import {
     PhysicalPosition,
-    PhysicalSize,
     LogicalSize,
     LogicalPosition,
   } from "@tauri-apps/api/dpi";
@@ -56,9 +56,8 @@
 
   // 데이터를 담는 창(main / note-* / tinynote-*)인지 판별합니다.
   // 설정·컨텍스트메뉴·환영 같은 임시 UI 창은 저장 플러시 대상이 아닙니다.
-  function isDataWindow(label) {
-    return label === "main" || label.startsWith("note-") || label.startsWith("tinynote-");
-  }
+  // (판별 규칙은 appState와 똑같아야 하므로 windowLabels.js 한 곳을 공유합니다.)
+  const isDataWindow = isDataWindowLabel;
 
   // 시작 시 뜨는 창들(환영 · 업데이트 공지)을 겹치지 않게 놓기 위한 화면 크기 조회입니다.
   // 왜 논리 좌표(logical)로 계산하는가: WebviewWindow의 x/y도 논리 좌표라 단위를 맞춰야
@@ -875,6 +874,15 @@
       if (win.label === "settings") return;
 
       event.preventDefault();
+
+      // 리마인더·환영·우클릭 메뉴 같은 보조 창은 저장할 데이터가 없으므로 바로 닫습니다.
+      // 왜: 예전에는 보조 창도 닫힐 때 저장 엔진을 돌렸고, 그 저장이 매니저에게
+      //     "리마인더 동기화" 신호를 보내 사용자가 방금 누른 "1시간 뒤 알림"을 초기화했습니다.
+      if (!isDataWindow(win.label)) {
+        await win.destroy();
+        return;
+      }
+
       if (document.activeElement instanceof HTMLElement) {
         document.activeElement.blur();
       }
@@ -1032,7 +1040,8 @@
         () => {
           appState.fontFamily = "메이플스토리 L";
           appState.uiFontFamily = "메이플스토리 L";
-          appState.customFonts = [];
+          // 커스텀 폰트 목록은 앱 전체가 공유하는 자원이라 창 하나의 "설정 초기화"로 비우지 않습니다.
+          // (예전에는 이 창의 글꼴 목록에서만 사라져 재시작 전까지 선택할 수 없었습니다.)
           appState.fontSize = 10;
           appState.uiFontSize = 10;
           appState.themeColor = "amber";
@@ -1047,7 +1056,9 @@
           appState.windowHeight = 500;
           try {
             const win = getCurrentWindow();
-            win.setSize(new PhysicalSize(380, 500));
+            // 저장값(windowWidth/Height)이 논리 단위이므로 크기 적용도 논리 단위로 맞춥니다.
+            // (물리 단위면 125%·150% 배율 화면에서 창이 작아졌습니다.)
+            win.setSize(new LogicalSize(380, 500));
           } catch (e) {}
 
           appState.applyFontToAllText("메이플스토리 L");

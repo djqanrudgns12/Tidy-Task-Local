@@ -105,7 +105,11 @@
 
   function handleDndConsider(e) {
     if (appState.searchQuery) return;
-    appState.reorderTodos(e.detail.items);
+    // 드래그 도중에는 화면 순서만 바꾸고 저장하지 않습니다.
+    // 왜: 칸을 지날 때마다 저장하면 드래그 한 번에 수십 번 디스크에 쓰고,
+    //     되돌리기 기록이 중간 상태로 가득 차며, 드래그용 임시 항목까지 저장될 수 있습니다.
+    //     최종 순서는 놓는 순간(finalize)에 한 번만 저장합니다.
+    appState.todos = e.detail.items;
   }
   function handleDndFinalize(e) {
     if (appState.searchQuery) return;
