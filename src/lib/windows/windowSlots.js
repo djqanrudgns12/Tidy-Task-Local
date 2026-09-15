@@ -20,11 +20,13 @@ import { MAX_WINDOWS_PER_KIND, slotLabels } from './windowLabels.js';
 export const NOTE_DEFAULT_WIDTH = 380;
 export const NOTE_DEFAULT_HEIGHT = 500;
 
+/** @param {string} prefix @param {string[]} openLabels */
 export function countOpenSlots(prefix, openLabels) {
   const open = new Set(openLabels || []);
   return slotLabels(prefix).filter((label) => open.has(label)).length;
 }
 
+/** @param {string} prefix @param {string[]} openLabels */
 export function isSlotLimitReached(prefix, openLabels) {
   return countOpenSlots(prefix, openLabels) >= MAX_WINDOWS_PER_KIND;
 }
@@ -53,20 +55,25 @@ export async function findSlot({ prefix, openLabels, getData, mode }) {
   return firstEmpty;
 }
 
+/** @param {unknown} value @returns {value is number} */
 function isValidPos(value) {
   return value !== null && value !== undefined && typeof value === 'number' && !isNaN(value);
 }
 
+/** @param {any} value @param {number} fallback */
 function savedSize(value, fallback) {
   return (value && value > 0) ? Math.round(value) : fallback;
 }
 
+/** @param {string} label */
 function slotNumber(label) {
   return label.split('-')[1];
 }
 
 // 일반 노트 창(note-N) 생성 옵션 — 저장된 크기·위치가 있으면 그대로, 없으면 화면 중앙
+/** @param {string} label @param {Record<string, any> | null | undefined} winData */
 export function noteWindowOptions(label, winData) {
+  /** @type {Record<string, any>} */
   const options = {
     url: 'index.html',
     title: `Tidy Task Note ${slotNumber(label)}`,
@@ -86,8 +93,10 @@ export function noteWindowOptions(label, winData) {
 }
 
 // Tiny Note 창 생성 옵션 — 롤업 상태로 닫혔다면 35px 띠 높이로 바로 엽니다(깜빡임 방지)
+/** @param {string} label @param {Record<string, any> | null | undefined} winData */
 export function tinyNoteWindowOptions(label, winData) {
   const isRolledUp = winData?.isRolledUp || false;
+  /** @type {Record<string, any>} */
   const options = {
     url: 'index.html',
     title: `Tiny Note ${slotNumber(label)}`,
@@ -110,6 +119,7 @@ export function tinyNoteWindowOptions(label, winData) {
 
 // 아카이브에서 꺼낸 메모를 새 Tiny Note 슬롯에 넣을 데이터
 // 왜 크기를 명시하는가: 크기가 비어 있으면 복원 로직이 크기 적용을 건너뛰어 헤더 폭 계산이 어긋났습니다.
+/** @param {{ title?: string, content?: string, themeColor?: string, isDarkMode?: boolean }} noteData */
 export function archivedNoteToWindowData(noteData) {
   return {
     title: noteData.title,

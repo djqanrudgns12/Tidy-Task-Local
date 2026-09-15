@@ -17,12 +17,19 @@ import { isTinyNoteLabel } from '../windows/windowLabels.js';
 const DEFAULT_FONT = '메이플스토리 L';
 
 /**
+ * @typedef {{ label: string, globalMuteSound?: unknown }} DecodeContext
+ * @typedef {(value: any, decoded: Record<string, any>, ctx: DecodeContext) => any} RestoreFn
+ * @typedef {{ name: string, restore: RestoreFn, snapshot: boolean }} FieldSpec
+ */
+
+/**
  * name     : 저장 키이자 AppState 필드 이름
  * restore  : (저장값, 지금까지 복원한 값들, ctx) → 복원 값
  * snapshot : 되돌리기(Undo) 기록 대상 여부
  * 배열 순서 = 저장 시 JSON 키 순서 (5.0.0과 동일하게 유지)
  */
-export const WINDOW_FIELDS = Object.freeze([
+/** @type {ReadonlyArray<FieldSpec>} */
+export const WINDOW_FIELDS = Object.freeze(/** @type {FieldSpec[]} */ ([
   { name: 'todos', restore: (v) => v || [], snapshot: true },
   { name: 'archivedTodos', restore: (v) => v || [], snapshot: true },
   { name: 'notes', restore: (v) => v || '', snapshot: true },
@@ -75,7 +82,7 @@ export const WINDOW_FIELDS = Object.freeze([
   { name: 'isVerticalSnapped', restore: (v) => v || false, snapshot: false },
   { name: 'preSnapPosY', restore: (v) => v ?? null, snapshot: false },
   { name: 'preSnapHeight', restore: (v) => v ?? null, snapshot: false },
-]);
+]));
 
 // 되돌리기 스냅샷의 필드 순서 (5.0.0 takeSnapshot과 동일)
 export const SNAPSHOT_FIELDS = Object.freeze([
@@ -124,6 +131,7 @@ export function pickSnapshot(read) {
 }
 
 // 스냅샷을 되돌릴 때의 값 보정 (옛 스냅샷에 없던 필드를 안전한 기본값으로)
+/** @param {string} name @param {any} value */
 export function restoreSnapshotValue(name, value) {
   if (name === 'letterSpacing') return value ?? 0;
   if (name === 'showReminders') return value ?? true;
@@ -136,6 +144,7 @@ export function restoreSnapshotValue(name, value) {
 //   같은 창을 어떤 곳은 "내용 있음", 어떤 곳은 "비었음"으로 판단해 명부가 어긋났습니다.
 
 // HTML에 사람이 읽을 글자가 하나라도 있는지 봅니다. (<br>, &nbsp;, 폭 없는 공백만 있으면 비어 있음)
+/** @param {unknown} html */
 export function htmlHasText(html) {
   if (!html) return false;
   return String(html)
@@ -145,6 +154,7 @@ export function htmlHasText(html) {
     .trim().length > 0;
 }
 
+/** @param {any} winData */
 export function hasWindowContent(winData) {
   if (!winData) return false;
   return (Array.isArray(winData.todos) && winData.todos.length > 0)

@@ -14,6 +14,7 @@ export async function getOpenWindowLabels() {
 
 // 창을 숨긴 채 만든 뒤, 생성이 끝나면 보여 주고 포커스를 줍니다.
 // (숨긴 채 만드는 이유: 크기·위치가 적용되기 전의 창이 잠깐 번쩍이는 것을 막기 위함)
+/** @param {string} label @param {Record<string, any>} options */
 export function openWindow(label, options) {
   const win = new WebviewWindow(label, options);
   win.once('tauri://created', async () => {

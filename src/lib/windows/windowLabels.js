@@ -8,16 +8,19 @@ export const NOTE_PREFIX = 'note-';
 export const TINY_NOTE_PREFIX = 'tinynote-';
 
 // 할 일·메모 데이터를 저장하는 창 (main / note-N / tinynote-N)
+/** @param {unknown} label */
 export function isDataWindowLabel(label) {
   return typeof label === 'string'
     && (label === 'main' || label.startsWith(NOTE_PREFIX) || label.startsWith(TINY_NOTE_PREFIX));
 }
 
+/** @param {unknown} label */
 export function isTinyNoteLabel(label) {
   return typeof label === 'string' && label.startsWith(TINY_NOTE_PREFIX);
 }
 
 // note-1..10 또는 tinynote-1..10 라벨 목록
+/** @param {string} prefix */
 export function slotLabels(prefix) {
   return Array.from({ length: MAX_WINDOWS_PER_KIND }, (_, i) => `${prefix}${i + 1}`);
 }

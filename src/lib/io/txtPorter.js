@@ -20,10 +20,12 @@ export const SECTION_NOTES = '[중요한 일 메모]';
 export const SECTION_END = '===========================';
 export const EMPTY_MARK = '(없음)';
 
+/** @type {Record<string, string>} */
 const NAMED_ENTITIES = { nbsp: ' ', amp: '&', lt: '<', gt: '>', quot: '"', apos: "'" };
 
+/** @param {string} text */
 function decodeEntities(text) {
-  return text.replace(/&(#x[0-9a-f]+|#\d+|[a-z]+);/gi, (match, code) => {
+  return text.replace(/&(#x[0-9a-f]+|#\d+|[a-z]+);/gi, (/** @type {string} */ match, /** @type {string} */ code) => {
     if (code[0] === '#') {
       const num = code[1].toLowerCase() === 'x' ? parseInt(code.slice(2), 16) : parseInt(code.slice(1), 10);
       return Number.isFinite(num) ? String.fromCodePoint(num) : match;
@@ -32,6 +34,7 @@ function decodeEntities(text) {
   });
 }
 
+/** @param {unknown} text */
 export function escapeHtml(text) {
   return String(text)
     .replace(/&/g, '&amp;')
@@ -40,6 +43,7 @@ export function escapeHtml(text) {
 }
 
 // 편집기 HTML을 "줄 목록"으로 바꿉니다. (문단 div·p·줄바꿈 br을 줄 경계로 봅니다)
+/** @param {unknown} html @returns {string[]} */
 export function htmlToLines(html) {
   if (!html) return [];
   const text = decodeEntities(
@@ -60,6 +64,7 @@ export function htmlToLines(html) {
 }
 
 // 줄 목록을 편집기 HTML로 바꿉니다. (편집기가 스스로 만드는 모양: 첫 줄 + 나머지 줄은 div)
+/** @param {string[]} lines */
 export function linesToHtml(lines) {
   if (!lines || lines.length === 0) return '';
   const [first, ...rest] = lines;
@@ -72,6 +77,7 @@ export function linesToHtml(lines) {
  *   todos/archived의 text는 이미 한 줄짜리 순수 텍스트여야 합니다.
  */
 export function buildExportText({ todos, archived, notesLines }) {
+  /** @param {{ text: string, deadline?: string }} t */
   const itemLine = (t) => `- ${t.deadline ? `[${t.deadline}] ` : ''}${t.text}`;
   const lines = [TXT_HEADER, ''];
 
@@ -95,9 +101,13 @@ export function buildExportText({ todos, archived, notesLines }) {
 }
 
 // 내보낸 TXT를 읽어 할 일·마감된 일·메모 줄로 나눕니다.
+/** @param {unknown} content */
 export function parseExportText(content) {
+  /** @type {{ text: string, deadline: string }[]} */
   const todos = [];
+  /** @type {{ text: string, deadline: string }[]} */
   const archived = [];
+  /** @type {string[]} */
   const notesLines = [];
   let mode = null;
 

@@ -3,6 +3,7 @@
 //   새로 만들고 닫지 않아 알림이 쌓일수록 자원이 새어 나갔습니다. 이제 창마다 하나만 만들어 재사용합니다.
 // 소리 모양(주파수·음량·길이)은 5.0.0과 똑같습니다.
 
+/** @type {Record<string, { from: number, to: number, ramp: number, peak: number, attack: number, end: number, decay: number, stop: number }>} */
 const CHIMES = {
   // 앱 시작음 (레모 탄산)
   start: { from: 1200, to: 3600, ramp: 0.15, peak: 0.45, attack: 0.01, end: 0.0001, decay: 0.4, stop: 0.42 },
@@ -10,16 +11,18 @@ const CHIMES = {
   alert: { from: 600, to: 800, ramp: 0.1, peak: 0.5, attack: 0.05, end: 0.01, decay: 0.3, stop: 0.3 },
 };
 
+/** @type {AudioContext | null} */
 let audioContext = null;
 
 function getAudioContext() {
-  const Ctx = globalThis.AudioContext || globalThis.webkitAudioContext;
+  const Ctx = globalThis.AudioContext || /** @type {any} */ (globalThis).webkitAudioContext;
   if (!Ctx) return null;
   if (!audioContext || audioContext.state === 'closed') audioContext = new Ctx();
   if (audioContext.state === 'suspended') audioContext.resume().catch(() => {});
   return audioContext;
 }
 
+/** @param {'start' | 'alert'} kind */
 export function playChime(kind) {
   const spec = CHIMES[kind];
   if (!spec) return;

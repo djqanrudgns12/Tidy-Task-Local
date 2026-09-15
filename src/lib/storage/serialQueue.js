@@ -8,6 +8,11 @@ export function createSerialQueue() {
   return {
     // task의 결과(또는 오류)를 그대로 돌려줍니다.
     // 실패해도 다음 작업이 멈추지 않도록 체인은 성공/실패 양쪽에서 이어 줍니다.
+    /**
+     * @template T
+     * @param {() => Promise<T> | T} task
+     * @returns {Promise<T>}
+     */
     enqueue(task) {
       const run = tail.then(task, task);
       tail = run.then(() => {}, () => {});
