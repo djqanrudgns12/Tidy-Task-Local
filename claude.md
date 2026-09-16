@@ -28,7 +28,7 @@
 - **저장소 사실 (tauri-plugin-store 2.x):** 같은 파일을 여는 모든 창은 Rust 쪽 메모리 하나를 공유하므로 `get()`이 항상 최신입니다. `reload()`는 디스크 값으로 메모리를 덮어써 다른 창의 미저장 변경을 되돌리므로 **쓰지 않습니다**(유일한 예외: 읽기 실패 감지 시 `_ensureStoreLoaded`).
 - **데이터 안전장치:** Rust `setup`에서 시작 시 `tidy-task-config.json`을 백업(`.backup.json`, `.backup-prev.json`)하고, 손상 시 백업에서 복구합니다. `store_health` 명령으로 "파일엔 데이터가 있는데 저장소가 비어 있음"을 감지하면 저장을 잠급니다.
 
-### 3.2.1. 모듈 지도 (v5.0.2)
+### 3.2.1. 모듈 지도 (v5.0.5)
 | 위치 | 역할 |
 |---|---|
 | `src/lib/appState.svelte.js` | 상태(`$state`)와 공개 메서드를 가진 창구(facade). 컴포넌트는 여기만 부릅니다 |

@@ -164,7 +164,7 @@
             <Sparkles size={20} strokeWidth={2.1} />
           </div>
           <div class="release-copy">
-            <span class="eyebrow">MAJOR UPDATE · v5.0.0</span>
+            <span class="eyebrow">MAJOR UPDATE · v5.0.5</span>
             <h2 id="update-notice-title">더 내 취향에 맞게,<br />더 안정적으로</h2>
             <p id="update-notice-summary">Tidy Task의 다섯 번째 큰 업데이트가 도착했어요.</p>
           </div>

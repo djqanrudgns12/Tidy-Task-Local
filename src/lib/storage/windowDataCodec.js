@@ -82,7 +82,7 @@ export const WINDOW_FIELDS = Object.freeze(/** @type {FieldSpec[]} */ ([
   { name: 'isVerticalSnapped', restore: (v) => v || false, snapshot: false },
   { name: 'preSnapPosY', restore: (v) => v ?? null, snapshot: false },
   { name: 'preSnapHeight', restore: (v) => v ?? null, snapshot: false },
-  // 5.0.2 추가: 물리 좌표(모니터 배율과 무관한 실제 화면 픽셀). 예전 데이터에는 없으며(undefined),
+  // 5.0.5 추가: 물리 좌표(모니터 배율과 무관한 실제 화면 픽셀). 예전 데이터에는 없으며(undefined),
   // 그때는 논리 좌표(windowPosX/Y)를 모니터별 배율로 해석합니다. (windows/windowPlacement.js)
   { name: 'windowPhysX', restore: (v) => v, snapshot: false },
   { name: 'windowPhysY', restore: (v) => v, snapshot: false },

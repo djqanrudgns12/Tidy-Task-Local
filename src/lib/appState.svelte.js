@@ -292,7 +292,7 @@ export class AppState {
 // ✨ [창 위치 및 크기 기억 변수 추가]
   windowPosX = $state(null);
   windowPosY = $state(null);
-  // 5.0.2: 물리 좌표(모니터 배율과 무관한 실제 화면 픽셀). 창 위치 복원은 이 값을 우선합니다.
+  // 5.0.5: 물리 좌표(모니터 배율과 무관한 실제 화면 픽셀). 창 위치 복원은 이 값을 우선합니다.
   windowPhysX = $state(null);
   windowPhysY = $state(null);
   windowWidth = $state(null);
