@@ -2,12 +2,13 @@ import { LazyStore } from '@tauri-apps/plugin-store';
 import { getCurrentWindow, primaryMonitor } from '@tauri-apps/api/window';
 import { WebviewWindow } from '@tauri-apps/api/webviewWindow';
 import { emit, listen } from '@tauri-apps/api/event';
-import { LogicalPosition } from '@tauri-apps/api/dpi';
+import { LogicalPosition, PhysicalPosition } from '@tauri-apps/api/dpi';
 import { TINY_NOTE_MIN_WIDTH, TINY_NOTE_ROLLED_HEIGHT } from './tinyNoteWindow.js';
 import { NOTE_PREFIX, TINY_NOTE_PREFIX, isDataWindowLabel } from './windows/windowLabels.js';
 import { pickManager } from './windows/managerElection.js';
 import { findSlot, isSlotLimitReached, noteWindowOptions, tinyNoteWindowOptions } from './windows/windowSlots.js';
 import { getOpenWindowLabels, openWindow } from './windows/windowRegistry.js';
+import { isPlausibleCoordinate } from './windows/windowPlacement.js';
 import { registerFontFace } from './fonts.js';
 import { createSerialQueue } from './storage/serialQueue.js';
 import { collectImminentTodos } from './reminders/reminderEngine.js';
@@ -291,6 +292,9 @@ export class AppState {
 // ✨ [창 위치 및 크기 기억 변수 추가]
   windowPosX = $state(null);
   windowPosY = $state(null);
+  // 5.0.2: 물리 좌표(모니터 배율과 무관한 실제 화면 픽셀). 창 위치 복원은 이 값을 우선합니다.
+  windowPhysX = $state(null);
+  windowPhysY = $state(null);
   windowWidth = $state(null);
   windowHeight = $state(null);
   // ✨ 전체화면 상태 보존: 앱 재시작 시 전체화면이 풀리지 않도록
@@ -635,26 +639,39 @@ async init() {
   // 왜 여기서 다른 창의 데이터를 직접 쓰지 않는가: 열려 있는 창의 데이터를 밖에서 덮어쓰면
   //   그 창이 막 입력한 내용과 경합해 한쪽이 사라질 수 있기 때문입니다.
   async resetAllCoordinates() {
-    let offsetX = 100;
-    let offsetY = 100;
+    // 주 모니터 작업영역(작업 표시줄 제외)의 왼쪽 위를 기준으로, 물리 픽셀로 계단식 배치합니다.
+    // 왜 물리 픽셀인가: 창마다 지금 놓인 모니터의 배율이 달라, 논리 좌표로 옮기면 기준점이 창마다 달라집니다.
+    let originX = 0;
+    let originY = 0;
+    let scale = 1;
+    try {
+      const primary = await primaryMonitor();
+      if (primary) {
+        originX = primary.workArea.position.x;
+        originY = primary.workArea.position.y;
+        scale = primary.scaleFactor || 1;
+      }
+    } catch (e) {}
 
+    let step = 0;
     const bringHere = async (win) => {
-      await win.setPosition(new LogicalPosition(offsetX, offsetY));
+      const offset = Math.round((100 + step * 30) * scale);
+      step += 1;
+      const target = new PhysicalPosition(originX + offset, originY + offset);
+      await win.setPosition(target);
       await win.show();
       await win.unminimize();
       await win.setFocus();
-      offsetX += 30;
-      offsetY += 30;
+      return target;
     };
 
     const mainWin = await WebviewWindow.getByLabel('main');
     if (mainWin) {
       try {
-        await bringHere(mainWin);
+        const target = await bringHere(mainWin);
         // main 창 자신의 상태와 동기화 (main이 매니저일 때)
         if (this.windowLabel === 'main') {
-          this.windowPosX = 100;
-          this.windowPosY = 100;
+          this.rememberWindowPosition(target, scale);
           this.saveNow();
         }
       } catch (e) {}
@@ -1104,6 +1121,23 @@ async init() {
     this.maxWindowToastTimer = setTimeout(() => {
       this.showMaxWindowToast = false;
     }, 2500);
+  }
+
+  // 창 위치를 기억합니다. 물리 좌표(실제 화면 픽셀)와 논리 좌표를 함께 남깁니다.
+  // 왜 물리 좌표까지: 배율이 다른 모니터(예: 200% + 100%)를 함께 쓰면 논리 좌표만으로는 어느 모니터 기준인지
+  //   알 수 없어, 다음 실행 때 창이 화면 밖(좌표가 배율만큼 커진 곳)에 복원됐습니다. (windows/windowPlacement.js)
+  // 최소화 좌표(-32000) 같은 비정상 값은 기억하지 않고 false를 돌려줍니다.
+  /** @param {{ x: number, y: number } | null | undefined} physicalPosition @param {number} scaleFactor */
+  rememberWindowPosition(physicalPosition, scaleFactor) {
+    if (!physicalPosition || !isPlausibleCoordinate(physicalPosition.x) || !isPlausibleCoordinate(physicalPosition.y)) {
+      return false;
+    }
+    const scale = Number(scaleFactor) > 0 ? Number(scaleFactor) : 1;
+    this.windowPhysX = Math.round(physicalPosition.x);
+    this.windowPhysY = Math.round(physicalPosition.y);
+    this.windowPosX = physicalPosition.x / scale;
+    this.windowPosY = physicalPosition.y / scale;
+    return true;
   }
 
   cycleTinyNoteTheme() {

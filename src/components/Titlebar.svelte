@@ -67,10 +67,7 @@
         appState.windowHeight = logicalSize.height;
         // setPosition() 과 기준을 맞추기 위해 outerPosition() 을 사용합니다.
         // (안쪽 좌표로 저장하면 전체화면 왕복마다 창이 테두리 두께만큼 밀립니다.)
-        const pos = await appWindow.outerPosition();
-        const logicalPos = pos.toLogical(factor);
-        appState.windowPosX = logicalPos.x;
-        appState.windowPosY = logicalPos.y;
+        appState.rememberWindowPosition(await appWindow.outerPosition(), factor);
       } catch(e) {}
     }
 
@@ -146,12 +143,8 @@
       // 왜 toLogical 변환이 필요한가: DPI 스케일링(125%, 150%) 환경에서
       // Physical 값을 그대로 저장하면 복원 시 위치가 스케일 배수만큼 어긋납니다.
       const factor = await win.scaleFactor();
-      const pos = await win.outerPosition();
-      const logicalPos = pos.toLogical(factor);
-      if (typeof logicalPos.x === 'number') {
-        appState.windowPosX = Math.round(logicalPos.x);
-        appState.windowPosY = Math.round(logicalPos.y);
-      }
+      // 물리 좌표와 논리 좌표를 함께 기억합니다 (배율이 다른 모니터에서도 정확히 복원).
+      appState.rememberWindowPosition(await win.outerPosition(), factor);
       // ✨ [버그 #3 수정] 크기도 함께 저장하여 onCloseRequested와의 경합 조건을 제거합니다.
       // 왜: 이전에는 위치만 저장하고 크기는 누락하여, 닫기 직전 saveNow()가
       //     windowWidth: null 상태로 디스크에 기록될 위험이 있었습니다.

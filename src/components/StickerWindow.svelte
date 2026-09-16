@@ -19,6 +19,7 @@
     shouldPersistTinyNoteBounds,
   } from "../lib/tinyNoteWindow.js";
   import { dragRegion } from "../lib/dragRegion.js";
+  import { isPlausibleCoordinate } from "../lib/windows/windowPlacement.js";
   import {
     resolveAvailableToolWidth,
     resolveVisibleToolCount,
@@ -90,7 +91,7 @@
     // setPosition() 은 창의 "바깥(outer)" 좌표를 설정하므로 저장도 outerPosition() 으로 맞춥니다.
     // 왜: 안쪽 좌표를 저장하고 바깥 좌표로 복원하면 전체화면을 켜고 끌 때마다
     //     테두리 두께(약 7px)만큼 창이 계속 오른쪽 아래로 밀려납니다.
-    const position = (await appWindow.outerPosition()).toLogical(factor);
+    const physicalPosition = await appWindow.outerPosition();
     const rawWidth = resolveTinyNoteWidth(size.width, appState.windowWidth);
     const rawHeight = resolveTinyNoteExpandedHeight(size.height, appState.previousHeight, appState.windowHeight);
     const { width, height } = clampTinyNoteSize(rawWidth, rawHeight, getWorkArea());
@@ -98,8 +99,7 @@
     appState.windowWidth = width;
     appState.windowHeight = height;
     appState.previousHeight = height;
-    appState.windowPosX = position.x;
-    appState.windowPosY = position.y;
+    appState.rememberWindowPosition(physicalPosition, factor);
   }
 
   async function restoreExpandedWindow({ restorePosition = false } = {}) {
@@ -121,10 +121,15 @@
     await setExpandedConstraints();
     await appWindow.setSize(new LogicalSize(width, height));
 
-    if (restorePosition && isValidPosition(appState.windowPosX) && isValidPosition(appState.windowPosY)) {
-      await appWindow.setPosition(
-        new LogicalPosition(Math.round(appState.windowPosX), Math.round(appState.windowPosY)),
-      );
+    if (restorePosition) {
+      // 물리 좌표가 있으면 그대로(모니터 배율과 무관), 없으면 예전 논리 좌표로 복원합니다.
+      if (isPlausibleCoordinate(appState.windowPhysX) && isPlausibleCoordinate(appState.windowPhysY)) {
+        await appWindow.setPosition(new PhysicalPosition(appState.windowPhysX, appState.windowPhysY));
+      } else if (isValidPosition(appState.windowPosX) && isValidPosition(appState.windowPosY)) {
+        await appWindow.setPosition(
+          new LogicalPosition(Math.round(appState.windowPosX), Math.round(appState.windowPosY)),
+        );
+      }
     }
 
     appState.windowWidth = width;
@@ -186,6 +191,8 @@
     
     // ✨ 자석 스냅 엔진 (150ms Debounce Lock 방어)
     unlistenMove = await win.onMoved(async (event) => {
+      // 최소화하면 윈도우가 창을 화면 밖(-32000)으로 옮기며 이동 이벤트를 보냅니다. 이 좌표는 기억하지 않습니다.
+      if (event.payload.x <= -10000 || event.payload.y <= -10000) return;
       if (snapLock || appState.isFullscreen || isProcessing) return;
       snapLock = true;
       setTimeout(() => { snapLock = false; }, 150);
@@ -233,8 +240,8 @@
         }
 
         // 바뀐 좌표를 앱 상태에 반영하여 재시작 시 위치 기억
-        appState.windowPosX = snapX;
-        appState.windowPosY = snapY;
+        // 스냅 좌표(논리)를 같은 배율로 물리 좌표로 바꿔 함께 기억합니다.
+        appState.rememberWindowPosition({ x: snapX * factor, y: snapY * factor }, factor);
         appState.save();
       } catch (e) {
         console.error("Window snap error:", e);

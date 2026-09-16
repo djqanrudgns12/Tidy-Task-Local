@@ -8,6 +8,8 @@
   import { isDataWindowLabel } from "./lib/windows/windowLabels.js";
   import { hasWindowContent } from "./lib/storage/windowDataCodec.js";
   import { playChime } from "./lib/sound.js";
+  import { ensureWindowOnScreen, getMonitorGeometries } from "./lib/windows/windowRegistry.js";
+  import { resolveSavedPosition } from "./lib/windows/windowPlacement.js";
   import {
     UPDATE_NOTICE_STORE_KEY,
     UPDATE_NOTICE_WINDOW_LABEL,
@@ -139,12 +141,12 @@
     let isText = e.target.closest('.note-wrapper') || e.target.closest('[contenteditable]') || e.target.tagName === 'INPUT';
     const type = isText ? 'text' : 'bar';
 
+    // 메뉴를 띄울 화면 좌표를 "물리 픽셀"로 계산합니다.
+    // 왜: 배율이 다른 모니터에서는 논리 좌표의 기준이 창마다 달라, 메뉴가 엉뚱한 곳(화면 밖)에 떴습니다.
     const scaleFactor = await getCurrentWindow().scaleFactor();
     const pos = await getCurrentWindow().innerPosition();
-    const logicalPos = pos.toLogical(scaleFactor);
-    
-    const screenX = logicalPos.x + e.clientX;
-    const screenY = logicalPos.y + e.clientY;
+    const screenX = Math.round(pos.x + e.clientX * scaleFactor);
+    const screenY = Math.round(pos.y + e.clientY * scaleFactor);
 
     if (ctxWin) {
       await emitTo('ctx-menu', 'show-ctx-menu', {
@@ -295,11 +297,9 @@
       const updatedSize = await win.innerSize();
       const updatedPos = await win.outerPosition();
       const updatedLogicalSize = updatedSize.toLogical(factor);
-      const updatedLogicalPos = updatedPos.toLogical(factor);
       appState.windowWidth = updatedLogicalSize.width;
       appState.windowHeight = updatedLogicalSize.height;
-      appState.windowPosX = updatedLogicalPos.x;
-      appState.windowPosY = updatedLogicalPos.y;
+      appState.rememberWindowPosition(updatedPos, factor);
       appState.saveNow();
 
       // ✨ [TCREI] 락 오프 (이벤트 루프 대기를 위해 setTimeout 활용)
@@ -312,6 +312,9 @@
 
   // ─── 1. 창 크기 조절 (Resize) 동기화 엔진 ───
   function handleBrowserResize() {
+    // 최소화하면 창 안쪽 크기가 0으로 보고됩니다. 이 값을 반영하면 메모 영역 높이가 기본값으로 줄고
+    // 창 크기가 0으로 저장되므로, 최소화 중의 크기 변화는 무시합니다.
+    if (window.innerWidth <= 0 || window.innerHeight <= 0) return;
     // ✨ [TCREI: Persistence] 전체화면일 때는 크기 업데이트를 건너뗴니다.
     // 왜: 전체화면 진입 전 저장해둔 원래 창 크기(windowWidth/Height)를 보존하기 위함입니다.
     //     방어하지 않으면 모니터 해상도(1920×1080 등)가 일반 창 크기로 덮어쓰여집니다.
@@ -569,6 +572,15 @@
     const _label = getCurrentWindow().label;
     if (_label === 'archive' || _label === UPDATE_NOTICE_WINDOW_LABEL) return;
 
+    // ✨ [표시 보장] 시작 과정 어디에서 오류가 나더라도 데이터 창은 몇 초 안에 반드시 화면에 나타나게 합니다.
+    // 왜: 창은 숨긴 채 만들어지고 아래 코드가 위치를 맞춘 뒤 직접 보여 주는데, 중간에 예외가 나면
+    //     창이 숨은 채로 남아 "메모가 사라졌다"처럼 보였습니다. 이미 보이는 창에 show()를 다시 불러도 영향이 없습니다.
+    if (isDataWindow(_label)) {
+      setTimeout(() => {
+        getCurrentWindow().show().catch(() => {});
+      }, 4000);
+    }
+
     await appState.init();
     applyCSSVars();
 
@@ -594,9 +606,15 @@
       if (showWelcome) {
         // 환영 창만 뜨는 상황(공지를 이미 닫음)이면 굳이 옆으로 밀지 않고 중앙에 둡니다.
         // 왜: 짝이 없는데 한쪽으로 치우쳐 뜨면 사용자에게 어색하게 보입니다.
-        const noticeHidden = !shouldShowUpdateNotice(
-          await new LazyStore("tidy-task-config.json").get(UPDATE_NOTICE_STORE_KEY),
-        );
+        // 저장소를 못 읽어도 시작 과정이 멈추지 않도록, 실패는 "숨기지 않음"으로 취급합니다.
+        // (예전에는 여기서 예외가 나면 창을 보여 주는 코드까지 도달하지 못했습니다)
+        let noticeHiddenUntil;
+        try {
+          noticeHiddenUntil = await new LazyStore("tidy-task-config.json").get(UPDATE_NOTICE_STORE_KEY);
+        } catch (error) {
+          noticeHiddenUntil = undefined;
+        }
+        const noticeHidden = !shouldShowUpdateNotice(noticeHiddenUntil);
         const welcomePos = (layout && !noticeHidden) ? layout.welcome : null;
         new WebviewWindow('welcome', getWelcomeWindowOptions(welcomePos));
       }
@@ -620,16 +638,26 @@
       // ✨ [TCREI: Persistence] 전체화면 상태 복원
       // 왜 크기/위치를 먼저 설정하는가: setFullscreen(true) 직전의 크기를 OS가 "이전 크기"로 기억합니다.
       // 이렇게 해야 앱 재시작 후 전체화면을 해제할 때 저장된 크기로 정확히 돌아갑니다.
+      // ✨ [위치 복원 · 화면 밖 방지] (windows/windowPlacement.js)
+      // 저장된 좌표를 "지금 연결된 모니터" 기준으로 해석해 물리 좌표로 옮깁니다.
+      // 왜: 배율이 다른 모니터(예: 200% + 100%)를 함께 쓰면 논리 좌표를 그대로 되돌릴 때 좌표가 배율만큼
+      //     커져 창이 화면 밖에 놓였습니다. 해석할 수 없으면(모니터 분리 등) 기본 위치에 둔 뒤,
+      //     크기까지 맞춘 다음 "제목줄이 화면 안에 보이는지" 검사해 필요하면 주 모니터 가운데로 옮깁니다.
+      const monitors = await getMonitorGeometries();
+      const savedPosition = resolveSavedPosition({
+        physicalX: appState.windowPhysX,
+        physicalY: appState.windowPhysY,
+        logicalX: appState.windowPosX,
+        logicalY: appState.windowPosY,
+        width: appState.windowWidth,
+        height: appState.windowHeight,
+      }, monitors);
+
       if (appState.isFullscreen) {
         // 1단계: 전체화면 진입 전의 크기/위치를 먼저 설정
-        if (isVisiblePos(appState.windowPosX) && isVisiblePos(appState.windowPosY)) {
+        if (savedPosition) {
           try {
-            await currentWindow.setPosition(
-              new LogicalPosition(
-                Math.round(appState.windowPosX),
-                Math.round(appState.windowPosY),
-              ),
-            );
+            await currentWindow.setPosition(new PhysicalPosition(savedPosition.x, savedPosition.y));
           } catch (e) {}
         }
         if (isValidSize(appState.windowWidth) && isValidSize(appState.windowHeight)) {
@@ -642,6 +670,8 @@
             );
           } catch (e) {}
         }
+        // 전체화면은 "창이 놓인 모니터"에서 켜지므로, 화면 밖이면 먼저 보이는 곳으로 옮깁니다.
+        await ensureWindowOnScreen(currentWindow, monitors);
         // 2단계: 그 후 전체화면 진입 → OS가 위의 크기를 "이전 크기"로 기억
         try {
           await currentWindow.setFullscreen(true);
@@ -650,14 +680,9 @@
         }
       } else {
         // 일반 상태: 기존 위치/크기 복원 로직 (기존 코드 완전 보존)
-        if (isVisiblePos(appState.windowPosX) && isVisiblePos(appState.windowPosY)) {
+        if (savedPosition) {
           try {
-            await currentWindow.setPosition(
-              new LogicalPosition(
-                Math.round(appState.windowPosX),
-                Math.round(appState.windowPosY),
-              ),
-            );
+            await currentWindow.setPosition(new PhysicalPosition(savedPosition.x, savedPosition.y));
           } catch (e) {
             console.warn("위치 복원 실패:", e);
           }
@@ -690,6 +715,9 @@
             console.warn("크기 복원 실패:", e);
           }
         }
+
+        // 크기까지 적용한 뒤, 최종 위치가 화면 안인지 확인합니다.
+        await ensureWindowOnScreen(currentWindow, monitors);
       }
 
       setTimeout(async () => {
@@ -712,14 +740,9 @@
                 if 
                   (event.payload.x <= -10000 || event.payload.y <= -10000) return;
                 const scale = await currentWindow.scaleFactor();
-                const logical = new PhysicalPosition(
-                  event.payload.x,
-                  event.payload.y,
-                ).toLogical(scale);
-            
-                appState.windowPosX = logical.x;
-                appState.windowPosY = logical.y;
-                
+                // 이벤트 값(물리 좌표)을 그대로 기억하고, 논리 좌표도 함께 남깁니다.
+                appState.rememberWindowPosition(event.payload, scale);
+
                 if (moveSaveTimeout) clearTimeout(moveSaveTimeout);
                 moveSaveTimeout = setTimeout(() => {
                   appState.save();
@@ -891,17 +914,18 @@
       try {
         const factor = await win.scaleFactor();
         const nativeFullscreen = await win.isFullscreen();
+        // 최소화된 채 닫히면(작업 표시줄에서 닫기 등) 윈도우가 창을 화면 밖(-32000)으로 옮겨 둔 상태이고
+        // 크기도 0으로 보고되므로, 그때의 좌표·크기는 기억하지 않고 마지막으로 보이던 값을 유지합니다.
+        const minimized = await win.isMinimized().catch(() => false);
         appState.isFullscreen = nativeFullscreen;
-        
+
         // ✨ [TCREI: Persistence] 전체화면 상태에서 닫을 때는 크기/위치를 덮어쓰지 않습니다.
         // 왜: 전체화면 해상도(1920×1080 등)가 일반 창 크기로 저장되면,
         //     다음 실행 시 전체화면이 아닌데 전체화면 크기의 기형적 창이 열립니다.
-        if (!nativeFullscreen) {
+        if (!nativeFullscreen && !minimized) {
           // setPosition() 과 같은 기준(outer)으로 저장해야 재시작 때 위치가 밀리지 않습니다.
-          const pos = await win.outerPosition();
-          const logicalPos = pos.toLogical(factor);
-          appState.windowPosX = logicalPos.x;
-          appState.windowPosY = logicalPos.y;
+          // 물리 좌표까지 함께 남겨 배율이 다른 모니터에서도 정확히 복원합니다.
+          appState.rememberWindowPosition(await win.outerPosition(), factor);
 
           // 롤업 높이(35px)는 정상 복원 크기가 아닙니다. 롤업 직전 높이를 보존합니다.
           if (!(win.label.startsWith("tinynote-") && appState.isRolledUp)) {

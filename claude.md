@@ -39,7 +39,16 @@
 | `src/lib/io/txtPorter.js` | TXT 내보내기/가져오기 형식 |
 | `src/lib/dateUtils.js`, `ids.js`, `sound.js`, `fonts.js`, `icons.js`, `editorConstants.js`, `text.js` | 날짜 계산, 새 ID, 효과음, 커스텀 폰트 등록, 내장 아이콘, 툴바 공용 표, HTML→텍스트 |
 
+| `src/lib/windows/windowPlacement.js` | 창 위치 복원 규칙 — 저장 좌표 해석, 제목줄이 화면 안에 보이는지 판정, 화면 밖 보정 |
+
 순수 로직 모듈은 모두 `node --test` 단위 테스트가 있습니다(`npm test`). 타입·접근성 검사는 `npm run check`.
+
+### 3.2.2. 창 위치 규칙 (다중 모니터·배율)
+- 사용자는 **배율이 다른 모니터(4K 200% + FHD 100%)**를 함께 씁니다. 논리 좌표는 모니터마다 기준이 달라 창 위치를 논리 좌표로만 저장·복원하면 창이 화면 밖에 놓입니다.
+- 창 위치를 저장할 때는 반드시 `appState.rememberWindowPosition(물리좌표, scaleFactor)`를 씁니다(물리 `windowPhysX/Y` + 논리 `windowPosX/Y` 동시 기록). `windowPosX/Y`에 직접 대입하지 않습니다.
+- 복원은 `resolveSavedPosition()` → `PhysicalPosition`으로 옮기고, 크기 적용 뒤 `ensureWindowOnScreen()`으로 화면 안을 보장합니다.
+- 최소화 상태의 좌표(-32000)·크기(0)는 저장하지 않습니다.
+- Rust `ensure_window_on_screen`(트레이 "열기"·시작 8초 뒤)과 JS 판정 규칙(제목줄 80×24 논리px)은 같은 값을 유지해야 합니다.
 
 ### 3.3. 타임머신 (Undo/Redo) 및 유령 청소기
 - 사용자의 모든 액션을 스냅샷 형태로 기록하여 롤백할 수 있는 히스토리 스택(최대 20개)을 지원합니다.

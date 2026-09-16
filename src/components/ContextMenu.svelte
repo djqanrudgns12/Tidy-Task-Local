@@ -3,7 +3,7 @@
   import { onMount } from 'svelte';
   import { getCurrentWindow } from '@tauri-apps/api/window';
   import { emit, emitTo } from '@tauri-apps/api/event';
-  import { LogicalPosition, LogicalSize } from "@tauri-apps/api/dpi";
+  import { LogicalSize, PhysicalPosition } from "@tauri-apps/api/dpi";
   import { getThemeAccent, getTidyTheme } from '../lib/themes.js';
 
   let { isStandalone = false } = $props();
@@ -30,7 +30,8 @@
           if (menuRef) {
             let win = getCurrentWindow();
             await win.setSize(new LogicalSize(menuRef.offsetWidth, menuRef.offsetHeight));
-            await win.setPosition(new LogicalPosition(x, y));
+            // x, y는 메뉴를 연 창이 계산한 물리 픽셀 좌표입니다 (배율이 다른 모니터에서도 정확)
+            await win.setPosition(new PhysicalPosition(x, y));
             await win.show();
             await win.setFocus();
           }

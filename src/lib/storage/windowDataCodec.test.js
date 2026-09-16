@@ -50,7 +50,8 @@ const FULL_V500 = Object.freeze({
 const MAIN = { label: 'main', globalMuteSound: true };
 
 test('필드 표는 5.0.0 저장 키 순서와 개수를 그대로 유지한다', () => {
-  assert.deepEqual(WINDOW_FIELDS.map((f) => f.name), Object.keys(FULL_V500));
+  // 5.0.2에서 추가된 필드는 항상 "끝에만" 붙입니다 (기존 키 순서 보존).
+  assert.deepEqual(WINDOW_FIELDS.map((f) => f.name), [...Object.keys(FULL_V500), 'windowPhysX', 'windowPhysY']);
   assert.deepEqual(
     SNAPSHOT_FIELDS,
     ['todos', 'archivedTodos', 'notes', 'themeColor', 'opacity', 'fontFamily', 'uiFontFamily',
@@ -70,8 +71,9 @@ test('필드 표는 5.0.0 저장 키 순서와 개수를 그대로 유지한다'
 test('정상 데이터는 복원 → 저장 왕복 후 한 글자도 바뀌지 않는다', () => {
   const decoded = decodeWindowData(structuredClone(FULL_V500), MAIN);
   const encoded = encodeWindowData((name) => decoded[name]);
-  assert.deepEqual(encoded, FULL_V500);
+  // 5.0.2에서 추가된 물리 좌표는 예전 데이터에 없으므로 undefined → JSON에서 빠져, 파일 내용이 한 글자도 바뀌지 않습니다.
   assert.equal(JSON.stringify(encoded), JSON.stringify(FULL_V500));
+  assert.deepEqual(JSON.parse(JSON.stringify(encoded)), FULL_V500);
 });
 
 test('빈 데이터는 5.0.0 init()과 같은 기본값으로 복원된다', () => {
@@ -196,4 +198,13 @@ test('빈 창 판정: 태그·&nbsp;·폭 없는 공백만 있으면 비어 있�
   assert.equal(hasWindowContent({ todos: [{ id: 1 }] }), true);
   assert.equal(hasWindowContent({ archivedTodos: [{ id: 1 }] }), true);
   assert.equal(hasWindowContent({ notes: '<div>메모</div>' }), true);
+});
+
+test('5.0.2 데이터: 물리 좌표도 복원 → 저장 왕복 후 그대로다', () => {
+  const v502 = { ...structuredClone(FULL_V500), windowPhysX: 4500, windowPhysY: -8 };
+  const decoded = decodeWindowData(structuredClone(v502), MAIN);
+  assert.equal(decoded.windowPhysX, 4500);
+  assert.equal(decoded.windowPhysY, -8);
+  const encoded = encodeWindowData((name) => decoded[name]);
+  assert.equal(JSON.stringify(encoded), JSON.stringify(v502));
 });

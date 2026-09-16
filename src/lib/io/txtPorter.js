@@ -54,7 +54,7 @@ export function htmlToLines(html) {
       .replace(/<(?:div|p|li)(?:\s[^>]*)?>/gi, '\n')
       .replace(/<[^>]*>?/g, ''),
   )
-    .replace(/[​-‍﻿]/g, '')
+    .replace(/[\u200B-\u200D\uFEFF]/g, '')
     .replace(/ /g, ' ');
 
   const lines = text.split('\n').map((line) => line.replace(/\s+$/, ''));

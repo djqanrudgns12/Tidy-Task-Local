@@ -12,6 +12,15 @@ const BACKUP_PREV_FILE: &str = "tidy-task-config.backup-prev.json";
 // 트레이 "종료" 후 창들이 마지막 입력을 저장할 수 있도록 기다리는 시간
 const QUIT_FLUSH_WAIT: Duration = Duration::from_millis(800);
 
+// 시작 후 이 시간이 지나도 main 창이 숨어 있거나 화면 밖이면 Rust가 직접 꺼냅니다.
+const STARTUP_REVEAL_DELAY: Duration = Duration::from_secs(8);
+// 앱을 켜 둔 동안 저장 파일을 백업하는 간격 (사용 중 전원이 꺼졌을 때 잃는 범위를 줄이기 위함)
+const PERIODIC_BACKUP_INTERVAL: Duration = Duration::from_secs(5 * 60);
+// 창을 끌어 옮기려면 제목줄이 최소한 이만큼(논리 px) 화면 안에 보여야 합니다. (JS windowPlacement.js와 같은 값)
+const MIN_GRAB_WIDTH: f64 = 80.0;
+const MIN_GRAB_HEIGHT: f64 = 24.0;
+const TITLE_STRIP_HEIGHT: f64 = 32.0;
+
 #[tauri::command]
 fn save_custom_font(app: tauri::AppHandle, name: String, bytes: Vec<u8>) -> Result<String, String> {
     // 파일 이름에서 경로 부분을 모두 떼어 냅니다.
@@ -48,6 +57,33 @@ fn file_len(path: &Path) -> u64 {
     fs::metadata(path).map(|m| m.len()).unwrap_or(0)
 }
 
+// 정상인 저장 파일을 백업합니다. 백업을 한 세대(prev) 밀어 두고 최신본을 백업 칸에 둡니다.
+// 단, 파일이 절반 이하로 급격히 줄었다면 기존 백업은 지우지 않고 보조 칸에만 기록합니다.
+// (버그로 데이터가 비워진 파일이 멀쩡한 백업을 덮어쓰는 일을 막기 위함입니다)
+fn rotate_backups(dir: &Path) {
+    let main = dir.join(STORE_FILE);
+    let Ok(current) = fs::read(&main) else { return };
+    if !matches!(serde_json::from_slice::<serde_json::Value>(&current), Ok(serde_json::Value::Object(_))) {
+        return;
+    }
+    let backup = dir.join(BACKUP_FILE);
+    let prev = dir.join(BACKUP_PREV_FILE);
+    // 내용이 그대로면 아무것도 하지 않습니다 (주기 백업이 이전 세대를 밀어내지 않도록).
+    if fs::read(&backup).ok().as_deref() == Some(current.as_slice()) {
+        return;
+    }
+    let backup_ok = read_json_object(&backup).is_some();
+    let shrunk_a_lot = backup_ok && (current.len() as u64) * 2 < file_len(&backup);
+    if shrunk_a_lot {
+        let _ = fs::write(&prev, &current);
+    } else {
+        if backup_ok {
+            let _ = fs::copy(&backup, &prev);
+        }
+        let _ = fs::write(&backup, &current);
+    }
+}
+
 // ✨ [데이터 안전장치] 앱이 저장 파일을 읽기 전에 백업하고, 손상됐다면 백업에서 복구합니다.
 // 왜 필요한가:
 //   저장 플러그인은 파일을 읽다가 실패하면(전원 차단으로 반쯤 잘린 파일 등) 오류를 알리지 않고
@@ -61,26 +97,14 @@ fn protect_store_file(app: &tauri::AppHandle) {
     if !main.exists() {
         return;
     }
-    let backup = dir.join(BACKUP_FILE);
-    let prev = dir.join(BACKUP_PREV_FILE);
-
     if read_json_object(&main).is_some() {
-        // 정상 파일: 백업을 한 세대 밀어 두고 최신본을 백업합니다.
-        // 단, 파일이 절반 이하로 급격히 줄었다면 기존 백업은 지우지 않고 보조 칸에만 기록합니다.
-        // (버그로 데이터가 비워진 파일이 멀쩡한 백업을 덮어쓰는 일을 막기 위함입니다)
-        let shrunk_a_lot = read_json_object(&backup).is_some() && file_len(&main) * 2 < file_len(&backup);
-        if shrunk_a_lot {
-            let _ = fs::copy(&main, &prev);
-        } else {
-            if read_json_object(&backup).is_some() {
-                let _ = fs::copy(&backup, &prev);
-            }
-            let _ = fs::copy(&main, &backup);
-        }
+        rotate_backups(&dir);
         return;
     }
 
     // 손상된 파일: 지우지 않고 이름을 바꿔 보존한 뒤, 정상 백업이 있으면 그것으로 되돌립니다.
+    let backup = dir.join(BACKUP_FILE);
+    let prev = dir.join(BACKUP_PREV_FILE);
     let stamp = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map(|d| d.as_secs())
@@ -121,6 +145,64 @@ fn store_health(app: tauri::AppHandle) -> StoreHealth {
     }
 }
 
+// 사각형 (x, y, 너비, 높이) — 모두 물리 픽셀
+type PixelRect = (i64, i64, i64, i64);
+
+// 창의 제목줄이 작업영역 안에서 "잡을 수 있을 만큼" 보이는지 판단합니다. (JS windowPlacement.js와 같은 규칙)
+fn is_title_strip_visible(window: PixelRect, work: PixelRect, scale: f64) -> bool {
+    let (wx, wy, ww, wh) = window;
+    let (ax, ay, aw, ah) = work;
+    let strip_h = ((TITLE_STRIP_HEIGHT * scale) as i64).min(wh);
+    let visible_w = (wx + ww).min(ax + aw) - wx.max(ax);
+    let visible_h = (wy + strip_h).min(ay + ah) - wy.max(ay);
+    let need_w = ((MIN_GRAB_WIDTH * scale) as i64).min(ww);
+    let need_h = ((MIN_GRAB_HEIGHT * scale) as i64).min(strip_h);
+    visible_w >= need_w && visible_h >= need_h
+}
+
+// 작업영역 가운데(창이 더 크면 왼쪽 위)에 놓일 좌표를 계산합니다.
+fn centered_in(work: PixelRect, width: i64, height: i64) -> (i64, i64) {
+    let (ax, ay, aw, ah) = work;
+    (ax + ((aw - width) / 2).max(0), ay + ((ah - height) / 2).max(0))
+}
+
+// 창이 어느 모니터에서도 제목줄을 잡을 수 없는 위치(화면 밖)라면 주 모니터 작업영역 가운데로 옮깁니다.
+// 왜: 모니터 구성·배율이 바뀌면 저장된 좌표가 화면 밖을 가리켜, 트레이의 "좌표 초기화" 전까지 창이 보이지 않았습니다.
+fn ensure_window_on_screen(window: &tauri::WebviewWindow) {
+    // 최소화된 창의 좌표(-32000)는 위치가 아니므로 건드리지 않습니다.
+    if window.is_minimized().unwrap_or(false) {
+        return;
+    }
+    let (Ok(position), Ok(size), Ok(monitors)) =
+        (window.outer_position(), window.outer_size(), window.available_monitors())
+    else {
+        return;
+    };
+    if monitors.is_empty() {
+        return;
+    }
+    let rect: PixelRect = (position.x as i64, position.y as i64, size.width as i64, size.height as i64);
+    let work_of = |m: &tauri::Monitor| -> PixelRect {
+        let area = m.work_area();
+        (area.position.x as i64, area.position.y as i64, area.size.width as i64, area.size.height as i64)
+    };
+    if monitors.iter().any(|m| is_title_strip_visible(rect, work_of(m), m.scale_factor())) {
+        return;
+    }
+    // 주 모니터: 윈도우에서는 가상 화면 좌표 (0, 0)을 포함하는 모니터입니다.
+    let primary = monitors
+        .iter()
+        .find(|m| {
+            let p = m.position();
+            let s = m.size();
+            p.x <= 0 && p.y <= 0 && p.x as i64 + s.width as i64 > 0 && p.y as i64 + s.height as i64 > 0
+        })
+        .unwrap_or(&monitors[0]);
+    let (x, y) = centered_in(work_of(primary), rect.2, rect.3);
+    log::warn!("창이 화면 밖({}, {})에 있어 주 모니터 가운데({}, {})로 옮깁니다.", position.x, position.y, x, y);
+    let _ = window.set_position(tauri::PhysicalPosition::new(x as i32, y as i32));
+}
+
 // main 창을 앞으로 가져오거나, 닫혀 있으면 새로 만듭니다.
 // 왜 함수로 모았는가: 두 번째 실행·트레이 "열기"·트레이 더블클릭 세 곳에 같은 코드가 복사돼 있었습니다.
 fn show_or_create_main(app: &tauri::AppHandle) {
@@ -128,6 +210,8 @@ fn show_or_create_main(app: &tauri::AppHandle) {
         let _ = window.show();
         let _ = window.unminimize();
         let _ = window.set_focus();
+        // 트레이 "열기"만 눌러도 화면 밖에 있던 창을 끌어옵니다.
+        ensure_window_on_screen(&window);
     } else {
         let _ = tauri::WebviewWindowBuilder::new(
             app,
@@ -187,6 +271,31 @@ pub fn run() {
         .setup(|app| {
             // 어떤 창보다 먼저 저장 파일을 점검·백업합니다.
             protect_store_file(app.handle());
+
+            // ✨ [표시 보장] 시작 후 일정 시간이 지나도 main 창이 숨어 있거나 화면 밖이면 Rust가 직접 꺼냅니다.
+            // 왜: main 창은 숨긴 채 만들어지고 화면(JS)이 위치를 맞춘 뒤 스스로 보여 주는데,
+            //     그 과정에서 오류가 나거나 좌표가 화면 밖이면 창이 보이지 않은 채 트레이에만 남았습니다.
+            let reveal_handle = app.handle().clone();
+            std::thread::spawn(move || {
+                std::thread::sleep(STARTUP_REVEAL_DELAY);
+                if let Some(window) = reveal_handle.get_webview_window("main") {
+                    if !window.is_visible().unwrap_or(true) {
+                        log::warn!("시작 후에도 main 창이 숨어 있어 직접 표시합니다.");
+                        let _ = window.show();
+                    }
+                    ensure_window_on_screen(&window);
+                }
+            });
+
+            // ✨ [주기 백업] 앱을 켜 둔 동안에도 저장 파일을 주기적으로 백업합니다.
+            // 왜: 시작할 때만 백업하면, 사용 중 전원이 꺼져 파일이 손상됐을 때 그동안 쓴 내용을 모두 잃습니다.
+            let backup_handle = app.handle().clone();
+            std::thread::spawn(move || loop {
+                std::thread::sleep(PERIODIC_BACKUP_INTERVAL);
+                if let Ok(dir) = backup_handle.path().app_data_dir() {
+                    rotate_backups(&dir);
+                }
+            });
 
             if cfg!(debug_assertions) {
                 app.handle().plugin(
@@ -251,4 +360,84 @@ pub fn run() {
         })
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // 실제 사용자 환경: 4K 주 모니터(배율 2) + FHD 보조 모니터(배율 1), 물리 픽셀 작업영역
+    const PRIMARY_WORK: PixelRect = (0, 0, 3840, 2064);
+    const SECONDARY_WORK: PixelRect = (3840, 0, 1920, 1032);
+
+    #[test]
+    fn offscreen_window_is_detected() {
+        // 논리 4500을 배율 2로 잘못 되돌린 위치(물리 9000)
+        let window = (9000, 400, 656, 898);
+        assert!(!is_title_strip_visible(window, PRIMARY_WORK, 2.0));
+        assert!(!is_title_strip_visible(window, SECONDARY_WORK, 1.0));
+    }
+
+    #[test]
+    fn visible_windows_are_kept() {
+        assert!(is_title_strip_visible((2978, 350, 656, 898), PRIMARY_WORK, 2.0));
+        assert!(is_title_strip_visible((4500, 200, 328, 449), SECONDARY_WORK, 1.0));
+        // 최대화된 창은 테두리만큼 살짝 음수 좌표를 가집니다
+        assert!(is_title_strip_visible((-8, -8, 3856, 2080), PRIMARY_WORK, 2.0));
+    }
+
+    #[test]
+    fn title_above_screen_is_not_grabbable() {
+        assert!(!is_title_strip_visible((400, -300, 656, 898), PRIMARY_WORK, 2.0));
+    }
+
+    #[test]
+    fn centers_in_work_area() {
+        assert_eq!(centered_in(PRIMARY_WORK, 656, 898), (1592, 583));
+        assert_eq!(centered_in(PRIMARY_WORK, 5000, 3000), (0, 0));
+    }
+
+    fn temp_dir(name: &str) -> std::path::PathBuf {
+        let dir = std::env::temp_dir().join(format!("tidy-task-test-{}-{}", name, std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    #[test]
+    fn backups_rotate_and_skip_unchanged_content() {
+        let dir = temp_dir("rotate");
+        fs::write(dir.join(STORE_FILE), br#"{"main":{"notes":"first"}}"#).unwrap();
+        rotate_backups(&dir);
+        assert_eq!(fs::read(dir.join(BACKUP_FILE)).unwrap(), br#"{"main":{"notes":"first"}}"#);
+
+        fs::write(dir.join(STORE_FILE), br#"{"main":{"notes":"second"}}"#).unwrap();
+        rotate_backups(&dir);
+        assert_eq!(fs::read(dir.join(BACKUP_FILE)).unwrap(), br#"{"main":{"notes":"second"}}"#);
+        assert_eq!(fs::read(dir.join(BACKUP_PREV_FILE)).unwrap(), br#"{"main":{"notes":"first"}}"#);
+
+        // 내용이 같으면 이전 세대를 밀어내지 않습니다
+        rotate_backups(&dir);
+        assert_eq!(fs::read(dir.join(BACKUP_PREV_FILE)).unwrap(), br#"{"main":{"notes":"first"}}"#);
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn shrunk_or_broken_file_never_overwrites_good_backup() {
+        let dir = temp_dir("shrink");
+        let rich = br#"{"main":{"notes":"a long memo that should survive a sudden wipe of the file"}}"#;
+        fs::write(dir.join(BACKUP_FILE), rich).unwrap();
+
+        // 절반 이하로 줄어든 파일 → 백업은 그대로, 보조 칸에만 기록
+        fs::write(dir.join(STORE_FILE), br#"{"main":{}}"#).unwrap();
+        rotate_backups(&dir);
+        assert_eq!(fs::read(dir.join(BACKUP_FILE)).unwrap(), rich);
+        assert_eq!(fs::read(dir.join(BACKUP_PREV_FILE)).unwrap(), br#"{"main":{}}"#);
+
+        // 손상된 파일 → 아무것도 백업하지 않음
+        fs::write(dir.join(STORE_FILE), br#"{"main": {"no"#).unwrap();
+        rotate_backups(&dir);
+        assert_eq!(fs::read(dir.join(BACKUP_FILE)).unwrap(), rich);
+        let _ = fs::remove_dir_all(&dir);
+    }
 }
