@@ -1,4 +1,5 @@
 import { LazyStore } from '@tauri-apps/plugin-store';
+import { track, trackThrottled } from './analytics.js';
 import { getCurrentWindow, primaryMonitor } from '@tauri-apps/api/window';
 import { WebviewWindow } from '@tauri-apps/api/webviewWindow';
 import { emit, listen } from '@tauri-apps/api/event';
@@ -928,6 +929,7 @@ async init() {
     const url = this.updateInfo?.downloadUrl || RELEASES_PAGE_URL;
     try {
       await openUrl(url);
+      track('update_download_opened');
       return true;
     } catch (e) {
       console.error('다운로드 페이지를 열지 못했습니다:', e);
@@ -1351,6 +1353,7 @@ async init() {
       return true;
     } catch (e) {
       console.error(`❌ [${this.windowLabel}] 저장 엔진 오류:`, e);
+      trackThrottled('app_error', { choice: 'storage_write' });
       return false;
     }
   }
@@ -1464,6 +1467,7 @@ async init() {
 
   addTodo(text, deadline = "") {
     this.todos.push({ id: newId(), text, completed: false, deadline });
+    track('todo_created');
     // ✨ 마감일이 있든 없든, 정렬 유틸리티를 호출하여 올바른 위치에 배치
     this._sortTodosByDeadline();
     this.saveNow();
@@ -1478,6 +1482,7 @@ async init() {
       completed: false
     }));
     this.todos = [...this.todos, ...newItems];
+    track('todo_created', { count: newItems.length });
     this.saveNow();
   }
 
@@ -1487,6 +1492,7 @@ async init() {
       const movedItem = { ...this.todos[idx], completed: true };
       this.todos.splice(idx, 1);
       this.archivedTodos.unshift(movedItem);
+      track('todo_completed');
       this.saveNow();
     }
   }
@@ -1497,11 +1503,13 @@ async init() {
       const restoredItem = { ...this.archivedTodos[idx], completed: false };
       this.archivedTodos.splice(idx, 1);
       this.todos.push(restoredItem);
+      track('todo_restored');
       this.saveNow();
     }
   }
 
   deleteTodo(id) {
+    if (this.todos.some(t => t.id === id)) track('todo_deleted');
     this.todos = this.todos.filter(t => t.id !== id);
     this.saveNow();
   }
@@ -2008,6 +2016,7 @@ async init() {
     this.notes = linesToHtml(notesLines);
 
     await this.saveNow();
+    if (todos.length + archived.length > 0) track('todos_imported', { count: todos.length + archived.length });
     return true;
   }
 
@@ -2020,6 +2029,7 @@ async init() {
 
     this.todos = this.todos.filter(t => !this.selectedTodoIds.includes(t.id));
     this.archivedTodos = [...activeToArchive, ...this.archivedTodos];
+    if (activeToArchive.length) track('todos_archived', { count: activeToArchive.length });
     
     this.selectedTodoIds = [];
     await this.saveNow();

@@ -1,4 +1,14 @@
 fn main() {
+    // These are public ingestion settings, never personal/secret API keys.
+    for name in ["POSTHOG_PROJECT_TOKEN", "POSTHOG_HOST", "POSTHOG_DEV_ENABLED"] {
+        println!("cargo:rerun-if-env-changed={name}");
+        let value = std::env::var(name).ok().or_else(|| {
+            dotenvy::from_path_iter(".env").ok()?.filter_map(Result::ok)
+                .find(|(key, _)| key == name).map(|(_, value)| value)
+        }).unwrap_or_else(|| if name == "POSTHOG_HOST" { "https://us.i.posthog.com".into() } else { String::new() });
+        assert!(!value.contains(['\r', '\n']), "Invalid analytics build setting");
+        println!("cargo:rustc-env={name}={}", value.trim());
+    }
     println!("cargo:rerun-if-changed=.env");
     println!("cargo:rerun-if-env-changed=NEIS_API_KEY");
     println!("cargo:rerun-if-env-changed=NEIS_ALLOW_NO_KEY");

@@ -1,4 +1,5 @@
 <script>
+  import { trackThrottled } from '../lib/analytics.js';
   import { appState } from '../lib/appState.svelte.js';
   import { editable } from '../lib/editable.js';
   import { PenLine } from 'lucide-svelte';
@@ -61,6 +62,7 @@
       use:editable={{
         html: appState.notes,
         onUpdate: (val) => {
+          if (val !== appState.notes) trackThrottled('note_edited');
           appState.notes = val;
           appState.save();
         },

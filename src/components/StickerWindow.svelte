@@ -1,4 +1,5 @@
 <script>
+  import { track, trackThrottled } from '../lib/analytics.js';
   import { onMount, onDestroy } from "svelte";
   import { slide } from "svelte/transition";
   import { getCurrentWindow, currentMonitor } from "@tauri-apps/api/window";
@@ -432,6 +433,7 @@
     });
 
     if (!saved) {
+      trackThrottled('app_error', { choice: 'archive_write' });
       // 저장 실패 시 데이터를 보존하고 사용자에게 알림
       console.error("아카이브 저장 실패: 데이터 보존됨");
       return;
@@ -440,6 +442,7 @@
     // ✨ [수정] 성공 시 UI 피드백을 먼저 보여줍니다.
     showCreationMessage = false;
     showArchiveMessage = true;
+    track('note_archived');
     
     // ✨ 800ms 동안 애니메이션 대기 (Promise 기반으로 컨텍스트 보존)
     await new Promise(resolve => setTimeout(resolve, 800));

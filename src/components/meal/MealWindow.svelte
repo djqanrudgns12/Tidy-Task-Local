@@ -1,4 +1,5 @@
 <script>
+  import { track, trackThrottled } from '../../lib/analytics.js';
   import { onMount, untrack } from "svelte";
   import {
     ChevronLeft,
@@ -124,6 +125,7 @@
           entries[i] = await fetchMonth(school, month, force);
         } catch (e) {
           if (version === requestVersion) error = errorMessage(e);
+          trackThrottled('app_error', { choice: 'meal_load' });
         }
       }),
     );
@@ -159,6 +161,7 @@
   });
   /** @param {number} count */
   function navigate(count) {
+    track('meal_navigated');
     manual = true;
     day = addDays(day, count * (layout === "weekly" ? 7 : 1));
   }
@@ -207,9 +210,11 @@
             .join("\n"),
       );
       copied = true;
+      track('meal_copied');
       window.setTimeout(() => (copied = false), 1800);
     } catch {
       error = "복사하지 못했어요. 메뉴를 선택해 복사해 주세요.";
+      trackThrottled('app_error', { choice: 'meal_copy' });
     }
   }
   /** @param {KeyboardEvent} e */

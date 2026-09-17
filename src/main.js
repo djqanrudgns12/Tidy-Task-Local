@@ -1,4 +1,5 @@
 import { mount } from "svelte";
+import { initAnalytics } from './lib/analytics.js';
 import "./app.css";
 import { isTauri } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
@@ -34,6 +35,7 @@ async function start() {
         : (await import("./App.svelte")).default;
   return mount(Component, { target });
 }
+initAnalytics();
 const app = await start();
 
 export default app;

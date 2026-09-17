@@ -4,6 +4,7 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tauri::{Manager, Emitter};
 use tauri_plugin_autostart::MacosLauncher;
 mod neis;
+mod analytics;
 
 // 모든 창이 함께 쓰는 저장 파일과 그 백업 파일 이름
 const STORE_FILE: &str = "tidy-task-config.json";
@@ -268,10 +269,11 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_opener::init())
-        .invoke_handler(tauri::generate_handler![save_custom_font, store_health, neis::neis_search_schools, neis::neis_meals, neis::neis_schedule, neis::meal_take_launch_token])
+        .invoke_handler(tauri::generate_handler![save_custom_font, store_health, neis::neis_search_schools, neis::neis_meals, neis::neis_schedule, neis::meal_take_launch_token, analytics::analytics_status, analytics::analytics_consent, analytics::analytics_track])
         .setup(|app| {
             // 어떤 창보다 먼저 저장 파일을 점검·백업합니다.
             protect_store_file(app.handle());
+            analytics::setup(app.handle());
 
             // ✨ [표시 보장] 시작 후 일정 시간이 지나도 main 창이 숨어 있거나 화면 밖이면 Rust가 직접 꺼냅니다.
             // 왜: main 창은 숨긴 채 만들어지고 화면(JS)이 위치를 맞춘 뒤 스스로 보여 주는데,

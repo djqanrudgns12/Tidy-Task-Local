@@ -1,4 +1,6 @@
 <script>
+  import AnalyticsSettings from './AnalyticsSettings.svelte';
+  import { track } from '../lib/analytics.js';
   import { X, Palette, Type, PenLine, Monitor, Layout, Upload, Moon, Archive, FileText, Database, RefreshCw, Bell, VolumeX, Download } from 'lucide-svelte';
   import { appState } from '../lib/appState.svelte.js';
   import { describeUpdateError, formatBytes } from '../lib/updateChecker.js';
@@ -29,6 +31,7 @@
     catch { designError = '디자인을 적용하지 못했어요. 다시 선택해 주세요.'; }
   }
   let localThemeColor = $state(appState.themeColor);
+  let originalThemeColor = appState.themeColor;
   let localUiFontFamily = $state(appState.uiFontFamily || '메이플스토리 L');
   let localIsDarkMode = $state(appState.isDarkMode);
   let localGlobalFont = $state(appState.fontFamily);
@@ -65,6 +68,7 @@
       localUiFontSize = s.uiFontSize;
       localHeaderDesign = s.headerDesign === 'modern' ? 'modern' : 'classic';
       localThemeColor = s.themeColor;
+      originalThemeColor = s.themeColor;
       localUiFontFamily = s.uiFontFamily;
       localIsDarkMode = s.isDarkMode;
       localGlobalFont = s.fontFamily; // 주의: appState는 fontFamily로 저장함
@@ -140,6 +144,8 @@
       showReminders: localShowReminders,
       globalMuteSound: localGlobalMuteSound
     });
+    track('settings_applied');
+    if (localThemeColor !== originalThemeColor) track('theme_changed', { choice: localThemeColor });
     await getCurrentWindow().close();
   }
 
@@ -177,6 +183,7 @@
     </div>
 
     <div class="flex-1 overflow-y-auto p-4 flex flex-col gap-3.5 custom-scrollbar">
+      <AnalyticsSettings dark={localIsDarkMode} />
       <fieldset class="header-design-settings" class:design-dark={localIsDarkMode} style="--design-accent:{updateAccent};">
         <legend>Tidy task 상단 디자인</legend>
         <div class="design-options">
