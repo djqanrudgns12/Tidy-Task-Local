@@ -31,7 +31,7 @@
   <div class="welcome-card">
     <div class="welcome-header" data-tauri-drag-region>
       <div class="logo">🎈 Tidy Task</div>
-      <div class="maker">Made by. 달디단</div>
+      <div class="maker"><img src="/chaltteok.webp" alt="" style="width: 32px; height: 32px; object-fit: contain; vertical-align: middle;" /> Made by. 찰떡쌤</div>
     </div>
     
     <div class="content">

@@ -86,6 +86,7 @@ export const WINDOW_FIELDS = Object.freeze(/** @type {FieldSpec[]} */ ([
   // 그때는 논리 좌표(windowPosX/Y)를 모니터별 배율로 해석합니다. (windows/windowPlacement.js)
   { name: 'windowPhysX', restore: (v) => v, snapshot: false },
   { name: 'windowPhysY', restore: (v) => v, snapshot: false },
+  { name: 'headerDesign', restore: (v) => v === 'modern' ? 'modern' : 'classic', snapshot: false },
 ]));
 
 // 되돌리기 스냅샷의 필드 순서 (5.0.0 takeSnapshot과 동일)
@@ -118,7 +119,9 @@ export function encodeWindowData(read) {
   /** @type {Record<string, any>} */
   const data = {};
   for (const field of WINDOW_FIELDS) {
-    data[field.name] = read(field.name);
+    const value = read(field.name);
+    // Classic is the legacy default: keep older files byte-compatible unless opted in.
+    data[field.name] = field.name === 'headerDesign' ? (value === 'modern' ? 'modern' : undefined) : value;
   }
   return data;
 }

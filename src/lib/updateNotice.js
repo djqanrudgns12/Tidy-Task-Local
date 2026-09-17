@@ -1,4 +1,4 @@
-export const UPDATE_NOTICE_ID = 'v5.0.5';
+export const UPDATE_NOTICE_ID = 'v5.1.0';
 export const UPDATE_NOTICE_WINDOW_LABEL = 'update-notice';
 export const UPDATE_NOTICE_STORE_KEY = `update-notice:${UPDATE_NOTICE_ID}:hidden-until`;
 export const UPDATE_NOTICE_DISMISSED_UNTIL = Number.MAX_SAFE_INTEGER;

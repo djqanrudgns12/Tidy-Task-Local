@@ -1,25 +1,18 @@
 <script>
-  import {
-    Pin,
-    Undo2,
-    Redo2,
-    Settings,
-    X,
-    Minus,
-    Trash2,
-    CopyPlus,
-    CircleHelp,
-    StickyNote,
-    Archive
-  } from "lucide-svelte";
+  import { Pin, Undo2, Redo2, X, Minus, StickyNote, CopyPlus, CircleHelp, Settings } from "lucide-svelte";
+  import "../lib/header.css";
+
+  import HeaderActions from './HeaderActions.svelte';
+  import { handleSettings } from '../lib/headerWindows.js';
+  import { emitTo } from '@tauri-apps/api/event';
   import { getCurrentWindow } from "@tauri-apps/api/window";
   import { dragRegion } from "../lib/dragRegion.js";
-  import { emit, emitTo, listen } from "@tauri-apps/api/event";
+
   import { onMount } from "svelte";
   import { appState } from "../lib/appState.svelte.js";
-  import { WebviewWindow } from "@tauri-apps/api/webviewWindow";
 
-  let showResetModal = $state(false);
+
+
 
   onMount(async () => {
     if (appState.isPinned) {
@@ -84,51 +77,6 @@
 
 
 
-  async function handleSettings() {
-    const currentWin = getCurrentWindow();
-    const existingWin = await WebviewWindow.getByLabel('settings');
-
-    // ✨ [핵심 1] 내 창의 현재 설정 상태를 찰칵! 찍어서 보낼 준비를 합니다.
-    const payload = {
-      targetLabel: currentWin.label,
-      settings: appState.takeSnapshot()
-    };
-
-    if (existingWin) {
-      try {
-        await existingWin.show();
-        await existingWin.unminimize();
-        await existingWin.setFocus();
-        
-        // ✨ 이미 열려있을 땐 혹시 모르니 아주 살짝(0.05초) 기다렸다가 쏴줍니다.
-        setTimeout(() => {
-          emitTo('settings', 'set-settings-target', payload);
-        }, 50);
-      } catch(e) {
-        console.error("기존 창 표시 실패:", e);
-      }
-    } else {
-      // ✨ [핵심 2] 설정창이 "나 준비됐어!(settings-ready)"라고 외치면 그때 데이터를 쏴줍니다.
-      const unlisten = await listen('settings-ready', async () => {
-        await emitTo('settings', 'set-settings-target', payload);
-        unlisten(); // 한 번 쏘고 나면 수신기 끄기
-      });
-
-      const settingsWindow = new WebviewWindow('settings', {
-        url: 'index.html', 
-        title: '시스템 설정',
-        width: 320,
-        height: 500,
-        resizable: false,
-        decorations: false,
-        transparent: true,
-        alwaysOnTop: true,
-        center: true,
-        visible: true
-      });
-    }
-  }
-
  async function handleMinimize() {
     await getCurrentWindow().minimize();
   }
@@ -156,153 +104,53 @@
       }
       await appState.saveNow(false); 
     } catch (e) {}
-    
+
     // ✨ [해결 4] 앱 전체 종료가 아닌 "내 창만 조용히 닫기"로 변경 (독립성 확보)
     await getCurrentWindow().close();
   }
 
-  // ✨ [버그 수정] 원본에서 빠져있던 초기화 확인 함수 추가
-  async function confirmReset() {
-    await appState.resetContent();
-    showResetModal = false;
-  }
 </script>
 
-{#if showResetModal}
-  <div
-    class="absolute inset-0 z-[9999] flex items-center justify-center"
-    style="background-color: rgba(0,0,0,0.45); backdrop-filter: blur(6px);"
-    role="dialog"
-    aria-modal="true"
-  >
-    <div
-      class="rounded-2xl shadow-2xl flex flex-col items-center gap-4 px-6 py-5 mx-4 max-w-[260px] w-full border"
-      style="background-color: {appState.isDarkMode ? '#1e2028' : 'rgba(255,255,255,0.97)'}; border-color: {appState.isDarkMode ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)'};"
-    >
-      <div class="w-10 h-10 rounded-full bg-red-100 flex items-center justify-center">
-        <Trash2 size={20} class="text-red-500" />
-      </div>
-      <div class="text-center">
-        <p class="font-bold text-[13px] mb-1" style="color: {appState.isDarkMode ? '#e2e8f0' : '#1f2937'};">
-          모든 내용을 초기화할까요?
-        </p>
-        <p class="text-[11px]" style="color: {appState.isDarkMode ? '#9ca3af' : '#6b7280'};">
-          책임 안 집니다.
-        </p>
-      </div>
-      <div class="flex w-full gap-2">
-        <button
-          onclick={() => showResetModal = false}
-          class="flex-1 py-1.5 rounded-lg text-[12px] font-semibold transition-colors"
-          style="background-color: {appState.isDarkMode ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)'}; color: {appState.isDarkMode ? '#d1d5db' : '#374151'};"
-        >아니오</button>
-        <button
-          onclick={confirmReset}
-          class="flex-1 py-1.5 rounded-lg text-[12px] font-bold bg-red-500 hover:bg-red-600 active:scale-95 text-white transition-all"
-        >예, 초기화</button>
-      </div>
+<div class="tidy-header-surface titlebar" class:header-dark={appState.isDarkMode} class:classic={appState.headerDesign !== 'modern'}
+  style="--header-accent: {appState.getThemeAccentColor()};"
+  use:dragRegion={{ onDoubleClick: handleFullscreen }} role="presentation">
+  {#if appState.headerDesign !== 'modern'}<div class="classic-create"><button class="tidy-header-button window-button pin-button" onclick={handlePin} aria-pressed={appState.isPinned} aria-label="항상 위" title={appState.isPinned ? '항상 위 해제' : '항상 위'}><Pin size={14} class={appState.isPinned ? 'fill-current' : ''} /></button>
+      <button class="tidy-header-button window-button create-icon" title="새 Tiny Note 띄우기" aria-label="새 Tiny Note 띄우기" onclick={() => appState.spawnTinyNote()}><StickyNote size={12}/></button>
+      <button class="tidy-header-button window-button create-icon" title="새 노트 창 띄우기" aria-label="새 노트 창 띄우기" onclick={() => appState.spawnNewWindow()}><CopyPlus size={12}/></button>
+      <HeaderActions kind="reset"/>
+      <button class="tidy-header-button window-button" title="기능 설명" aria-label="기능 설명" onclick={() => emitTo(getCurrentWindow().label, 'ctx-action', 'open-help')}><CircleHelp size={12}/></button>
+  </div>{/if}
+
+  <div class="brand-group">    {#if appState.headerDesign === 'modern'}<button class="tidy-header-button window-button pin-button" onclick={handlePin} aria-pressed={appState.isPinned} aria-label="항상 위" title={appState.isPinned ? '항상 위 해제' : '항상 위'}><Pin size={14} class={appState.isPinned ? 'fill-current' : ''} /></button>{/if}<span class="brand">Tidy Task</span></div>
+  <div class="window-actions">
+   <div class="history-actions">
+      <button class="tidy-header-button window-button" disabled={!appState.canUndo} onclick={() => appState.undo()} aria-label="실행 취소" title="실행 취소"><Undo2 size={13} /></button>
+      <button class="tidy-header-button window-button" disabled={!appState.canRedo} onclick={() => appState.redo()} aria-label="다시 실행" title="다시 실행"><Redo2 size={15} /></button>
     </div>
-  </div>
-{/if}
 
-<!-- 타이틀바: 드래그 + 더블클릭 전체화면.
-     data-tauri-drag-region 을 쓰지 않는 이유는 dragRegion 액션 주석 참고
-     (네이티브 자동 최대화가 우리 전체화면 전환과 충돌했습니다). -->
-<div
-  class="flex items-center justify-between px-3 py-2 select-none group w-full cursor-move"
-  style="color: {appState.isDarkMode ? '#d1d5db' : '#374151'};"
-  use:dragRegion={{ onDoubleClick: handleFullscreen }}
-  role="presentation"
->
-  <div class="flex items-center gap-1 pointer-events-none">
-    <button
-      class="cursor-pointer pointer-events-auto p-1 rounded-md transition-colors {appState.isPinned ? '' : 'text-gray-400 hover:bg-black/5'}"
-      style={appState.isPinned ? `color: ${appState.getThemeAccentColor()};` : null}
-      onclick={(e) => { e.stopPropagation(); handlePin(); }}
-      title="항상 위"
-    >
-      <Pin size={13} strokeWidth={2.5} class={appState.isPinned ? "fill-current" : ""} />
-    </button>
-
-    <button
-      class="cursor-pointer pointer-events-auto p-1 rounded-md hover:bg-black/5 active:scale-95 transition-all"
-      style="color: {appState.getThemeAccentColor()};"
-      title="새 Tiny Note 띄우기"
-      onclick={(e) => { e.stopPropagation(); appState.spawnTinyNote(); }}
-    >
-      <StickyNote size={13} strokeWidth={2.5} />
-    </button>
-    <button
-      class="cursor-pointer pointer-events-auto p-1 rounded-md hover:bg-black/5 active:scale-95 transition-all"
-      style="color: {appState.getThemeAccentColor()};"
-      title="새 노트 창 띄우기"
-      onclick={(e) => { e.stopPropagation(); appState.spawnNewWindow(); }}
-    >
-      <CopyPlus size={13} strokeWidth={2.5} />
-    </button>
-
-    <button
-      class="cursor-pointer pointer-events-auto p-1 rounded-md hover:bg-red-50 text-gray-400 hover:text-red-500 transition-colors"
-      title="모든 내용 초기화"
-      onclick={(e) => { e.stopPropagation(); showResetModal = true; }}
-    >
-      <Trash2 size={13} strokeWidth={2} />
-    </button>
-    <button
-      class="cursor-pointer pointer-events-auto p-1 rounded-md text-gray-400 hover:text-amber-600 hover:bg-black/5 transition-all"
-      title="기능 설명"
-      onclick={(e) => { e.stopPropagation(); emitTo(getCurrentWindow().label, 'ctx-action', 'open-help'); }}
-    >
-      <CircleHelp size={13} strokeWidth={2} />
-    </button>
-  </div>
-
-  <div class="flex flex-col items-center justify-center pointer-events-none mt-1">
-    <span class="text-[13px] font-bold tracking-wide select-none pointer-events-none" style="color: {appState.isDarkMode ? '#e2e8f0' : '#6b7280'};">Tidy Task</span>
-  </div>
-
-  <div class="flex items-center gap-1.5 pointer-events-none">
-
-    <button
-      class="pointer-events-auto p-1 rounded-md transition-colors {appState.canUndo ? 'cursor-pointer text-gray-500 hover:text-gray-800 hover:bg-black/5' : 'text-gray-300 opacity-40 cursor-not-allowed'}"
-      disabled={!appState.canUndo}
-      onclick={(e) => { e.stopPropagation(); appState.undo(); }}
-      title="실행 취소"
-    >
-      <Undo2 size={13} strokeWidth={2.5} />
-    </button>
-
-    <button
-      class="pointer-events-auto p-1 rounded-md transition-colors {appState.canRedo ? 'cursor-pointer text-gray-500 hover:text-gray-800 hover:bg-black/5' : 'text-gray-300 opacity-40 cursor-not-allowed'}"
-      disabled={!appState.canRedo}
-      onclick={(e) => { e.stopPropagation(); appState.redo(); }}
-      title="다시 실행"
-    >
-      <Redo2 size={13} strokeWidth={2.5} />
-    </button>
-
-    <button
-      class="cursor-pointer pointer-events-auto p-1 rounded-md hover:bg-black/5 text-gray-400 hover:text-gray-600 transition-colors"
-      title="설정"
-      onclick={(e) => { e.stopPropagation(); handleSettings(); }}
-    >
-      <Settings size={13} strokeWidth={2.5} />
-    </button>
-
-    <button
-      class="cursor-pointer pointer-events-auto p-1 rounded-md hover:bg-black/5 text-gray-400 hover:text-gray-600 transition-colors"
-      title="창 숨기기"
-      onclick={(e) => { e.stopPropagation(); handleMinimize(); }}
-    >
-      <Minus size={13} strokeWidth={2.5} />
-    </button>
-
-    <button
-      class="cursor-pointer pointer-events-auto p-1 rounded-md text-gray-400 hover:text-white hover:bg-red-500 transition-all duration-150"
-      title="닫기"
-      onclick={(e) => { e.stopPropagation(); handleClose(); }}
-    >
-      <X size={13} strokeWidth={2.5} />
-    </button>
+    {#if appState.headerDesign !== 'modern'}<button class="tidy-header-button window-button" title="설정" aria-label="설정" onclick={handleSettings}><Settings size={12}/></button>{/if}
+    <button class="tidy-header-button window-button" onclick={handleMinimize} aria-label="창 숨기기" title="창 숨기기"><Minus size={14} /></button>
+    <button class="tidy-header-button window-button close-button" onclick={handleClose} aria-label="닫기" title="닫기"><X size={16} /></button>
   </div>
 </div>
+<style>
+  .classic-create { display:flex; align-items:center; gap:1px; }
+  .brand-group { display:flex; align-items:center; gap:4px; flex-shrink:0; }
+  .classic .window-button { width:18px; min-height:22px; border-radius:4px; }
+  .classic .window-actions { gap:1px; }
+  .classic .history-actions { border:0; margin:0; padding:0; }
+  .classic .brand { font-size:12px; }
+  .classic .brand-group { gap:2px; }
+  .create-icon { color:var(--header-accent); }
+  @media(max-width:249px) { .titlebar.classic { flex-wrap:wrap; } .classic .brand-group { order:-1; width:100%; } .classic .window-actions { margin-left:auto; } }
+
+  .titlebar { display:flex; align-items:center; justify-content:space-between; gap:6px; min-height:29px; padding:2px 8px 2px 10px; user-select:none; cursor:move; background:transparent; flex-shrink:0; }
+  .brand { font-size:13px; font-weight:600; letter-spacing:-.35px; white-space:nowrap; }
+  .window-actions,.history-actions { display:flex; align-items:center; }
+  .history-actions { margin-right:4px; padding-right:4px; border-right:1px solid var(--header-line); }
+  .window-button { width:25px; min-height:25px; padding:0; border-radius:7px; color:var(--header-muted); }
+  .pin-button[aria-pressed="true"] { color:var(--header-accent); }
+  .close-button:hover { color:#fff; background:#b43e3e !important; }
+  @media(max-width:279px) { .titlebar { padding-inline:8px; gap:2px; } .window-button { width:26px; } .history-actions { padding-right:3px; margin-right:3px; } .brand { font-size:13px; } }
+  @media(max-width:259px) { .titlebar { flex-wrap:wrap; } .brand { flex:1; } .window-actions { margin-left:auto; } }
+</style>

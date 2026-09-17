@@ -1,0 +1,87 @@
+{
+  "minimum": 4.633146169047015,
+  "threshold": 4.5,
+  "pass": true,
+  "rows": [
+    {
+      "theme": "white",
+      "bodyText": 10.307355969735845,
+      "secondaryText": 5.556157377832016
+    },
+    {
+      "theme": "amber",
+      "bodyText": 9.887692035808112,
+      "secondaryText": 5.3299384648975145
+    },
+    {
+      "theme": "blue",
+      "bodyText": 9.548223477189918,
+      "secondaryText": 5.146948691181879
+    },
+    {
+      "theme": "green",
+      "bodyText": 9.763930390099263,
+      "secondaryText": 5.263225024232725
+    },
+    {
+      "theme": "rose",
+      "bodyText": 9.773222849338806,
+      "secondaryText": 5.268234103778787
+    },
+    {
+      "theme": "purple",
+      "bodyText": 9.706708598905568,
+      "secondaryText": 5.232379744585148
+    },
+    {
+      "theme": "slate",
+      "bodyText": 9.851471216553469,
+      "secondaryText": 5.310413712601805
+    },
+    {
+      "theme": "sea-glass",
+      "bodyText": 9.788175345867575,
+      "secondaryText": 5.276294213873875
+    },
+    {
+      "theme": "apricot",
+      "bodyText": 9.803362390655067,
+      "secondaryText": 5.284480756687691
+    },
+    {
+      "theme": "pistachio",
+      "bodyText": 9.932049995949713,
+      "secondaryText": 5.353849524943368
+    },
+    {
+      "theme": "periwinkle",
+      "bodyText": 9.653021340752668,
+      "secondaryText": 5.203439747135012
+    },
+    {
+      "theme": "mauve",
+      "bodyText": 9.796433575143203,
+      "secondaryText": 5.280745794051404
+    },
+    {
+      "theme": "linen",
+      "bodyText": 9.869315509653463,
+      "secondaryText": 5.320032639225746
+    },
+    {
+      "theme": "kraft",
+      "bodyText": 8.59505654298429,
+      "secondaryText": 4.633146169047015
+    },
+    {
+      "theme": "sepia",
+      "bodyText": 8.806898338056572,
+      "secondaryText": 4.747339018899099
+    },
+    {
+      "theme": "dark",
+      "bodyText": 12.157846268886864,
+      "secondaryText": 7.553027854983521
+    }
+  ]
+}

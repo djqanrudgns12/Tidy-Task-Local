@@ -1,0 +1,76 @@
+/* Scoped shared vocabulary for the main note header; Tiny Note is unaffected. */
+.tidy-header-surface {
+  --header-ink: #374151;
+  --header-muted: #606976;
+  --header-line: #27344920;
+  --header-hover: #3341550b;
+  --header-panel: #fffdf8;
+  --header-field: #ffffffb8;
+  --header-tint: color-mix(in srgb, var(--header-accent) 9%, transparent);
+  color: var(--header-ink);
+  font-family: var(--ui-font-family, '엘리스 디지털배움'), 'Malgun Gothic', sans-serif;
+  font-size: 12px;
+  line-height: 1.4;
+}
+.tidy-header-surface.header-dark {
+  --header-ink: #e2e8f0;
+  --header-muted: #aeb9c9;
+  --header-line: #e2e8f026;
+  --header-hover: #e2e8f012;
+  --header-panel: #232833;
+  --header-field: #ffffff0d;
+  --header-tint: color-mix(in srgb, var(--header-accent) 13%, transparent);
+}
+.tidy-header-button {
+  display: inline-flex; align-items: center; justify-content: center; gap: 5px;
+  min-height: 26px; min-width: 0; padding: 3px 6px; border: 1px solid transparent;
+  border-radius: 6px; background: transparent; color: var(--header-ink);
+  font: inherit; font-weight: 600; white-space: nowrap; cursor: pointer;
+  transition: background-color 130ms ease-out, border-color 130ms ease-out, box-shadow 130ms ease-out;
+}
+.tidy-header-button:hover:not(:disabled) { background: var(--header-hover); }
+.tidy-header-button[aria-expanded="true"], .tidy-header-button[aria-pressed="true"] {
+  background: var(--header-tint); border-color: transparent;
+}
+.tidy-header-button:disabled { opacity: .36; cursor: default; }
+.tidy-header-surface :is(button, input, select):focus-visible {
+  outline: 2px solid var(--header-accent); outline-offset: 2px;
+}
+.tidy-header-create { border-color:var(--header-line); background:transparent; font-size:11px; min-height:25px; padding:2px 7px; border-radius:6px; }
+.tidy-header-create > svg:first-child { color: var(--header-accent); }
+.tidy-header-popover {
+  display: none; position: fixed; inset: auto; margin: 0; padding: 5px;
+  box-sizing: border-box; overflow: auto; overscroll-behavior: contain; z-index: 200000;
+  border: 1px solid var(--header-line); border-radius: 9px;
+  background: var(--header-panel); color: var(--header-ink);
+  box-shadow: 0 6px 18px #14203320, 0 1px 3px #1420330c;
+  font: inherit;
+}
+.tidy-header-popover:popover-open, .tidy-header-popover.fallback-open { display: block; }
+.tidy-header-popover::backdrop { background: transparent; }
+.tidy-header-menuitem {
+  display: flex; align-items: center; gap: 7px; width: 100%; min-height: 29px;
+  border: 0; border-radius: 5px; padding: 5px 6px; text-align: left; cursor: pointer;
+  color: var(--header-ink); background: transparent; font: inherit;
+}
+.tidy-header-menuitem:hover { background: var(--header-hover); }
+.tidy-header-menuitem > svg { flex-shrink:0; color:var(--header-muted); width:25px; height:25px; padding:5px; background:var(--header-tint); border-radius:7px; }
+.tidy-header-menuitem > span { flex:1; font-size:11px; }
+.tidy-header-menuitem strong { display: block; font-size: 11px; font-weight: 600; }
+.tidy-header-menuitem small { display: block; color: var(--header-muted); font-size: 10px; margin-top: 2px; }
+.tidy-header-menuheading { margin: 3px 8px 4px; color: var(--header-muted); font-size: 11px; font-weight: 600; }
+.tidy-header-divider { height: 1px; background: var(--header-line); margin: 4px 5px; }
+.tidy-header-danger { color: #b43e3e; }
+.header-dark .tidy-header-danger { color: #ffaaaa; }
+.tidy-header-danger > svg { color: inherit; }
+.tidy-header-meta { color: var(--header-muted); font-size: 9px; padding: 5px 7px; line-height: 1.5; }
+.tidy-header-opacity { display: grid; grid-template-columns: 1fr auto; gap: 2px; padding: 5px 7px; font-size: 11px; }
+.tidy-header-opacity input { grid-column: 1 / -1; width: 100%; accent-color: var(--header-accent); min-height: 24px; }
+@media (prefers-reduced-motion: reduce) {
+  .tidy-header-surface *, .tidy-header-surface *::before, .tidy-header-surface *::after { transition: none !important; animation: none !important; }
+}
+
+.header-popover-caption { position:sticky; top:-5px; z-index:1; display:flex; align-items:center; justify-content:space-between; gap:8px; padding:2px 3px 5px 6px; margin-bottom:3px; border-bottom:1px solid var(--header-line); background:var(--header-panel); font-size:11px; }
+.header-popover-caption strong { font-weight:600; }
+.header-popover-close { display:grid; place-items:center; width:23px; height:23px; border:0; border-radius:5px; background:var(--header-hover); color:var(--header-muted); cursor:pointer; }
+.header-popover-close:hover { color:var(--header-ink); background:var(--header-tint); }

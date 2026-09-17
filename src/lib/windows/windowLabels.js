@@ -6,6 +6,8 @@
 export const MAX_WINDOWS_PER_KIND = 10;
 export const NOTE_PREFIX = 'note-';
 export const TINY_NOTE_PREFIX = 'tinynote-';
+/** @param {string|null} label */
+export const isMealWindowLabel = (label) => label !== null && ['meal', 'meal-search', 'meal-settings'].includes(label);
 
 // 할 일·메모 데이터를 저장하는 창 (main / note-N / tinynote-N)
 /** @param {unknown} label */

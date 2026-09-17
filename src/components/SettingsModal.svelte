@@ -6,6 +6,7 @@
   import { getCurrentWindow } from '@tauri-apps/api/window';
   import { emitTo, listen, emit } from '@tauri-apps/api/event';
   import { onMount, onDestroy } from 'svelte';
+  import HeaderLayoutIcon from './HeaderLayoutIcon.svelte';
   import ThemePicker from './ThemePicker.svelte';
   import { getTidyTheme } from '../lib/themes.js';
 
@@ -18,6 +19,15 @@
 
   let localFontSize = $state(appState.fontSize || 10);
   let localUiFontSize = $state(appState.uiFontSize || 10);
+  let localHeaderDesign = $state(appState.headerDesign || 'classic');
+  let designError = $state('');
+  /** @param {'classic' | 'modern'} design */
+  async function chooseHeaderDesign(design) {
+    localHeaderDesign = design;
+    designError = '';
+    try { await emit('req-set-header-design', { targetWindow: targetLabel, headerDesign: design }); }
+    catch { designError = '디자인을 적용하지 못했어요. 다시 선택해 주세요.'; }
+  }
   let localThemeColor = $state(appState.themeColor);
   let localUiFontFamily = $state(appState.uiFontFamily || '메이플스토리 L');
   let localIsDarkMode = $state(appState.isDarkMode);
@@ -53,6 +63,7 @@
       // 나를 부른 메모장의 진짜 설정으로 UI를 즉시 맞춥니다.
       localFontSize = s.fontSize;
       localUiFontSize = s.uiFontSize;
+      localHeaderDesign = s.headerDesign === 'modern' ? 'modern' : 'classic';
       localThemeColor = s.themeColor;
       localUiFontFamily = s.uiFontFamily;
       localIsDarkMode = s.isDarkMode;
@@ -119,6 +130,7 @@
       targetWindow: targetLabel,
       fontSize: localFontSize,
       uiFontSize: localUiFontSize, 
+      headerDesign: localHeaderDesign,
       themeColor: localThemeColor,
       uiFontFamily: localUiFontFamily,
       isDarkMode: localIsDarkMode,
@@ -165,6 +177,23 @@
     </div>
 
     <div class="flex-1 overflow-y-auto p-4 flex flex-col gap-3.5 custom-scrollbar">
+      <fieldset class="header-design-settings" class:design-dark={localIsDarkMode} style="--design-accent:{updateAccent};">
+        <legend>Tidy task 상단 디자인</legend>
+        <div class="design-options">
+          <label class:selected={localHeaderDesign === 'classic'}>
+            <input type="radio" name="header-design" value="classic" checked={localHeaderDesign === 'classic'} onchange={() => chooseHeaderDesign('classic')}/>
+            <span class="design-option-title"><HeaderLayoutIcon variant="classic"/><strong>클래식</strong><span class="design-check" aria-hidden="true">{localHeaderDesign === 'classic' ? '✓' : ''}</span></span>
+            <small>익숙한 아이콘 배치</small>
+          </label>
+          <label class:selected={localHeaderDesign === 'modern'}>
+            <input type="radio" name="header-design" value="modern" checked={localHeaderDesign === 'modern'} onchange={() => chooseHeaderDesign('modern')}/>
+            <span class="design-option-title"><HeaderLayoutIcon variant="modern"/><strong>모던</strong><span class="design-check" aria-hidden="true">{localHeaderDesign === 'modern' ? '✓' : ''}</span></span>
+            <small>이름이 보이는 도구</small>
+          </label>
+        </div>
+        <p class="design-hint">선택하면 노트에 바로 적용·저장됩니다.</p>
+        {#if designError}<p class="design-error" role="alert">{designError}</p>{/if}
+      </fieldset>
       
       <div class="p-3.5 rounded-xl border transition-all duration-300 shadow-sm" style="background-color: {localIsDarkMode ? 'rgba(0,0,0,0.2)' : 'rgba(255,255,255,0.6)'}; border-color: {localIsDarkMode ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.04)'};">
         <label class="flex items-center gap-2.5 text-[0.85em] font-bold" style="color: {localIsDarkMode ? '#cbd5e1' : '#4b5563'};">
@@ -442,9 +471,12 @@
         </div>
         <!-- 버전을 코드에 박아두면 배포 때 갱신을 빠뜨려 실제 버전과 어긋납니다.
              appState.appVersion은 tauri.conf.json의 version을 그대로 읽어옵니다. -->
-        <span class="text-[9px] font-medium opacity-30 select-none uppercase tracking-widest" style="color: {localIsDarkMode ? '#ffffff' : '#000000'};">v.{appState.appVersion || '5.0.5'}</span>
+        <span class="text-[9px] font-medium opacity-30 select-none uppercase tracking-widest" style="color: {localIsDarkMode ? '#ffffff' : '#000000'};">v.{appState.appVersion || '5.1.0'}</span>
       </div>
 
+      <div class="flex items-center justify-center gap-1 pt-3 text-[9px]" style="color: {localIsDarkMode ? '#94a3b8' : '#64748b'};">
+        <span>© 2026</span><img src="/chaltteok.webp" alt="" class="w-6 h-6 object-contain" /><span>찰떡쌤. All rights reserved.</span>
+      </div>
       <div class="flex items-center justify-end px-5 py-4 gap-3">
         <button onclick={handleCancel} class="px-5 py-2 rounded-xl text-[0.85em] font-bold transition-all active:scale-95" style="color: {localIsDarkMode ? '#94a3b8' : '#64748b'}; background-color: {localIsDarkMode ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)'};">
           취소
@@ -482,6 +514,24 @@
 </div>
 
 <style>
+  .header-design-settings { --design-ink:#374151; --design-muted:#626d7b; --design-border:#9ca3af38; padding:10px; border:1px solid var(--design-border); border-radius:11px; color:var(--design-ink); background:#ffffff40; }
+  .header-design-settings.design-dark { --design-ink:#e2e8f0; --design-muted:#aeb9c9; --design-border:#cbd5e12b; background:#ffffff04; }
+  .header-design-settings legend { padding:0 5px; font-size:11px; font-weight:600; }
+  .design-options { display:grid; grid-template-columns:1fr 1fr; gap:7px; }
+  .design-options label { position:relative; display:flex; flex-direction:column; gap:5px; padding:9px 7px; border:1px solid var(--design-border); border-radius:8px; cursor:pointer; background:#ffffff16; }
+  .design-options label:hover { border-color:var(--design-accent); }
+  .design-options label.selected { border-color:color-mix(in srgb,var(--design-accent) 55%,transparent); background:color-mix(in srgb,var(--design-accent) 6%,transparent); }
+  .design-options input { position:absolute; width:1px; height:1px; opacity:0; }
+  .design-options label:has(input:focus-visible) { outline:2px solid var(--design-accent); outline-offset:2px; }
+  .design-option-title { display:flex; align-items:center; gap:5px; }
+  .design-option-title :global(svg) { flex-shrink:0; color:var(--design-muted); }
+  .selected .design-option-title :global(svg) { color:var(--design-accent); }
+  .design-options strong { font-size:11px; font-weight:600; white-space:nowrap; }
+  .design-options small { display:block; font-size:9px; color:var(--design-muted); padding-left:1px; }
+  .design-check { margin-left:auto; width:10px; color:var(--design-accent); font-size:10px; }
+  .design-hint,.design-error { font-size:9px; line-height:1.5; color:var(--design-muted); margin:8px 1px 0; }
+  .design-error { color:#b43e3e; }
+
   .custom-scrollbar::-webkit-scrollbar { width: 4px; }
   .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.1); border-radius: 10px; }
   :global(body) { background: transparent !important; }

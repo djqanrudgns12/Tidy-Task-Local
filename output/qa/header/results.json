@@ -1,0 +1,2363 @@
+{
+  "status": "passed",
+  "checks": [
+    {
+      "name": "layout-200-light",
+      "detail": [
+        {
+          "name": "tidy-header-surface titlebar svelte-1l8wugd",
+          "overflow": 0,
+          "buttons": [
+            {
+              "name": "항상 위",
+              "left": 9,
+              "right": 35,
+              "width": 26,
+              "height": 25,
+              "overflow": 0
+            },
+            {
+              "name": "실행 취소",
+              "left": 80,
+              "right": 106,
+              "width": 26,
+              "height": 25,
+              "overflow": 0
+            },
+            {
+              "name": "다시 실행",
+              "left": 106,
+              "right": 132,
+              "width": 26,
+              "height": 25,
+              "overflow": 0
+            },
+            {
+              "name": "창 숨기기",
+              "left": 139,
+              "right": 165,
+              "width": 26,
+              "height": 25,
+              "overflow": 0
+            },
+            {
+              "name": "닫기",
+              "left": 165,
+              "right": 191,
+              "width": 26,
+              "height": 25,
+              "overflow": 0
+            }
+          ]
+        },
+        {
+          "name": "note-heading svelte-1bd5ar4",
+          "overflow": 0,
+          "buttons": [
+            {
+              "name": "새 노트",
+              "left": 110.796875,
+              "right": 191,
+              "width": 80.203125,
+              "height": 25,
+              "overflow": 0
+            }
+          ]
+        },
+        {
+          "name": "note-tools svelte-1bd5ar4",
+          "overflow": 0,
+          "buttons": [
+            {
+              "name": "서식",
+              "left": 9,
+              "right": 64.375,
+              "width": 55.375,
+              "height": 26,
+              "overflow": 0
+            },
+            {
+              "name": "알림",
+              "left": 124.8125,
+              "right": 167.1875,
+              "width": 42.375,
+              "height": 26,
+              "overflow": 0
+            },
+            {
+              "name": "급식창 열기",
+              "left": 32.71875,
+              "right": 75.265625,
+              "width": 42.546875,
+              "height": 26,
+              "overflow": 0
+            },
+            {
+              "name": "메뉴",
+              "left": 118.703125,
+              "right": 173.296875,
+              "width": 54.59375,
+              "height": 26,
+              "overflow": 0
+            }
+          ]
+        },
+        {
+          "name": "format-tools svelte-1bd5ar4",
+          "overflow": 0,
+          "buttons": [
+            {
+              "name": "글자 크기 목록 열기",
+              "left": 80.875,
+              "right": 89.875,
+              "width": 9,
+              "height": 11,
+              "overflow": 0
+            },
+            {
+              "name": "굵게",
+              "left": 94.875,
+              "right": 110.0625,
+              "width": 15.1875,
+              "height": 25,
+              "overflow": 0
+            },
+            {
+              "name": "기울임",
+              "left": 111.0625,
+              "right": 126.25,
+              "width": 15.1875,
+              "height": 25,
+              "overflow": 0
+            },
+            {
+              "name": "밑줄",
+              "left": 127.25,
+              "right": 142.4375,
+              "width": 15.1875,
+              "height": 25,
+              "overflow": 0
+            },
+            {
+              "name": " ",
+              "left": 143.4375,
+              "right": 158.625,
+              "width": 15.1875,
+              "height": 25,
+              "overflow": 0
+            },
+            {
+              "name": " ",
+              "left": 159.625,
+              "right": 174.8125,
+              "width": 15.1875,
+              "height": 25,
+              "overflow": 0
+            },
+            {
+              "name": "더보기",
+              "left": 175.8125,
+              "right": 191,
+              "width": 15.1875,
+              "height": 25,
+              "overflow": 0
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "layout-250-light",
+      "detail": [
+        {
+          "name": "tidy-header-surface titlebar svelte-1l8wugd",
+          "overflow": 0,
+          "buttons": [
+            {
+              "name": "항상 위",
+              "left": 9,
+              "right": 35,
+              "width": 26,
+              "height": 25,
+              "overflow": 0
+            },
+            {
+              "name": "실행 취소",
+              "left": 130,
+              "right": 156,
+              "width": 26,
+              "height": 25,
+              "overflow": 0
+            },
+            {
+              "name": "다시 실행",
+              "left": 156,
+              "right": 182,
+              "width": 26,
+              "height": 25,
+              "overflow": 0
+            },
+            {
+              "name": "창 숨기기",
+              "left": 189,
+              "right": 215,
+              "width": 26,
+              "height": 25,
+              "overflow": 0
+            },
+            {
+              "name": "닫기",
+              "left": 215,
+              "right": 241,
+              "width": 26,
+              "height": 25,
+              "overflow": 0
+            }
+          ]
+        },
+        {
+          "name": "note-heading svelte-1bd5ar4",
+          "overflow": 0,
+          "buttons": [
+            {
+              "name": "새 노트",
+              "left": 160.796875,
+              "right": 241,
+              "width": 80.203125,
+              "height": 25,
+              "overflow": 0
+            }
+          ]
+        },
+        {
+          "name": "note-tools svelte-1bd5ar4",
+          "overflow": 0,
+          "buttons": [
+            {
+              "name": "서식",
+              "left": 9,
+              "right": 64.375,
+              "width": 55.375,
+              "height": 26,
+              "overflow": 0
+            },
+            {
+              "name": "알림",
+              "left": 74.5625,
+              "right": 116.9375,
+              "width": 42.375,
+              "height": 26,
+              "overflow": 0
+            },
+            {
+              "name": "급식창 열기",
+              "left": 132.96875,
+              "right": 175.515625,
+              "width": 42.546875,
+              "height": 26,
+              "overflow": 0
+            },
+            {
+              "name": "메뉴",
+              "left": 185.453125,
+              "right": 240.046875,
+              "width": 54.59375,
+              "height": 26,
+              "overflow": 0
+            }
+          ]
+        },
+        {
+          "name": "format-tools svelte-1bd5ar4",
+          "overflow": 0,
+          "buttons": [
+            {
+              "name": "글자 크기 목록 열기",
+              "left": 102.4375,
+              "right": 112.4375,
+              "width": 10,
+              "height": 11,
+              "overflow": 0
+            },
+            {
+              "name": "굵게",
+              "left": 118.4375,
+              "right": 138.03125,
+              "width": 19.59375,
+              "height": 25,
+              "overflow": 0
+            },
+            {
+              "name": "기울임",
+              "left": 139.03125,
+              "right": 158.625,
+              "width": 19.59375,
+              "height": 25,
+              "overflow": 0
+            },
+            {
+              "name": "밑줄",
+              "left": 159.625,
+              "right": 179.21875,
+              "width": 19.59375,
+              "height": 25,
+              "overflow": 0
+            },
+            {
+              "name": " ",
+              "left": 180.21875,
+              "right": 199.8125,
+              "width": 19.59375,
+              "height": 25,
+              "overflow": 0
+            },
+            {
+              "name": " ",
+              "left": 200.8125,
+              "right": 220.40625,
+              "width": 19.59375,
+              "height": 25,
+              "overflow": 0
+            },
+            {
+              "name": "더보기",
+              "left": 221.40625,
+              "right": 241,
+              "width": 19.59375,
+              "height": 25,
+              "overflow": 0
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "layout-280-light",
+      "detail": [
+        {
+          "name": "tidy-header-surface titlebar svelte-1l8wugd",
+          "overflow": 0,
+          "buttons": [
+            {
+              "name": "항상 위",
+              "left": 11,
+              "right": 36,
+              "width": 25,
+              "height": 25,
+              "overflow": 0
+            },
+            {
+              "name": "실행 취소",
+              "left": 162,
+              "right": 187,
+              "width": 25,
+              "height": 25,
+              "overflow": 0
+            },
+            {
+              "name": "다시 실행",
+              "left": 187,
+              "right": 212,
+              "width": 25,
+              "height": 25,
+              "overflow": 0
+            },
+            {
+              "name": "창 숨기기",
+              "left": 221,
+              "right": 246,
+              "width": 25,
+              "height": 25,
+              "overflow": 0
+            },
+            {
+              "name": "닫기",
+              "left": 246,
+              "right": 271,
+              "width": 25,
+              "height": 25,
+              "overflow": 0
+            }
+          ]
+        },
+        {
+          "name": "note-heading svelte-1bd5ar4",
+          "overflow": 0,
+          "buttons": [
+            {
+              "name": "새 노트",
+              "left": 188.796875,
+              "right": 269,
+              "width": 80.203125,
+              "height": 25,
+              "overflow": 0
+            }
+          ]
+        },
+        {
+          "name": "note-tools svelte-1bd5ar4",
+          "overflow": 0,
+          "buttons": [
+            {
+              "name": "서식",
+              "left": 11,
+              "right": 74.375,
+              "width": 63.375,
+              "height": 26,
+              "overflow": 0
+            },
+            {
+              "name": "알림",
+              "left": 75.9375,
+              "right": 138.3125,
+              "width": 62.375,
+              "height": 26,
+              "overflow": 0
+            },
+            {
+              "name": "급식창 열기",
+              "left": 148.09375,
+              "right": 197.640625,
+              "width": 49.546875,
+              "height": 26,
+              "overflow": 0
+            },
+            {
+              "name": "메뉴",
+              "left": 207.328125,
+              "right": 269.921875,
+              "width": 62.59375,
+              "height": 26,
+              "overflow": 0
+            }
+          ]
+        },
+        {
+          "name": "format-tools svelte-1bd5ar4",
+          "overflow": 0,
+          "buttons": [
+            {
+              "name": "글자 크기 목록 열기",
+              "left": 114.921875,
+              "right": 126.109375,
+              "width": 11.1875,
+              "height": 11,
+              "overflow": 0
+            },
+            {
+              "name": "굵게",
+              "left": 132.703125,
+              "right": 154.578125,
+              "width": 21.875,
+              "height": 25,
+              "overflow": 0
+            },
+            {
+              "name": "기울임",
+              "left": 155.578125,
+              "right": 177.46875,
+              "width": 21.890625,
+              "height": 25,
+              "overflow": 0
+            },
+            {
+              "name": "밑줄",
+              "left": 178.46875,
+              "right": 200.34375,
+              "width": 21.875,
+              "height": 25,
+              "overflow": 0
+            },
+            {
+              "name": " ",
+              "left": 201.34375,
+              "right": 223.234375,
+              "width": 21.890625,
+              "height": 25,
+              "overflow": 0
+            },
+            {
+              "name": " ",
+              "left": 224.234375,
+              "right": 246.109375,
+              "width": 21.875,
+              "height": 25,
+              "overflow": 0
+            },
+            {
+              "name": "더보기",
+              "left": 247.109375,
+              "right": 269,
+              "width": 21.890625,
+              "height": 25,
+              "overflow": 0
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "layout-320-light",
+      "detail": [
+        {
+          "name": "tidy-header-surface titlebar svelte-1l8wugd",
+          "overflow": 0,
+          "buttons": [
+            {
+              "name": "항상 위",
+              "left": 11,
+              "right": 36,
+              "width": 25,
+              "height": 25,
+              "overflow": 0
+            },
+            {
+              "name": "실행 취소",
+              "left": 202,
+              "right": 227,
+              "width": 25,
+              "height": 25,
+              "overflow": 0
+            },
+            {
+              "name": "다시 실행",
+              "left": 227,
+              "right": 252,
+              "width": 25,
+              "height": 25,
+              "overflow": 0
+            },
+            {
+              "name": "창 숨기기",
+              "left": 261,
+              "right": 286,
+              "width": 25,
+              "height": 25,
+              "overflow": 0
+            },
+            {
+              "name": "닫기",
+              "left": 286,
+              "right": 311,
+              "width": 25,
+              "height": 25,
+              "overflow": 0
+            }
+          ]
+        },
+        {
+          "name": "note-heading svelte-1bd5ar4",
+          "overflow": 0,
+          "buttons": [
+            {
+              "name": "새 노트",
+              "left": 228.796875,
+              "right": 309,
+              "width": 80.203125,
+              "height": 25,
+              "overflow": 0
+            }
+          ]
+        },
+        {
+          "name": "note-tools svelte-1bd5ar4",
+          "overflow": 0,
+          "buttons": [
+            {
+              "name": "서식",
+              "left": 11,
+              "right": 74.375,
+              "width": 63.375,
+              "height": 26,
+              "overflow": 0
+            },
+            {
+              "name": "알림",
+              "left": 90.9375,
+              "right": 153.3125,
+              "width": 62.375,
+              "height": 26,
+              "overflow": 0
+            },
+            {
+              "name": "급식창 열기",
+              "left": 173.09375,
+              "right": 222.640625,
+              "width": 49.546875,
+              "height": 26,
+              "overflow": 0
+            },
+            {
+              "name": "메뉴",
+              "left": 242.328125,
+              "right": 304.921875,
+              "width": 62.59375,
+              "height": 26,
+              "overflow": 0
+            }
+          ]
+        },
+        {
+          "name": "format-tools svelte-1bd5ar4",
+          "overflow": 0,
+          "buttons": [
+            {
+              "name": "글자 크기 목록 열기",
+              "left": 124.015625,
+              "right": 136.8125,
+              "width": 12.796875,
+              "height": 11,
+              "overflow": 0
+            },
+            {
+              "name": "굵게",
+              "left": 160,
+              "right": 184,
+              "width": 24,
+              "height": 25,
+              "overflow": 0
+            },
+            {
+              "name": "기울임",
+              "left": 185,
+              "right": 209,
+              "width": 24,
+              "height": 25,
+              "overflow": 0
+            },
+            {
+              "name": "밑줄",
+              "left": 210,
+              "right": 234,
+              "width": 24,
+              "height": 25,
+              "overflow": 0
+            },
+            {
+              "name": " ",
+              "left": 235,
+              "right": 259,
+              "width": 24,
+              "height": 25,
+              "overflow": 0
+            },
+            {
+              "name": " ",
+              "left": 260,
+              "right": 284,
+              "width": 24,
+              "height": 25,
+              "overflow": 0
+            },
+            {
+              "name": "더보기",
+              "left": 285,
+              "right": 309,
+              "width": 24,
+              "height": 25,
+              "overflow": 0
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "layout-350-light",
+      "detail": [
+        {
+          "name": "tidy-header-surface titlebar svelte-1l8wugd",
+          "overflow": 0,
+          "buttons": [
+            {
+              "name": "항상 위",
+              "left": 11,
+              "right": 36,
+              "width": 25,
+              "height": 25,
+              "overflow": 0
+            },
+            {
+              "name": "실행 취소",
+              "left": 232,
+              "right": 257,
+              "width": 25,
+              "height": 25,
+              "overflow": 0
+            },
+            {
+              "name": "다시 실행",
+              "left": 257,
+              "right": 282,
+              "width": 25,
+              "height": 25,
+              "overflow": 0
+            },
+            {
+              "name": "창 숨기기",
+              "left": 291,
+              "right": 316,
+              "width": 25,
+              "height": 25,
+              "overflow": 0
+            },
+            {
+              "name": "닫기",
+              "left": 316,
+              "right": 341,
+              "width": 25,
+              "height": 25,
+              "overflow": 0
+            }
+          ]
+        },
+        {
+          "name": "note-heading svelte-1bd5ar4",
+          "overflow": 0,
+          "buttons": [
+            {
+              "name": "새 노트",
+              "left": 258.796875,
+              "right": 339,
+              "width": 80.203125,
+              "height": 25,
+              "overflow": 0
+            }
+          ]
+        },
+        {
+          "name": "note-tools svelte-1bd5ar4",
+          "overflow": 0,
+          "buttons": [
+            {
+              "name": "서식",
+              "left": 11,
+              "right": 74.375,
+              "width": 63.375,
+              "height": 26,
+              "overflow": 0
+            },
+            {
+              "name": "알림",
+              "left": 102.1875,
+              "right": 164.5625,
+              "width": 62.375,
+              "height": 26,
+              "overflow": 0
+            },
+            {
+              "name": "급식창 열기",
+              "left": 191.84375,
+              "right": 241.390625,
+              "width": 49.546875,
+              "height": 26,
+              "overflow": 0
+            },
+            {
+              "name": "메뉴",
+              "left": 268.578125,
+              "right": 331.171875,
+              "width": 62.59375,
+              "height": 26,
+              "overflow": 0
+            }
+          ]
+        },
+        {
+          "name": "format-tools svelte-1bd5ar4",
+          "overflow": 0,
+          "buttons": [
+            {
+              "name": "글자 크기 목록 열기",
+              "left": 122.5,
+              "right": 136.5,
+              "width": 14,
+              "height": 11,
+              "overflow": 0
+            },
+            {
+              "name": "굵게",
+              "left": 190,
+              "right": 214,
+              "width": 24,
+              "height": 25,
+              "overflow": 0
+            },
+            {
+              "name": "기울임",
+              "left": 215,
+              "right": 239,
+              "width": 24,
+              "height": 25,
+              "overflow": 0
+            },
+            {
+              "name": "밑줄",
+              "left": 240,
+              "right": 264,
+              "width": 24,
+              "height": 25,
+              "overflow": 0
+            },
+            {
+              "name": " ",
+              "left": 265,
+              "right": 289,
+              "width": 24,
+              "height": 25,
+              "overflow": 0
+            },
+            {
+              "name": " ",
+              "left": 290,
+              "right": 314,
+              "width": 24,
+              "height": 25,
+              "overflow": 0
+            },
+            {
+              "name": "더보기",
+              "left": 315,
+              "right": 339,
+              "width": 24,
+              "height": 25,
+              "overflow": 0
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "layout-480-light",
+      "detail": [
+        {
+          "name": "tidy-header-surface titlebar svelte-1l8wugd",
+          "overflow": 0,
+          "buttons": [
+            {
+              "name": "항상 위",
+              "left": 11,
+              "right": 36,
+              "width": 25,
+              "height": 25,
+              "overflow": 0
+            },
+            {
+              "name": "실행 취소",
+              "left": 362,
+              "right": 387,
+              "width": 25,
+              "height": 25,
+              "overflow": 0
+            },
+            {
+              "name": "다시 실행",
+              "left": 387,
+              "right": 412,
+              "width": 25,
+              "height": 25,
+              "overflow": 0
+            },
+            {
+              "name": "창 숨기기",
+              "left": 421,
+              "right": 446,
+              "width": 25,
+              "height": 25,
+              "overflow": 0
+            },
+            {
+              "name": "닫기",
+              "left": 446,
+              "right": 471,
+              "width": 25,
+              "height": 25,
+              "overflow": 0
+            }
+          ]
+        },
+        {
+          "name": "note-heading svelte-1bd5ar4",
+          "overflow": 0,
+          "buttons": [
+            {
+              "name": "새 노트",
+              "left": 388.796875,
+              "right": 469,
+              "width": 80.203125,
+              "height": 25,
+              "overflow": 0
+            }
+          ]
+        },
+        {
+          "name": "note-tools svelte-1bd5ar4",
+          "overflow": 0,
+          "buttons": [
+            {
+              "name": "서식",
+              "left": 11,
+              "right": 74.375,
+              "width": 63.375,
+              "height": 26,
+              "overflow": 0
+            },
+            {
+              "name": "알림",
+              "left": 150.9375,
+              "right": 213.3125,
+              "width": 62.375,
+              "height": 26,
+              "overflow": 0
+            },
+            {
+              "name": "급식창 열기",
+              "left": 273.09375,
+              "right": 322.640625,
+              "width": 49.546875,
+              "height": 26,
+              "overflow": 0
+            },
+            {
+              "name": "메뉴",
+              "left": 382.328125,
+              "right": 444.921875,
+              "width": 62.59375,
+              "height": 26,
+              "overflow": 0
+            }
+          ]
+        },
+        {
+          "name": "format-tools svelte-1bd5ar4",
+          "overflow": 0,
+          "buttons": [
+            {
+              "name": "글자 크기 목록 열기",
+              "left": 122,
+              "right": 136,
+              "width": 14,
+              "height": 11,
+              "overflow": 0
+            },
+            {
+              "name": "굵게",
+              "left": 320,
+              "right": 344,
+              "width": 24,
+              "height": 25,
+              "overflow": 0
+            },
+            {
+              "name": "기울임",
+              "left": 345,
+              "right": 369,
+              "width": 24,
+              "height": 25,
+              "overflow": 0
+            },
+            {
+              "name": "밑줄",
+              "left": 370,
+              "right": 394,
+              "width": 24,
+              "height": 25,
+              "overflow": 0
+            },
+            {
+              "name": " ",
+              "left": 395,
+              "right": 419,
+              "width": 24,
+              "height": 25,
+              "overflow": 0
+            },
+            {
+              "name": " ",
+              "left": 420,
+              "right": 444,
+              "width": 24,
+              "height": 25,
+              "overflow": 0
+            },
+            {
+              "name": "더보기",
+              "left": 445,
+              "right": 469,
+              "width": 24,
+              "height": 25,
+              "overflow": 0
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "layout-640-light",
+      "detail": [
+        {
+          "name": "tidy-header-surface titlebar svelte-1l8wugd",
+          "overflow": 0,
+          "buttons": [
+            {
+              "name": "항상 위",
+              "left": 11,
+              "right": 36,
+              "width": 25,
+              "height": 25,
+              "overflow": 0
+            },
+            {
+              "name": "실행 취소",
+              "left": 522,
+              "right": 547,
+              "width": 25,
+              "height": 25,
+              "overflow": 0
+            },
+            {
+              "name": "다시 실행",
+              "left": 547,
+              "right": 572,
+              "width": 25,
+              "height": 25,
+              "overflow": 0
+            },
+            {
+              "name": "창 숨기기",
+              "left": 581,
+              "right": 606,
+              "width": 25,
+              "height": 25,
+              "overflow": 0
+            },
+            {
+              "name": "닫기",
+              "left": 606,
+              "right": 631,
+              "width": 25,
+              "height": 25,
+              "overflow": 0
+            }
+          ]
+        },
+        {
+          "name": "note-heading svelte-1bd5ar4",
+          "overflow": 0,
+          "buttons": [
+            {
+              "name": "새 노트",
+              "left": 548.796875,
+              "right": 629,
+              "width": 80.203125,
+              "height": 25,
+              "overflow": 0
+            }
+          ]
+        },
+        {
+          "name": "note-tools svelte-1bd5ar4",
+          "overflow": 0,
+          "buttons": [
+            {
+              "name": "서식",
+              "left": 11,
+              "right": 74.375,
+              "width": 63.375,
+              "height": 26,
+              "overflow": 0
+            },
+            {
+              "name": "알림",
+              "left": 210.9375,
+              "right": 273.3125,
+              "width": 62.375,
+              "height": 26,
+              "overflow": 0
+            },
+            {
+              "name": "급식창 열기",
+              "left": 373.09375,
+              "right": 422.640625,
+              "width": 49.546875,
+              "height": 26,
+              "overflow": 0
+            },
+            {
+              "name": "메뉴",
+              "left": 522.328125,
+              "right": 584.921875,
+              "width": 62.59375,
+              "height": 26,
+              "overflow": 0
+            }
+          ]
+        },
+        {
+          "name": "format-tools svelte-1bd5ar4",
+          "overflow": 0,
+          "buttons": [
+            {
+              "name": "글자 크기 목록 열기",
+              "left": 122,
+              "right": 136,
+              "width": 14,
+              "height": 11,
+              "overflow": 0
+            },
+            {
+              "name": "굵게",
+              "left": 480,
+              "right": 504,
+              "width": 24,
+              "height": 25,
+              "overflow": 0
+            },
+            {
+              "name": "기울임",
+              "left": 505,
+              "right": 529,
+              "width": 24,
+              "height": 25,
+              "overflow": 0
+            },
+            {
+              "name": "밑줄",
+              "left": 530,
+              "right": 554,
+              "width": 24,
+              "height": 25,
+              "overflow": 0
+            },
+            {
+              "name": " ",
+              "left": 555,
+              "right": 579,
+              "width": 24,
+              "height": 25,
+              "overflow": 0
+            },
+            {
+              "name": " ",
+              "left": 580,
+              "right": 604,
+              "width": 24,
+              "height": 25,
+              "overflow": 0
+            },
+            {
+              "name": "더보기",
+              "left": 605,
+              "right": 629,
+              "width": 24,
+              "height": 25,
+              "overflow": 0
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "layout-200-dark",
+      "detail": [
+        {
+          "name": "tidy-header-surface titlebar svelte-1l8wugd header-dark",
+          "overflow": 0,
+          "buttons": [
+            {
+              "name": "항상 위",
+              "left": 9,
+              "right": 35,
+              "width": 26,
+              "height": 25,
+              "overflow": 0
+            },
+            {
+              "name": "실행 취소",
+              "left": 80,
+              "right": 106,
+              "width": 26,
+              "height": 25,
+              "overflow": 0
+            },
+            {
+              "name": "다시 실행",
+              "left": 106,
+              "right": 132,
+              "width": 26,
+              "height": 25,
+              "overflow": 0
+            },
+            {
+              "name": "창 숨기기",
+              "left": 139,
+              "right": 165,
+              "width": 26,
+              "height": 25,
+              "overflow": 0
+            },
+            {
+              "name": "닫기",
+              "left": 165,
+              "right": 191,
+              "width": 26,
+              "height": 25,
+              "overflow": 0
+            }
+          ]
+        },
+        {
+          "name": "note-heading svelte-1bd5ar4",
+          "overflow": 0,
+          "buttons": [
+            {
+              "name": "새 노트",
+              "left": 110.796875,
+              "right": 191,
+              "width": 80.203125,
+              "height": 25,
+              "overflow": 0
+            }
+          ]
+        },
+        {
+          "name": "note-tools svelte-1bd5ar4",
+          "overflow": 0,
+          "buttons": [
+            {
+              "name": "서식",
+              "left": 9,
+              "right": 64.375,
+              "width": 55.375,
+              "height": 26,
+              "overflow": 0
+            },
+            {
+              "name": "알림",
+              "left": 124.8125,
+              "right": 167.1875,
+              "width": 42.375,
+              "height": 26,
+              "overflow": 0
+            },
+            {
+              "name": "급식창 열기",
+              "left": 32.71875,
+              "right": 75.265625,
+              "width": 42.546875,
+              "height": 26,
+              "overflow": 0
+            },
+            {
+              "name": "메뉴",
+              "left": 118.703125,
+              "right": 173.296875,
+              "width": 54.59375,
+              "height": 26,
+              "overflow": 0
+            }
+          ]
+        },
+        {
+          "name": "format-tools svelte-1bd5ar4",
+          "overflow": 0,
+          "buttons": [
+            {
+              "name": "글자 크기 목록 열기",
+              "left": 80.875,
+              "right": 89.875,
+              "width": 9,
+              "height": 11,
+              "overflow": 0
+            },
+            {
+              "name": "굵게",
+              "left": 94.875,
+              "right": 110.0625,
+              "width": 15.1875,
+              "height": 25,
+              "overflow": 0
+            },
+            {
+              "name": "기울임",
+              "left": 111.0625,
+              "right": 126.25,
+              "width": 15.1875,
+              "height": 25,
+              "overflow": 0
+            },
+            {
+              "name": "밑줄",
+              "left": 127.25,
+              "right": 142.4375,
+              "width": 15.1875,
+              "height": 25,
+              "overflow": 0
+            },
+            {
+              "name": " ",
+              "left": 143.4375,
+              "right": 158.625,
+              "width": 15.1875,
+              "height": 25,
+              "overflow": 0
+            },
+            {
+              "name": " ",
+              "left": 159.625,
+              "right": 174.8125,
+              "width": 15.1875,
+              "height": 25,
+              "overflow": 0
+            },
+            {
+              "name": "더보기",
+              "left": 175.8125,
+              "right": 191,
+              "width": 15.1875,
+              "height": 25,
+              "overflow": 0
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "layout-250-dark",
+      "detail": [
+        {
+          "name": "tidy-header-surface titlebar svelte-1l8wugd header-dark",
+          "overflow": 0,
+          "buttons": [
+            {
+              "name": "항상 위",
+              "left": 9,
+              "right": 35,
+              "width": 26,
+              "height": 25,
+              "overflow": 0
+            },
+            {
+              "name": "실행 취소",
+              "left": 130,
+              "right": 156,
+              "width": 26,
+              "height": 25,
+              "overflow": 0
+            },
+            {
+              "name": "다시 실행",
+              "left": 156,
+              "right": 182,
+              "width": 26,
+              "height": 25,
+              "overflow": 0
+            },
+            {
+              "name": "창 숨기기",
+              "left": 189,
+              "right": 215,
+              "width": 26,
+              "height": 25,
+              "overflow": 0
+            },
+            {
+              "name": "닫기",
+              "left": 215,
+              "right": 241,
+              "width": 26,
+              "height": 25,
+              "overflow": 0
+            }
+          ]
+        },
+        {
+          "name": "note-heading svelte-1bd5ar4",
+          "overflow": 0,
+          "buttons": [
+            {
+              "name": "새 노트",
+              "left": 160.796875,
+              "right": 241,
+              "width": 80.203125,
+              "height": 25,
+              "overflow": 0
+            }
+          ]
+        },
+        {
+          "name": "note-tools svelte-1bd5ar4",
+          "overflow": 0,
+          "buttons": [
+            {
+              "name": "서식",
+              "left": 9,
+              "right": 64.375,
+              "width": 55.375,
+              "height": 26,
+              "overflow": 0
+            },
+            {
+              "name": "알림",
+              "left": 74.5625,
+              "right": 116.9375,
+              "width": 42.375,
+              "height": 26,
+              "overflow": 0
+            },
+            {
+              "name": "급식창 열기",
+              "left": 132.96875,
+              "right": 175.515625,
+              "width": 42.546875,
+              "height": 26,
+              "overflow": 0
+            },
+            {
+              "name": "메뉴",
+              "left": 185.453125,
+              "right": 240.046875,
+              "width": 54.59375,
+              "height": 26,
+              "overflow": 0
+            }
+          ]
+        },
+        {
+          "name": "format-tools svelte-1bd5ar4",
+          "overflow": 0,
+          "buttons": [
+            {
+              "name": "글자 크기 목록 열기",
+              "left": 102.4375,
+              "right": 112.4375,
+              "width": 10,
+              "height": 11,
+              "overflow": 0
+            },
+            {
+              "name": "굵게",
+              "left": 118.4375,
+              "right": 138.03125,
+              "width": 19.59375,
+              "height": 25,
+              "overflow": 0
+            },
+            {
+              "name": "기울임",
+              "left": 139.03125,
+              "right": 158.625,
+              "width": 19.59375,
+              "height": 25,
+              "overflow": 0
+            },
+            {
+              "name": "밑줄",
+              "left": 159.625,
+              "right": 179.21875,
+              "width": 19.59375,
+              "height": 25,
+              "overflow": 0
+            },
+            {
+              "name": " ",
+              "left": 180.21875,
+              "right": 199.8125,
+              "width": 19.59375,
+              "height": 25,
+              "overflow": 0
+            },
+            {
+              "name": " ",
+              "left": 200.8125,
+              "right": 220.40625,
+              "width": 19.59375,
+              "height": 25,
+              "overflow": 0
+            },
+            {
+              "name": "더보기",
+              "left": 221.40625,
+              "right": 241,
+              "width": 19.59375,
+              "height": 25,
+              "overflow": 0
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "layout-280-dark",
+      "detail": [
+        {
+          "name": "tidy-header-surface titlebar svelte-1l8wugd header-dark",
+          "overflow": 0,
+          "buttons": [
+            {
+              "name": "항상 위",
+              "left": 11,
+              "right": 36,
+              "width": 25,
+              "height": 25,
+              "overflow": 0
+            },
+            {
+              "name": "실행 취소",
+              "left": 162,
+              "right": 187,
+              "width": 25,
+              "height": 25,
+              "overflow": 0
+            },
+            {
+              "name": "다시 실행",
+              "left": 187,
+              "right": 212,
+              "width": 25,
+              "height": 25,
+              "overflow": 0
+            },
+            {
+              "name": "창 숨기기",
+              "left": 221,
+              "right": 246,
+              "width": 25,
+              "height": 25,
+              "overflow": 0
+            },
+            {
+              "name": "닫기",
+              "left": 246,
+              "right": 271,
+              "width": 25,
+              "height": 25,
+              "overflow": 0
+            }
+          ]
+        },
+        {
+          "name": "note-heading svelte-1bd5ar4",
+          "overflow": 0,
+          "buttons": [
+            {
+              "name": "새 노트",
+              "left": 188.796875,
+              "right": 269,
+              "width": 80.203125,
+              "height": 25,
+              "overflow": 0
+            }
+          ]
+        },
+        {
+          "name": "note-tools svelte-1bd5ar4",
+          "overflow": 0,
+          "buttons": [
+            {
+              "name": "서식",
+              "left": 11,
+              "right": 74.375,
+              "width": 63.375,
+              "height": 26,
+              "overflow": 0
+            },
+            {
+              "name": "알림",
+              "left": 75.9375,
+              "right": 138.3125,
+              "width": 62.375,
+              "height": 26,
+              "overflow": 0
+            },
+            {
+              "name": "급식창 열기",
+              "left": 148.09375,
+              "right": 197.640625,
+              "width": 49.546875,
+              "height": 26,
+              "overflow": 0
+            },
+            {
+              "name": "메뉴",
+              "left": 207.328125,
+              "right": 269.921875,
+              "width": 62.59375,
+              "height": 26,
+              "overflow": 0
+            }
+          ]
+        },
+        {
+          "name": "format-tools svelte-1bd5ar4",
+          "overflow": 0,
+          "buttons": [
+            {
+              "name": "글자 크기 목록 열기",
+              "left": 114.921875,
+              "right": 126.109375,
+              "width": 11.1875,
+              "height": 11,
+              "overflow": 0
+            },
+            {
+              "name": "굵게",
+              "left": 132.703125,
+              "right": 154.578125,
+              "width": 21.875,
+              "height": 25,
+              "overflow": 0
+            },
+            {
+              "name": "기울임",
+              "left": 155.578125,
+              "right": 177.46875,
+              "width": 21.890625,
+              "height": 25,
+              "overflow": 0
+            },
+            {
+              "name": "밑줄",
+              "left": 178.46875,
+              "right": 200.34375,
+              "width": 21.875,
+              "height": 25,
+              "overflow": 0
+            },
+            {
+              "name": " ",
+              "left": 201.34375,
+              "right": 223.234375,
+              "width": 21.890625,
+              "height": 25,
+              "overflow": 0
+            },
+            {
+              "name": " ",
+              "left": 224.234375,
+              "right": 246.109375,
+              "width": 21.875,
+              "height": 25,
+              "overflow": 0
+            },
+            {
+              "name": "더보기",
+              "left": 247.109375,
+              "right": 269,
+              "width": 21.890625,
+              "height": 25,
+              "overflow": 0
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "layout-320-dark",
+      "detail": [
+        {
+          "name": "tidy-header-surface titlebar svelte-1l8wugd header-dark",
+          "overflow": 0,
+          "buttons": [
+            {
+              "name": "항상 위",
+              "left": 11,
+              "right": 36,
+              "width": 25,
+              "height": 25,
+              "overflow": 0
+            },
+            {
+              "name": "실행 취소",
+              "left": 202,
+              "right": 227,
+              "width": 25,
+              "height": 25,
+              "overflow": 0
+            },
+            {
+              "name": "다시 실행",
+              "left": 227,
+              "right": 252,
+              "width": 25,
+              "height": 25,
+              "overflow": 0
+            },
+            {
+              "name": "창 숨기기",
+              "left": 261,
+              "right": 286,
+              "width": 25,
+              "height": 25,
+              "overflow": 0
+            },
+            {
+              "name": "닫기",
+              "left": 286,
+              "right": 311,
+              "width": 25,
+              "height": 25,
+              "overflow": 0
+            }
+          ]
+        },
+        {
+          "name": "note-heading svelte-1bd5ar4",
+          "overflow": 0,
+          "buttons": [
+            {
+              "name": "새 노트",
+              "left": 228.796875,
+              "right": 309,
+              "width": 80.203125,
+              "height": 25,
+              "overflow": 0
+            }
+          ]
+        },
+        {
+          "name": "note-tools svelte-1bd5ar4",
+          "overflow": 0,
+          "buttons": [
+            {
+              "name": "서식",
+              "left": 11,
+              "right": 74.375,
+              "width": 63.375,
+              "height": 26,
+              "overflow": 0
+            },
+            {
+              "name": "알림",
+              "left": 90.9375,
+              "right": 153.3125,
+              "width": 62.375,
+              "height": 26,
+              "overflow": 0
+            },
+            {
+              "name": "급식창 열기",
+              "left": 173.09375,
+              "right": 222.640625,
+              "width": 49.546875,
+              "height": 26,
+              "overflow": 0
+            },
+            {
+              "name": "메뉴",
+              "left": 242.328125,
+              "right": 304.921875,
+              "width": 62.59375,
+              "height": 26,
+              "overflow": 0
+            }
+          ]
+        },
+        {
+          "name": "format-tools svelte-1bd5ar4",
+          "overflow": 0,
+          "buttons": [
+            {
+              "name": "글자 크기 목록 열기",
+              "left": 124.015625,
+              "right": 136.8125,
+              "width": 12.796875,
+              "height": 11,
+              "overflow": 0
+            },
+            {
+              "name": "굵게",
+              "left": 160,
+              "right": 184,
+              "width": 24,
+              "height": 25,
+              "overflow": 0
+            },
+            {
+              "name": "기울임",
+              "left": 185,
+              "right": 209,
+              "width": 24,
+              "height": 25,
+              "overflow": 0
+            },
+            {
+              "name": "밑줄",
+              "left": 210,
+              "right": 234,
+              "width": 24,
+              "height": 25,
+              "overflow": 0
+            },
+            {
+              "name": " ",
+              "left": 235,
+              "right": 259,
+              "width": 24,
+              "height": 25,
+              "overflow": 0
+            },
+            {
+              "name": " ",
+              "left": 260,
+              "right": 284,
+              "width": 24,
+              "height": 25,
+              "overflow": 0
+            },
+            {
+              "name": "더보기",
+              "left": 285,
+              "right": 309,
+              "width": 24,
+              "height": 25,
+              "overflow": 0
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "layout-350-dark",
+      "detail": [
+        {
+          "name": "tidy-header-surface titlebar svelte-1l8wugd header-dark",
+          "overflow": 0,
+          "buttons": [
+            {
+              "name": "항상 위",
+              "left": 11,
+              "right": 36,
+              "width": 25,
+              "height": 25,
+              "overflow": 0
+            },
+            {
+              "name": "실행 취소",
+              "left": 232,
+              "right": 257,
+              "width": 25,
+              "height": 25,
+              "overflow": 0
+            },
+            {
+              "name": "다시 실행",
+              "left": 257,
+              "right": 282,
+              "width": 25,
+              "height": 25,
+              "overflow": 0
+            },
+            {
+              "name": "창 숨기기",
+              "left": 291,
+              "right": 316,
+              "width": 25,
+              "height": 25,
+              "overflow": 0
+            },
+            {
+              "name": "닫기",
+              "left": 316,
+              "right": 341,
+              "width": 25,
+              "height": 25,
+              "overflow": 0
+            }
+          ]
+        },
+        {
+          "name": "note-heading svelte-1bd5ar4",
+          "overflow": 0,
+          "buttons": [
+            {
+              "name": "새 노트",
+              "left": 258.796875,
+              "right": 339,
+              "width": 80.203125,
+              "height": 25,
+              "overflow": 0
+            }
+          ]
+        },
+        {
+          "name": "note-tools svelte-1bd5ar4",
+          "overflow": 0,
+          "buttons": [
+            {
+              "name": "서식",
+              "left": 11,
+              "right": 74.375,
+              "width": 63.375,
+              "height": 26,
+              "overflow": 0
+            },
+            {
+              "name": "알림",
+              "left": 102.1875,
+              "right": 164.5625,
+              "width": 62.375,
+              "height": 26,
+              "overflow": 0
+            },
+            {
+              "name": "급식창 열기",
+              "left": 191.84375,
+              "right": 241.390625,
+              "width": 49.546875,
+              "height": 26,
+              "overflow": 0
+            },
+            {
+              "name": "메뉴",
+              "left": 268.578125,
+              "right": 331.171875,
+              "width": 62.59375,
+              "height": 26,
+              "overflow": 0
+            }
+          ]
+        },
+        {
+          "name": "format-tools svelte-1bd5ar4",
+          "overflow": 0,
+          "buttons": [
+            {
+              "name": "글자 크기 목록 열기",
+              "left": 122.5,
+              "right": 136.5,
+              "width": 14,
+              "height": 11,
+              "overflow": 0
+            },
+            {
+              "name": "굵게",
+              "left": 190,
+              "right": 214,
+              "width": 24,
+              "height": 25,
+              "overflow": 0
+            },
+            {
+              "name": "기울임",
+              "left": 215,
+              "right": 239,
+              "width": 24,
+              "height": 25,
+              "overflow": 0
+            },
+            {
+              "name": "밑줄",
+              "left": 240,
+              "right": 264,
+              "width": 24,
+              "height": 25,
+              "overflow": 0
+            },
+            {
+              "name": " ",
+              "left": 265,
+              "right": 289,
+              "width": 24,
+              "height": 25,
+              "overflow": 0
+            },
+            {
+              "name": " ",
+              "left": 290,
+              "right": 314,
+              "width": 24,
+              "height": 25,
+              "overflow": 0
+            },
+            {
+              "name": "더보기",
+              "left": 315,
+              "right": 339,
+              "width": 24,
+              "height": 25,
+              "overflow": 0
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "layout-480-dark",
+      "detail": [
+        {
+          "name": "tidy-header-surface titlebar svelte-1l8wugd header-dark",
+          "overflow": 0,
+          "buttons": [
+            {
+              "name": "항상 위",
+              "left": 11,
+              "right": 36,
+              "width": 25,
+              "height": 25,
+              "overflow": 0
+            },
+            {
+              "name": "실행 취소",
+              "left": 362,
+              "right": 387,
+              "width": 25,
+              "height": 25,
+              "overflow": 0
+            },
+            {
+              "name": "다시 실행",
+              "left": 387,
+              "right": 412,
+              "width": 25,
+              "height": 25,
+              "overflow": 0
+            },
+            {
+              "name": "창 숨기기",
+              "left": 421,
+              "right": 446,
+              "width": 25,
+              "height": 25,
+              "overflow": 0
+            },
+            {
+              "name": "닫기",
+              "left": 446,
+              "right": 471,
+              "width": 25,
+              "height": 25,
+              "overflow": 0
+            }
+          ]
+        },
+        {
+          "name": "note-heading svelte-1bd5ar4",
+          "overflow": 0,
+          "buttons": [
+            {
+              "name": "새 노트",
+              "left": 388.796875,
+              "right": 469,
+              "width": 80.203125,
+              "height": 25,
+              "overflow": 0
+            }
+          ]
+        },
+        {
+          "name": "note-tools svelte-1bd5ar4",
+          "overflow": 0,
+          "buttons": [
+            {
+              "name": "서식",
+              "left": 11,
+              "right": 74.375,
+              "width": 63.375,
+              "height": 26,
+              "overflow": 0
+            },
+            {
+              "name": "알림",
+              "left": 150.9375,
+              "right": 213.3125,
+              "width": 62.375,
+              "height": 26,
+              "overflow": 0
+            },
+            {
+              "name": "급식창 열기",
+              "left": 273.09375,
+              "right": 322.640625,
+              "width": 49.546875,
+              "height": 26,
+              "overflow": 0
+            },
+            {
+              "name": "메뉴",
+              "left": 382.328125,
+              "right": 444.921875,
+              "width": 62.59375,
+              "height": 26,
+              "overflow": 0
+            }
+          ]
+        },
+        {
+          "name": "format-tools svelte-1bd5ar4",
+          "overflow": 0,
+          "buttons": [
+            {
+              "name": "글자 크기 목록 열기",
+              "left": 122,
+              "right": 136,
+              "width": 14,
+              "height": 11,
+              "overflow": 0
+            },
+            {
+              "name": "굵게",
+              "left": 320,
+              "right": 344,
+              "width": 24,
+              "height": 25,
+              "overflow": 0
+            },
+            {
+              "name": "기울임",
+              "left": 345,
+              "right": 369,
+              "width": 24,
+              "height": 25,
+              "overflow": 0
+            },
+            {
+              "name": "밑줄",
+              "left": 370,
+              "right": 394,
+              "width": 24,
+              "height": 25,
+              "overflow": 0
+            },
+            {
+              "name": " ",
+              "left": 395,
+              "right": 419,
+              "width": 24,
+              "height": 25,
+              "overflow": 0
+            },
+            {
+              "name": " ",
+              "left": 420,
+              "right": 444,
+              "width": 24,
+              "height": 25,
+              "overflow": 0
+            },
+            {
+              "name": "더보기",
+              "left": 445,
+              "right": 469,
+              "width": 24,
+              "height": 25,
+              "overflow": 0
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "layout-640-dark",
+      "detail": [
+        {
+          "name": "tidy-header-surface titlebar svelte-1l8wugd header-dark",
+          "overflow": 0,
+          "buttons": [
+            {
+              "name": "항상 위",
+              "left": 11,
+              "right": 36,
+              "width": 25,
+              "height": 25,
+              "overflow": 0
+            },
+            {
+              "name": "실행 취소",
+              "left": 522,
+              "right": 547,
+              "width": 25,
+              "height": 25,
+              "overflow": 0
+            },
+            {
+              "name": "다시 실행",
+              "left": 547,
+              "right": 572,
+              "width": 25,
+              "height": 25,
+              "overflow": 0
+            },
+            {
+              "name": "창 숨기기",
+              "left": 581,
+              "right": 606,
+              "width": 25,
+              "height": 25,
+              "overflow": 0
+            },
+            {
+              "name": "닫기",
+              "left": 606,
+              "right": 631,
+              "width": 25,
+              "height": 25,
+              "overflow": 0
+            }
+          ]
+        },
+        {
+          "name": "note-heading svelte-1bd5ar4",
+          "overflow": 0,
+          "buttons": [
+            {
+              "name": "새 노트",
+              "left": 548.796875,
+              "right": 629,
+              "width": 80.203125,
+              "height": 25,
+              "overflow": 0
+            }
+          ]
+        },
+        {
+          "name": "note-tools svelte-1bd5ar4",
+          "overflow": 0,
+          "buttons": [
+            {
+              "name": "서식",
+              "left": 11,
+              "right": 74.375,
+              "width": 63.375,
+              "height": 26,
+              "overflow": 0
+            },
+            {
+              "name": "알림",
+              "left": 210.9375,
+              "right": 273.3125,
+              "width": 62.375,
+              "height": 26,
+              "overflow": 0
+            },
+            {
+              "name": "급식창 열기",
+              "left": 373.09375,
+              "right": 422.640625,
+              "width": 49.546875,
+              "height": 26,
+              "overflow": 0
+            },
+            {
+              "name": "메뉴",
+              "left": 522.328125,
+              "right": 584.921875,
+              "width": 62.59375,
+              "height": 26,
+              "overflow": 0
+            }
+          ]
+        },
+        {
+          "name": "format-tools svelte-1bd5ar4",
+          "overflow": 0,
+          "buttons": [
+            {
+              "name": "글자 크기 목록 열기",
+              "left": 122,
+              "right": 136,
+              "width": 14,
+              "height": 11,
+              "overflow": 0
+            },
+            {
+              "name": "굵게",
+              "left": 480,
+              "right": 504,
+              "width": 24,
+              "height": 25,
+              "overflow": 0
+            },
+            {
+              "name": "기울임",
+              "left": 505,
+              "right": 529,
+              "width": 24,
+              "height": 25,
+              "overflow": 0
+            },
+            {
+              "name": "밑줄",
+              "left": 530,
+              "right": 554,
+              "width": 24,
+              "height": 25,
+              "overflow": 0
+            },
+            {
+              "name": " ",
+              "left": 555,
+              "right": 579,
+              "width": 24,
+              "height": 25,
+              "overflow": 0
+            },
+            {
+              "name": " ",
+              "left": 580,
+              "right": 604,
+              "width": 24,
+              "height": 25,
+              "overflow": 0
+            },
+            {
+              "name": "더보기",
+              "left": 605,
+              "right": 629,
+              "width": 24,
+              "height": 25,
+              "overflow": 0
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "menu-bounds-and-escape",
+      "detail": "14 viewport/theme combinations"
+    },
+    {
+      "name": "short-window-reset-cancel",
+      "detail": "Scrollable menu, default cancel focus, Escape preserves content"
+    },
+    {
+      "name": "create-menu",
+      "detail": "Two separate existing creation callbacks"
+    },
+    {
+      "name": "keyboard-and-outside-close",
+      "detail": "Arrow navigation and outside dismissal"
+    },
+    {
+      "name": "selection-and-reminder",
+      "detail": "Existing state/event route with visible status"
+    },
+    {
+      "name": "format-persistence-and-selection",
+      "detail": "Collapse persists; mouse bold, keyboard italic, palette color, 18pt retain editor selection"
+    },
+    {
+      "name": "font-presets-keyboard",
+      "detail": "Enter opens, arrows navigate, Enter applies, Escape returns focus"
+    },
+    {
+      "name": "format-popup-bounds",
+      "detail": "Symbols stay inside a 250x300 viewport"
+    },
+    {
+      "name": "single-row-format",
+      "detail": "Both designs: 22 resize cases, 200–640 px, all fields/buttons aligned and unclipped"
+    },
+    {
+      "name": "settings-only-design",
+      "detail": "6 widths: no header switch; classic pin first, modern pin beside brand; tools and close buttons preserved"
+    },
+    {
+      "name": "settings-design-selection",
+      "detail": "Mouse and arrow keys apply immediately; Cancel preserves the explicitly immediate preference"
+    },
+    {
+      "name": "runtime-errors",
+      "detail": []
+    }
+  ]
+}

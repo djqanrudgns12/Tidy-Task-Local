@@ -1,5 +1,5 @@
 <script>
-  import { onMount, onDestroy } from "svelte";
+  import { onMount, onDestroy, tick } from "svelte";
   import { ChevronDown } from "lucide-svelte";
   import { FONT_SIZE_PRESETS } from "../lib/fontSize.js";
 
@@ -112,12 +112,23 @@
     if (popupEl && popupEl.contains(e.target)) return;
     closeList();
   }
+  /** @param {KeyboardEvent} event */
+  function closeOnEscape(event) {
+    if (!open || event.key !== 'Escape') return;
+    event.preventDefault();
+    open = false;
+    /** @type {HTMLDivElement | null} */ (rootEl)?.querySelector('button')?.focus();
+  }
   onMount(() => {
+    document.addEventListener('keydown', closeOnEscape);
+    document.addEventListener('focusin', onDocDown);
     document.addEventListener("mousedown", onDocDown);
     window.addEventListener("resize", closeList);
     window.addEventListener("scroll", onScrollCheck, true);
   });
   onDestroy(() => {
+    document.removeEventListener('keydown', closeOnEscape);
+    document.removeEventListener('focusin', onDocDown);
     document.removeEventListener("mousedown", onDocDown);
     window.removeEventListener("resize", closeList);
     window.removeEventListener("scroll", onScrollCheck, true);
@@ -156,7 +167,12 @@
       onmousedown={(e) => { e.preventDefault(); beforeInteract(); toggleList(); }}
       class="flex items-center justify-center w-3.5 shrink-0 opacity-70 hover:opacity-100 transition-opacity"
       title="크기 선택"
-      aria-label="글자 크기 목록 열기"
+      aria-label="글자 크기 목록 열기" aria-expanded={open}
+      onkeydown={async (event) => {
+        if (!['Enter', ' ', 'ArrowDown'].includes(event.key)) return;
+        event.preventDefault(); beforeInteract(); toggleList();
+        await tick(); /** @type {HTMLDivElement | null} */ (popupEl)?.querySelector('button')?.focus();
+      }}
     >
       <ChevronDown size={11} style="color: inherit;" />
     </button>
@@ -178,6 +194,15 @@
         <button
           type="button"
           onmousedown={(e) => { e.preventDefault(); selectPreset(p); }}
+          onkeydown={(event) => {
+            if (event.key === 'Enter' || event.key === ' ') {
+              event.preventDefault(); selectPreset(p); /** @type {HTMLDivElement | null} */ (rootEl)?.querySelector('button')?.focus();
+            } else if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+              event.preventDefault();
+              const next = event.key === 'ArrowDown' ? event.currentTarget.nextElementSibling : event.currentTarget.previousElementSibling;
+              if (next instanceof HTMLElement) next.focus();
+            }
+          }}
           class="w-full text-left px-2.5 py-1 text-[11px] transition-colors {Math.round(value) === p
             ? dark ? 'bg-amber-500/20 text-amber-300' : 'bg-amber-100 text-amber-700'
             : dark ? 'text-gray-200 hover:bg-white/10' : 'text-gray-700 hover:bg-gray-100'}"

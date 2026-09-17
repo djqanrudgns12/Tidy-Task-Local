@@ -8,9 +8,11 @@
     getTidyTheme,
   } from '../lib/themes.js';
 
+  /** @type {{value?:string,isDarkMode?:boolean,onChange?:(value:string)=>void}} */
   let {
     value = $bindable(DEFAULT_THEME_ID),
     isDarkMode = false,
+    onChange = (_value) => {},
   } = $props();
 
   const listboxId = 'tidy-theme-picker-listbox';
@@ -86,6 +88,7 @@
 
   function selectTheme(themeId) {
     value = themeId;
+    onChange(themeId);
     closePicker();
   }
 

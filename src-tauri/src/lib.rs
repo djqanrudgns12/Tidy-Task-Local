@@ -3,6 +3,7 @@ use std::path::Path;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tauri::{Manager, Emitter};
 use tauri_plugin_autostart::MacosLauncher;
+mod neis;
 
 // 모든 창이 함께 쓰는 저장 파일과 그 백업 파일 이름
 const STORE_FILE: &str = "tidy-task-config.json";
@@ -244,7 +245,7 @@ pub fn run() {
                 let mut has_active_notes = false;
                 for label in windows.keys() {
                     // 삭제 중인 창 자신은 제외하고 남은 창이 있는지 검사합니다.
-                    if label != destroyed_label && (label == "main" || label.starts_with("note-") || label.starts_with("tinynote-") || label == "reminder" || label == "archive") {
+                    if label != destroyed_label && (label == "main" || label.starts_with("note-") || label.starts_with("tinynote-") || label == "reminder" || label == "archive" || matches!(label.as_str(), "meal" | "meal-search" | "meal-settings")) {
                         has_active_notes = true;
                         break;
                     }
@@ -267,7 +268,7 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_opener::init())
-        .invoke_handler(tauri::generate_handler![save_custom_font, store_health])
+        .invoke_handler(tauri::generate_handler![save_custom_font, store_health, neis::neis_search_schools, neis::neis_meals, neis::neis_schedule, neis::meal_take_launch_token])
         .setup(|app| {
             // 어떤 창보다 먼저 저장 파일을 점검·백업합니다.
             protect_store_file(app.handle());
@@ -311,11 +312,12 @@ pub fn run() {
                 use tauri::tray::TrayIconBuilder;
 
                 let open_i = MenuItem::with_id(app, "open", "열기 (Open)", true, None::<&str>)?;
+                let meal_i = MenuItem::with_id(app, "meal", "급식창 열기", true, None::<&str>)?;
                 let new_main_i = MenuItem::with_id(app, "new_main", "새 Tidy Task", true, None::<&str>)?;
                 let new_tiny_i = MenuItem::with_id(app, "new_tiny", "새 Tiny Note", true, None::<&str>)?;
                 let reset_coord_i = MenuItem::with_id(app, "reset_coord", "좌표 초기화", true, None::<&str>)?;
                 let quit_i = MenuItem::with_id(app, "quit", "종료 (Quit)", true, None::<&str>)?;
-                let menu = Menu::with_items(app, &[&open_i, &new_main_i, &new_tiny_i, &reset_coord_i, &quit_i])?;
+                let menu = Menu::with_items(app, &[&open_i, &meal_i, &new_main_i, &new_tiny_i, &reset_coord_i, &quit_i])?;
 
                 let _tray = TrayIconBuilder::new()
                     .icon(app.default_window_icon().cloned().unwrap())
@@ -334,6 +336,21 @@ pub fn run() {
                         }
                         // ✨ 3. 트레이 메뉴 '열기' 시에도 방어 로직
                         "open" => show_or_create_main(app),
+                        "meal" => {
+                            if let Some(win) = app.get_webview_window("meal") {
+                                let _ = win.unminimize();
+                                ensure_window_on_screen(&win);
+                                let _ = win.show();
+                                let _ = win.set_focus();
+                            } else {
+                                // 메모 창이 없어도 열리며, 화면에서 급식 전용 저장소의 위치를 복원합니다.
+                                let _ = tauri::WebviewWindowBuilder::new(app, "meal", tauri::WebviewUrl::App("index.html".into()))
+                                    .title("오늘의 급식").inner_size(320.0,460.0).min_inner_size(180.0,120.0)
+                                    // Windows의 undecorated shadow가 투명 모서리에 만드는 1px 흰 테두리를 제거합니다.
+                                    // 창 내부의 MealFrame이 자체 보더와 둥근 모서리를 그립니다.
+                                    .decorations(false).transparent(true).shadow(false).resizable(true).visible(false).build();
+                            }
+                        }
                         // 아래 요청은 모든 창에 방송하고, 매니저 창 하나만 처리합니다.
                         // 왜: 예전에는 main 창에만 보내서 main을 닫으면 메뉴가 아무 반응이 없었습니다.
                         "new_main" => {

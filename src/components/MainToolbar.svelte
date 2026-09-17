@@ -1,18 +1,53 @@
 <script>
   import {
+    Eye, BellOff, Archive,
     AlignJustify,
     Bold,
     Italic,
     Underline,
-    Eye,
     MousePointer2,
     Link,
     Bell,
-    BellOff,
-    Archive,
+    ChevronDown,
+    Check,
+    Type,
     MoreHorizontal
   } from "lucide-svelte";
-  import { onMount, onDestroy } from "svelte";
+  import { onMount } from "svelte";
+  import HeaderActions from './HeaderActions.svelte';
+  import '../lib/header.css';
+  import { isTauri } from '@tauri-apps/api/core';
+  let formatOpen = $state(true);
+  function toggleFormat() {
+    saveSelection();
+    formatOpen = !formatOpen;
+    activePopup = null;
+    try { localStorage.setItem('tidy:header:format-open', String(formatOpen)); } catch {}
+  }
+  function toggleReminders() {
+    const payload = appState.takeSnapshot();
+    payload.globalFont = appState.fontFamily;
+    payload.showReminders = !appState.showReminders;
+    payload.targetWindow = appState.windowLabel;
+    emit('req-apply-settings', payload);
+  }
+  onMount(() => {
+    try { formatOpen = localStorage.getItem('tidy:header:format-open') !== 'false'; } catch {}
+  });
+  import MealIcon from './meal/MealIcon.svelte';
+  import { toggleMeal } from '../lib/meal/mealWindows.js';
+  import { listen } from '@tauri-apps/api/event';
+  let mealOpen = $state(false);
+  let mealError = $state('');
+  onMount(() => {
+    if (!isTauri()) return;
+    let disposed = false;
+    /** @type {undefined | (() => void)} */ let off;
+    void WebviewWindow.getByLabel('meal').then(win => { if (!disposed) mealOpen = Boolean(win); }).catch(() => {});
+    void listen('meal-window-state', event => mealOpen = Boolean(event.payload)).then(fn => { if(disposed) fn(); else off=fn; }).catch(() => {});
+    return () => { disposed=true; off?.(); };
+  });
+  async function handleMeal() { try { await toggleMeal(); mealError=''; } catch { mealError='급식창을 전환하지 못했어요. 다시 눌러 주세요.'; } }
   import { appState } from "../lib/appState.svelte.js";
   import { openUrl } from "@tauri-apps/plugin-opener";
   import { emit } from "@tauri-apps/api/event";
@@ -57,6 +92,7 @@
   let isUnderline = $state(false);
   let selAlign = $state('left');
 
+  /** @type {null | 'symbols' | 'link' | 'more' | 'textColor' | 'bgColor'} */
   let activePopup = $state(null);
   let symPage = $state(0);
   
@@ -67,12 +103,16 @@
   let showDeleteLinkModal = $state(false);
   let pendingDeleteATag = $state(null);
 
+  /** @type {Range | null} */
   let savedRange = null;
 
   function saveSelection() {
     const sel = window.getSelection();
     if (sel && sel.rangeCount > 0) {
-      savedRange = sel.getRangeAt(0).cloneRange();
+      const range = sel.getRangeAt(0);
+      const node = range.commonAncestorContainer;
+      const element = node instanceof Element ? node : node.parentElement;
+      if (element?.closest('[contenteditable="true"]')) savedRange = range.cloneRange();
     }
   }
 
@@ -80,11 +120,11 @@
     if (!savedRange) return false;
     
     if (requireFocus) {
-      let container = savedRange.commonAncestorContainer;
-      if (container.nodeType === 3) container = container.parentNode;
-      const editable = container.closest('[contenteditable="true"]');
+      const node = savedRange.commonAncestorContainer;
+      const container = node instanceof Element ? node : node.parentElement;
+      const editable = container?.closest('[contenteditable="true"]');
       if (editable && document.activeElement !== editable) {
-        editable.focus({ preventScroll: true }); // 화면 떨림 완벽 방어
+        /** @type {HTMLElement} */ (editable).focus({ preventScroll: true }); // 화면 떨림 완벽 방어
       }
     }
     
@@ -201,7 +241,8 @@
       if (originalText === "") {
         document.execCommand("insertHTML", false, `<a href="${url}" target="_blank" rel="noopener noreferrer" style="${linkStyle}">${url}</a>`);
       } else {
-        const fragment = savedRange.cloneContents();
+        const fragment = savedRange?.cloneContents();
+        if (!fragment) return;
         const div = document.createElement('div');
         div.appendChild(fragment);
         let innerHTML = div.innerHTML;
@@ -229,6 +270,12 @@
       if (!sel || sel.rangeCount === 0) return;
       const range = sel.getRangeAt(0);
       let node = range.startContainer;
+      // selectNode() anchors the range on its parent. Read the selected text's style,
+      // otherwise a just-applied size/color is immediately replaced by the editor default.
+      if (!range.collapsed && node instanceof Element) {
+        node = node.childNodes[range.startOffset] || node;
+        while (node.firstChild) node = node.firstChild;
+      }
       if (node.nodeType === Node.ELEMENT_NODE && range.collapsed && range.startOffset > 0) {
         let prevNode = node.childNodes[range.startOffset - 1];
         while (prevNode && prevNode.lastChild) prevNode = prevNode.lastChild;
@@ -330,7 +377,7 @@
       NodeFilter.SHOW_TEXT,
       {
         acceptNode: function(node) {
-          if (savedRange.intersectsNode(node)) return NodeFilter.FILTER_ACCEPT;
+          if (savedRange?.intersectsNode(node)) return NodeFilter.FILTER_ACCEPT;
           return NodeFilter.FILTER_REJECT;
         }
       }
@@ -410,6 +457,51 @@
       }
     }
   });
+
+
+  /** @type {HTMLElement | null} */ let popupTrigger = null;
+  /** @param {HTMLElement} node */
+  function editorControls(node) {
+    /** @param {MouseEvent} event */
+    function down(event) {
+      if (!(event.target instanceof Element)) return;
+      if (event.target.closest('input, select, option')) return;
+      saveSelection();
+      event.preventDefault();
+    }
+    /** @param {Event} event */
+    function remember(event) {
+      if (!(event.target instanceof Element)) return;
+      const button = event.target.closest('button');
+      if (button && !button.closest('.editor-popup')) popupTrigger = button;
+    }
+    node.addEventListener('mousedown', down);
+    node.addEventListener('click', remember, true);
+    return { destroy() { node.removeEventListener('mousedown', down); node.removeEventListener('click', remember, true); } };
+  }
+  /** @param {HTMLDivElement} node */
+  function editorPopup(node) {
+    // The top layer avoids clipping by the rounded, overflow-hidden native window shell.
+    if (typeof node.showPopover === 'function') node.showPopover();
+    document.dispatchEvent(new CustomEvent('tidy-header-popover', { detail: 'format' }));
+    function position() {
+      const anchor = popupTrigger?.isConnected ? popupTrigger.getBoundingClientRect() : document.querySelector('.note-tools')?.getBoundingClientRect();
+      if (!anchor) return;
+      node.style.maxHeight = (window.innerHeight - 16) + 'px';
+      const height = Math.min(node.scrollHeight + 2, window.innerHeight - 16);
+      node.style.top = Math.max(8, Math.min(anchor.bottom + 6, window.innerHeight - height - 8)) + 'px';
+      node.style.left = Math.max(8, Math.min(anchor.left, window.innerWidth - node.offsetWidth - 8)) + 'px';
+    }
+    const resize = new ResizeObserver(position); resize.observe(node);
+    window.addEventListener('resize', position);
+    /** @param {KeyboardEvent} event */
+    function escape(event) {
+      if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); activePopup = null; popupTrigger?.focus(); }
+    }
+    document.addEventListener('keydown', escape, true);
+    position();
+    return { destroy() { resize.disconnect(); window.removeEventListener('resize', position); document.removeEventListener('keydown', escape, true); } };
+  }
 
   function handleGlobalMousedown(e) {
     if (!activePopup) return;
@@ -496,6 +588,9 @@
       }
     }
 
+    /** @param {Event} event */
+    function closeForHeader(event) { if (/** @type {CustomEvent} */ (event).detail !== 'format') activePopup = null; }
+    document.addEventListener('tidy-header-popover', closeForHeader);
     function handleOpenSymbol() {
       activePopup = 'symbols';
       symPage = 0;
@@ -513,6 +608,7 @@
       document.removeEventListener("keyup", handler);
       document.removeEventListener("mouseup", handler);
       document.removeEventListener("mousedown", handleGlobalMousedown);
+      document.removeEventListener('tidy-header-popover', closeForHeader);
       window.removeEventListener('open-symbol-popup', handleOpenSymbol);
       document.removeEventListener('click', handleLinkClick, true);
       document.removeEventListener('keydown', handleLinkKeydown, true);
@@ -541,7 +637,7 @@
   
 </script>
 
-<div class="relative w-full" style="z-index: 50; --slider-thumb-color: {appState.getThemeAccentColor()};">
+<div class="tidy-header-surface main-header relative w-full" class:header-dark={appState.isDarkMode} class:classic={appState.headerDesign !== 'modern'} style="z-index: 50; --header-accent: {appState.getThemeAccentColor()};">
 
   {#if showDeleteLinkModal}
     <div
@@ -573,9 +669,10 @@
     </div>
   {/if}
 
-  <div class="flex items-center justify-between px-2.5 py-1 border-b w-full" style="border-color: {appState.isDarkMode ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.05)'};">
+  {#if appState.headerDesign !== 'modern'}
+  <div class="main-toolbar-row grid items-center px-2.5 py-1 border-b w-full" style="border-color: {appState.isDarkMode ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.05)'};">
     
-    <div class="flex items-center gap-1.5 justify-start flex-1 min-w-0 pr-2">
+    <div class="main-toolbar-left flex items-center gap-1.5 justify-start min-w-0 pr-2">
       <button
         onclick={() => appState.toggleEditMode()}
         onmousedown={(e) => e.preventDefault()}
@@ -621,7 +718,7 @@
       </button>
     </div>
 
-    <div class="flex items-center justify-center shrink-0 w-[140px]">
+    <div class="flex items-center justify-center w-full min-w-0">
       <input
         type="text"
         bind:value={appState.title}
@@ -633,23 +730,37 @@
       />
     </div>
 
-    <div class="flex items-center justify-end gap-1.5 flex-1 min-w-0 pl-2" title="창 불투명도">
-      <Eye size={10} class="text-gray-400 shrink-0" />
+    <div class="meal-toolbar-actions flex items-center justify-end gap-1.5 min-w-0 pl-1">
+      <span class="opacity-eye"><Eye size={10} class="text-gray-400 shrink-0" /></span>
       <input
         type="range" min="0.2" max="1.0" step="0.05"
         bind:value={appState.opacity}
-        class="w-[60px] h-1.5 appearance-none rounded-full bg-black/15 cursor-pointer custom-slider"
+        aria-label="창 불투명도"
+        class="opacity-slider w-[44px] h-1.5 appearance-none rounded-full bg-black/15 cursor-pointer custom-slider"
       />
+      <button onclick={handleMeal} onmousedown={(e) => e.preventDefault()} aria-label={mealOpen ? '급식창 닫기' : '급식창 열기'} aria-pressed={mealOpen} title={mealError || (mealOpen ? '급식창 닫기' : '급식창 열기')} class="flex items-center justify-center w-[24px] h-[22px] rounded-md border shrink-0 transition-all hover:scale-105 active:scale-95" style="background: {mealOpen ? appState.getThemeAccentColor() : (appState.isDarkMode ? 'rgba(255,255,255,.06)' : 'rgba(255,255,255,.6)')}; color: {mealOpen ? '#fff' : appState.getThemeAccentColor()}; border-color: {appState.isDarkMode ? '#ffffff22' : '#00000022'};"><MealIcon size={14}/></button>
     </div>
   </div>
 
-  <div class="flex items-center gap-0.5 px-2 py-0.5 border-b w-full overflow-x-auto" 
-       style="border-color: {appState.isDarkMode ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.05)'};"
-       onmousedown={(e) => {
-         if (!["INPUT", "SELECT", "OPTION"].includes(e.target.tagName) && !e.target.closest('.popup-safe-area')) {
-           e.preventDefault();
-         }
-       }}>
+  {:else}
+  <div class="note-heading">
+    <input class="note-title" type="text" bind:value={appState.title} onblur={() => appState.save()} placeholder="제목 쓰기" aria-label="노트 제목" maxlength="15" />
+    <HeaderActions kind="create" />
+  </div>
+  <div class="note-tools" aria-label="노트 도구" role="group">
+    <button class="tidy-header-button" aria-expanded={formatOpen} aria-controls="main-format-tools" onmousedown={(e) => { e.preventDefault(); saveSelection(); }} onclick={toggleFormat}><Type size={14}/><span>서식</span><ChevronDown size={10} class={formatOpen ? 'rotate-180' : ''}/></button>
+    <button class="tidy-header-button reminder-button" aria-pressed={appState.showReminders} title={appState.showReminders ? '알림 표시 끄기' : '알림 표시 켜기'} onclick={toggleReminders}><Bell size={14}/><span>알림</span><span class="tool-status" aria-hidden="true">{#if appState.showReminders}<Check size={9}/>{/if}</span></button>
+    <button class="tidy-header-button meal-button" onclick={handleMeal} aria-label={mealOpen ? '급식창 닫기' : '급식창 열기'} aria-pressed={mealOpen} title={mealOpen ? '급식창 닫기' : '급식창 열기'}><MealIcon size={15}/><span>급식</span></button>
+    <HeaderActions kind="tools" onArchive={handleOpenArchive}/>
+  </div>
+  {/if}
+  {#if appState.isEditMode}<div class="selection-status"><MousePointer2 size={13}/><span>여러 항목 선택 중</span><button class="tidy-header-button" onclick={() => appState.toggleEditMode()}>완료</button></div>{/if}
+  {#if mealError}<p class="meal-error" role="alert">{mealError}</p>{/if}
+
+  {#if formatOpen || appState.headerDesign !== 'modern'}
+  <div id="main-format-tools" class="format-tools" role="group" aria-label="글자 서식"
+       style="border-color: {appState.isDarkMode ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.05)'};" use:editorControls>
+    <div class="format-fields">
     <select
       value={selFontFamily}
       onmousedown={() => { saveSelection(); }}
@@ -659,7 +770,7 @@
         if (fontObj) applyStyleDirect({ fontFamily: fontObj.family });
       }}
       class="text-[10px] bg-white/60 border border-black/10 rounded-md px-0.5 h-5 outline-none cursor-pointer hover:border-amber-400 transition-colors w-[72px] truncate shrink-0"
-      title="글꼴"
+      title="글꼴" aria-label="글꼴"
     >
       {#each appState.allFonts as font}
         <option value={font.name} style="font-family: {font.family.replace(/"/g, "'")}">{font.name}</option>
@@ -671,50 +782,51 @@
       value={selFontSize}
       max={STABLE_MAX_PT}
       dark={appState.isDarkMode}
-      boxClass="bg-white/60 border border-black/10 rounded-md h-5 text-gray-700 hover:border-amber-400 transition-colors"
+      boxClass="header-font-size rounded-md"
       onBeforeInteract={saveSelection}
       onApply={(pt) => { selFontSize = pt; applyStyleDirect({ fontSize: `${pt}pt`, lineHeight: '1.5' }); }}
     />
 
-    <div class="w-px h-3 bg-black/10 mx-0.5 shrink-0"></div>
+    </div>
+    <div class="format-buttons">
 
     <button
-      onmousedown={(e) => { e.preventDefault(); applyFormat("bold"); }}
+      onclick={(e) => { e.preventDefault(); applyFormat("bold"); }}
       class="w-6 h-6 flex items-center justify-center rounded-md transition-all shrink-0 {isBold ? 'text-amber-600 bg-amber-50' : 'text-gray-500 hover:text-black hover:bg-black/5'}"
-      title="굵게"
+      title="굵게" aria-label="굵게" aria-pressed={isBold}
     >
       <Bold size={13} strokeWidth={isBold ? 3.5 : 2.5} />
     </button>
     
     <button
-      onmousedown={(e) => { e.preventDefault(); applyFormat("italic"); }}
+      onclick={(e) => { e.preventDefault(); applyFormat("italic"); }}
       class="w-6 h-6 flex items-center justify-center rounded-md transition-all shrink-0 {isItalic ? 'text-amber-600 bg-amber-50' : 'text-gray-500 hover:text-black hover:bg-black/5'}"
-      title="기울임"
+      title="기울임" aria-label="기울임" aria-pressed={isItalic}
     >
       <Italic size={13} strokeWidth={isItalic ? 3.5 : 2.5} />
     </button>
 
     <button
-      onmousedown={(e) => { e.preventDefault(); applyFormat("underline"); }}
+      onclick={(e) => { e.preventDefault(); applyFormat("underline"); }}
       class="w-6 h-6 flex items-center justify-center rounded-md transition-all shrink-0 {isUnderline ? 'text-amber-600 bg-amber-50' : 'text-gray-500 hover:text-black hover:bg-black/5'}"
-      title="밑줄"
+      title="밑줄" aria-label="밑줄" aria-pressed={isUnderline}
     >
       <Underline size={13} strokeWidth={isUnderline ? 3.5 : 2.5} />
     </button>
 
     <button
-      onmousedown={(e) => { e.preventDefault(); saveSelection(); activePopup = activePopup === 'textColor' ? null : 'textColor'; }}
+      onclick={(e) => { e.preventDefault(); saveSelection(); activePopup = activePopup === 'textColor' ? null : 'textColor'; }}
       class="relative w-6 h-6 rounded-md hover:bg-amber-100 transition-colors flex items-center justify-center shrink-0 mx-0.5 popup-safe-area"
       title="글자 색상"
     >
       <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="text-gray-600" style="margin-top: -2px;">
         <path d="m6 15 6-11 6 11" /><path d="M9 11h6" />
       </svg>
-      <div class="absolute bottom-1 left-1 right-1 h-[4.5px] rounded-full" style="background-color: {selTextColor || '#374151'};"></div>
+      <div class="absolute bottom-1 left-1 right-1 h-[4.5px] rounded-full" style="background-color: {selTextColor || (appState.isDarkMode ? '#e2e8f0' : '#374151')};"></div>
     </button>
 
     <button
-      onmousedown={(e) => { e.preventDefault(); saveSelection(); activePopup = activePopup === 'bgColor' ? null : 'bgColor'; }}
+      onclick={(e) => { e.preventDefault(); saveSelection(); activePopup = activePopup === 'bgColor' ? null : 'bgColor'; }}
       class="relative w-6 h-6 rounded-md hover:bg-amber-100 transition-colors flex items-center justify-center shrink-0 mx-0.5 popup-safe-area"
       title="형광펜"
     >
@@ -724,30 +836,33 @@
       <div class="absolute bottom-1 left-1 right-1 h-[4.5px] rounded-full" style="background-color: {selBgColor || '#e5e7eb'};"></div>
     </button>
 
-    <div class="w-px h-3 bg-black/10 mx-0.5 shrink-0"></div>
+
 
     <button
-      onmousedown={(e) => { e.preventDefault(); saveSelection(); activePopup = activePopup === 'more' ? null : 'more'; }}
+      onclick={(e) => { e.preventDefault(); saveSelection(); activePopup = activePopup === 'more' ? null : 'more'; }}
       class="w-6 h-6 flex items-center justify-center rounded-md transition-all shrink-0 {activePopup === 'more' ? 'bg-amber-100 text-amber-700' : 'text-gray-500 hover:text-black hover:bg-black/5'} popup-safe-area"
       title="더보기"
     >
       <MoreHorizontal size={14} strokeWidth={2.5} />
     </button>
+    </div>
   </div>
+
+  {/if}
 
   {#if activePopup}
     <div
-      role="listbox"
+      role="dialog" aria-label="서식 옵션" popover="manual" use:editorPopup use:editorControls
       tabindex="-1"
-      class="absolute z-[100000] bg-white/98 border border-black/8 rounded-xl shadow-xl overflow-hidden popup-safe-area right-2"
-      style="backdrop-filter:blur(12px); margin-top: 4px;"
-      onmousedown={(e) => { if(activePopup !== 'link') e.preventDefault(); }}
+      class="editor-popup popup-safe-area"
+
+
     >
       {#if activePopup === 'symbols'}
         <div class="flex items-center gap-1.5 border-b border-black/5 px-2 py-1.5 bg-black/5 w-[320px]">
           {#each SYM_PAGES as _, i}
             <button
-              onmousedown={(e) => { e.preventDefault(); symPage = i; }}
+              onclick={(e) => { e.preventDefault(); symPage = i; }}
               class="w-4 h-4 flex items-center justify-center rounded-sm text-[9px] font-bold transition-all {symPage === i ? 'bg-amber-400 text-white shadow-sm' : 'bg-white/50 text-gray-400 hover:text-gray-600'}"
             >
               {i + 1}
@@ -756,10 +871,10 @@
           <div class="flex-1"></div>
           <span class="text-[9px] font-bold text-amber-600 pr-1">{SYM_PAGES[symPage].label}</span>
         </div>
-        <div class="grid grid-cols-10 gap-0.5 p-1.5">
+        <div class="symbol-grid">
           {#each SYM_PAGES[symPage].syms as sym}
             <button
-              onmousedown={(e) => { e.preventDefault(); insertSymbol(sym); }}
+              onclick={(e) => { e.preventDefault(); insertSymbol(sym); }}
               class="w-6 h-6 flex items-center justify-center text-[12px] rounded-lg hover:bg-amber-100 hover:text-amber-700 active:scale-90 cursor-pointer transition-all"
               title={sym}
             >
@@ -773,8 +888,8 @@
           <input type="text" bind:value={linkUrl} onkeydown={(e) => { if(e.key === 'Enter') { e.preventDefault(); insertLink(); } }} placeholder="https:// URL 입력" class="w-full text-[10px] px-2 py-1.5 border border-black/10 rounded outline-none focus:border-amber-400" />
           <input type="text" bind:value={linkText} onkeydown={(e) => { if(e.key === 'Enter') { e.preventDefault(); insertLink(); } }} placeholder="표시할 텍스트 (선택사항)" class="w-full text-[10px] px-2 py-1.5 border border-black/10 rounded outline-none focus:border-amber-400" />
           <div class="flex gap-1 mt-0.5">
-            <button onmousedown={(e) => { e.preventDefault(); activePopup = null; }} class="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-600 font-bold py-1.5 rounded text-[10px] transition-colors">취소</button>
-            <button onmousedown={(e) => { e.preventDefault(); insertLink(); }} class="flex-1 bg-amber-400 hover:bg-amber-500 text-white font-bold py-1.5 rounded text-[10px] transition-colors">적용</button>
+            <button onclick={(e) => { e.preventDefault(); activePopup = null; }} class="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-600 font-bold py-1.5 rounded text-[10px] transition-colors">취소</button>
+            <button onclick={(e) => { e.preventDefault(); insertLink(); }} class="popup-primary flex-1 bg-amber-400 hover:bg-amber-500 text-white font-bold py-1.5 rounded text-[10px] transition-colors">적용</button>
           </div>
         </div>
 
@@ -785,7 +900,7 @@
             <span class="text-[10px] font-bold text-gray-600 shrink-0">자간 조절</span>
             <div class="flex items-center gap-1">
               <button 
-                onmousedown={(e) => {
+                onclick={(e) => {
                   e.preventDefault();
                   saveSelection();
                   if (selLetterSp === "") {
@@ -824,7 +939,7 @@
                 style="color: {appState.isDarkMode ? '#e2e8f0' : '#1f2937'};"
               />
               <button 
-                onmousedown={(e) => {
+                onclick={(e) => {
                   e.preventDefault();
                   saveSelection();
                   if (selLetterSp === "") {
@@ -843,21 +958,21 @@
           <!-- 정렬, 특수기호, 링크 버튼 -->
           <div class="flex items-center gap-1">
             <button
-              onmousedown={(e) => { e.preventDefault(); saveSelection(); handleAlignCycle(); }}
+              onclick={(e) => { e.preventDefault(); saveSelection(); handleAlignCycle(); }}
               class="flex-1 py-1.5 flex flex-col items-center justify-center gap-1 rounded-md transition-all {selAlign !== 'left' && selAlign !== 'start' ? 'text-amber-600 bg-amber-50' : 'text-gray-600 hover:text-black hover:bg-black/5'}"
             >
               <AlignJustify size={14} strokeWidth={2.5} />
               <span class="text-[8px] font-bold">정렬</span>
             </button>
             <button
-              onmousedown={(e) => { e.preventDefault(); saveSelection(); activePopup = 'symbols'; symPage = 0; }}
+              aria-label="기호" onclick={(e) => { e.preventDefault(); saveSelection(); activePopup = 'symbols'; symPage = 0; }}
               class="flex-1 py-1.5 flex flex-col items-center justify-center gap-1 text-gray-600 hover:text-black hover:bg-black/5 rounded-md transition-all font-bold popup-safe-area"
             >
               <span style="font-size: 14px; line-height: 1;">Ω</span>
               <span class="text-[8px] font-bold">기호</span>
             </button>
             <button
-              onmousedown={(e) => { 
+              onclick={(e) => {
                 e.preventDefault(); 
                 saveSelection(); 
                 activePopup = 'link'; 
@@ -876,7 +991,7 @@
         <div class="p-2 w-[180px]">
           {#if activePopup === 'bgColor'}
             <button
-              onmousedown={(e) => {
+              onclick={(e) => {
                 e.preventDefault();
                 applyFormat('hiliteColor', 'transparent');
                 activePopup = null;
@@ -886,10 +1001,10 @@
               🚫 색상 없음 (투명)
             </button>
           {/if}
-          <div class="grid grid-cols-10 gap-1">
+          <div class="color-grid">
             {#each PALETTE as color}
               <button
-                onmousedown={(e) => {
+                onclick={(e) => {
                   e.preventDefault();
                   if (activePopup === 'textColor') applyStyleDirect({ color: color }, true);
                   if (activePopup === 'bgColor') applyFormat('hiliteColor', color);
@@ -908,28 +1023,69 @@
 </div>
 
 <style>
-  input[type=range].custom-slider {
-    -webkit-appearance: none;
-    appearance: none;
-    outline: none;
+  .main-toolbar-row { grid-template-columns:minmax(0,1fr) clamp(60px,calc(100% - 184px),140px) minmax(0,1fr); }
+  .classic .format-tools { padding:2px 8px; gap:3px; background:transparent; }
+  .classic .format-fields > select { height:22px; }
+  .classic .format-tools :global(.header-font-size) { height:22px; }
+
+
+  input[type=range].custom-slider { appearance:none; outline:none; }
+  input[type=range].custom-slider::-webkit-slider-thumb { appearance:none; width:10px; height:10px; border-radius:50%; background:var(--header-accent); cursor:pointer; }
+  @media(max-width:350px) { .opacity-eye { display:none; } }
+  @media(max-width:290px) { .opacity-slider { display:none; } }
+
+  .editor-popup { display:block; position:fixed; inset:auto; margin:0; border:1px solid var(--header-line); border-radius:12px; background:var(--header-panel); color:var(--header-ink); box-shadow:0 12px 32px #14203328; overflow:auto; max-width:calc(100vw - 16px); z-index:200000; }
+  .editor-popup > div { max-width:100%; }
+  .editor-popup :global(button), .editor-popup :global(input), .editor-popup :global(span) { color:var(--header-ink); }
+  .editor-popup :global(button) { min-height:28px; font-size:12px; }
+  .editor-popup :global(span) { font-size:12px; }
+  .editor-popup :global(input) { background:var(--header-field); min-height:28px; font-size:12px; }
+  .editor-popup .popup-primary { background:var(--header-ink); color:var(--header-panel); }
+  .symbol-grid { display:grid; grid-template-columns:repeat(8,minmax(0,1fr)); gap:3px; padding:8px; }
+  .color-grid { display:grid; grid-template-columns:repeat(6,minmax(0,1fr)); gap:5px; }
+  .color-grid > button { width:22px; height:22px; min-height:22px; }
+  .main-header { flex-shrink:0; border-bottom:1px solid var(--header-line); }
+  .note-heading { display:flex; align-items:center; gap:8px; padding:3px 10px 3px; }
+  .note-title { flex:1; min-width:0; width:0; border:1px solid transparent; border-radius:5px; padding:3px 0; background:transparent; color:var(--header-ink); font-family:inherit; font-size:14px; font-weight:600; letter-spacing:-.2px; text-overflow:ellipsis; }
+  .note-title::placeholder { color:var(--header-muted); opacity:1; font-weight:400; }
+  .note-title:hover { border-bottom-color:var(--header-line); }
+  .note-title:focus { background:var(--header-field); }
+  .note-tools { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:5px; padding:1px 10px 5px; }
+  .note-tools :global(.tidy-header-button) { width:auto; justify-self:center; padding:3px 5px; gap:4px; font-size:11px; font-weight:500; border-radius:5px; border-color:transparent; background:transparent; }
+  .note-tools :global(.tidy-header-button[aria-expanded="true"]), .note-tools :global(.tidy-header-button[aria-pressed="true"]) { background:color-mix(in srgb,var(--header-accent) 6%,transparent); border-color:transparent; }
+  .note-tools :global(.tidy-header-button:hover) { background:var(--header-hover); border-color:transparent; }
+  .note-tools > .tidy-header-button:first-child { justify-self:start; }
+  .note-tools :global(.tidy-header-button > svg) { flex-shrink:0; }
+  .tool-status { width:9px; }
+  .reminder-button[aria-pressed="true"] :global(svg) { color:var(--header-accent); }
+  .selection-status { display:flex; align-items:center; gap:6px; padding:4px 12px; background:var(--header-tint); font-size:12px; }
+  .selection-status button { margin-left:auto; min-height:28px; }
+  .meal-button :global(svg) { color:var(--header-accent); }
+  .meal-error { font-size:12px; padding:6px 12px; color:var(--header-ink); }
+  /* Both groups shrink together; no wrap or clipped controls at the minimum window width. */
+  .format-tools { display:flex; flex-wrap:nowrap; align-items:center; gap:clamp(2px,1vw,5px); padding:4px 10px; border-top:1px solid var(--header-line); background:color-mix(in srgb,var(--header-hover) 30%,transparent); }
+  .format-fields, .format-buttons { display:flex; align-items:center; min-width:0; }
+  .format-fields { gap:3px; flex:0 1 130px; }
+  .format-buttons { flex:0 1 149px; gap:1px; margin-left:auto; }
+  .format-buttons > button { flex:1 1 0; min-width:0; margin:0; width:0; height:25px; border-radius:6px; color:var(--header-ink); }
+  .format-fields > select { flex:1 1 64px; min-width:0; width:0; height:23px; font-size:clamp(9px,3.65vw,11px); color:var(--header-ink); background:var(--header-field); border-color:var(--header-line); border-radius:7px; }
+  .format-fields > :global(div) { flex:0 1 61px; min-width:0; }
+  .format-tools :global(input) { min-width:0; width:clamp(15px,8vw,26px); font-size:clamp(9px,3.65vw,11px); flex:1 1 auto; }
+  .format-tools :global(.header-font-size) { height:23px; padding-inline:clamp(1px,1vw,4px); gap:1px; border:1px solid var(--header-line); border-radius:7px; background:var(--header-field); color:var(--header-ink); }
+  .format-tools :global(.header-font-size > span) { font-size:clamp(7px,3vw,9px); }
+  .format-tools :global(.header-font-size > button) { width:clamp(9px,4vw,14px); }
+  .format-buttons > button :global(svg) { width:clamp(10px,4.3vw,14px); height:clamp(10px,4.3vw,14px); color:inherit; }
+  .format-buttons > button > div { left:3px; right:3px; height:3px; bottom:3px; }
+  .format-buttons > button:hover { background:var(--header-tint); }
+  .format-buttons > button[aria-pressed="true"] { background:var(--header-tint); outline:1px solid var(--header-accent); }
+  @media(max-width:279px) {
+    .note-heading { padding-inline:8px; gap:6px; }
+    .note-title { font-size:14px; }
+    .note-tools { padding-inline:8px; gap:2px; }
+    .note-tools :global(.tidy-header-button) { font-size:11px; gap:3px; padding-inline:2px; }
+    .format-tools { padding-inline:8px; }
+    .tool-status { display:none; }
   }
-  input[type=range].custom-slider::-webkit-slider-thumb {
-    -webkit-appearance: none;
-    appearance: none;
-    width: 12px;
-    height: 12px;
-    border-radius: 50%;
-    background-color: var(--slider-thumb-color, #9ca3af);
-    box-shadow: 0 1px 3px rgba(0,0,0,0.2);
-    cursor: pointer;
-  }
-  
-  .hide-spinners::-webkit-outer-spin-button,
-  .hide-spinners::-webkit-inner-spin-button {
-    -webkit-appearance: none;
-    margin: 0;
-  }
-  .hide-spinners {
-    -moz-appearance: textfield;
-  }
+
+  @media(max-width:229px) { .note-tools { grid-template-columns:repeat(2,minmax(0,1fr)); } }
 </style>

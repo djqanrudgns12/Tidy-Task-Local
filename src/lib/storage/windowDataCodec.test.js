@@ -51,7 +51,7 @@ const MAIN = { label: 'main', globalMuteSound: true };
 
 test('필드 표는 5.0.0 저장 키 순서와 개수를 그대로 유지한다', () => {
   // 5.0.5에서 추가된 필드는 항상 "끝에만" 붙입니다 (기존 키 순서 보존).
-  assert.deepEqual(WINDOW_FIELDS.map((f) => f.name), [...Object.keys(FULL_V500), 'windowPhysX', 'windowPhysY']);
+  assert.deepEqual(WINDOW_FIELDS.map((f) => f.name), [...Object.keys(FULL_V500), 'windowPhysX', 'windowPhysY', 'headerDesign']);
   assert.deepEqual(
     SNAPSHOT_FIELDS,
     ['todos', 'archivedTodos', 'notes', 'themeColor', 'opacity', 'fontFamily', 'uiFontFamily',
@@ -207,4 +207,19 @@ test('5.0.5 데이터: 물리 좌표도 복원 → 저장 왕복 후 그대로�
   assert.equal(decoded.windowPhysY, -8);
   const encoded = encodeWindowData((name) => decoded[name]);
   assert.equal(JSON.stringify(encoded), JSON.stringify(v502));
+});
+
+
+test('상단 디자인은 클래식 기본값이며 새 디자인 선택만 저장하고 Undo에 섞지 않는다', () => {
+  for (const value of [undefined, null, '', 'invalid', 'classic']) {
+    const state = decodeWindowData({ headerDesign: value }, MAIN);
+    assert.equal(state.headerDesign, 'classic');
+    assert.equal(encodeWindowData(name => state[name]).headerDesign, undefined);
+  }
+  const original = { ...FULL_V500, headerDesign: 'modern' };
+  const restored = decodeWindowData(original, MAIN);
+  const encoded = encodeWindowData(name => restored[name]);
+  assert.equal(encoded.headerDesign, 'modern');
+  assert.deepEqual(encoded.todos, FULL_V500.todos);
+  assert.equal(Object.hasOwn(pickSnapshot(name => restored[name]), 'headerDesign'), false);
 });

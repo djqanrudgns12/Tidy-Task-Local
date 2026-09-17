@@ -1,5 +1,7 @@
 <script>
+  import { applyHeaderDesignChoice } from './lib/headerDesign.js';
   import { onMount, onDestroy } from "svelte";
+  import { launchMealOnce } from './lib/meal/mealWindows.js';
   import { slide, fade, scale } from "svelte/transition";
   import { Check, Eraser } from "lucide-svelte";
   import { appState } from "./lib/appState.svelte.js";
@@ -49,6 +51,8 @@
     LogicalPosition,
   } from "@tauri-apps/api/dpi";
 
+  /** @type {(() => void) | undefined} */
+  let unlistenHeaderDesign;
   let unlistenApplySettings,
     unlistenResetData,
     unlistenResetConfig,
@@ -634,6 +638,9 @@
       (val) => isValidPos(val) && val > -10000 && val < 20000;
     const isValidSize = (val) => isValidPos(val) && val > 0;
 
+    if (currentWindow.label === 'main') {
+      void launchMealOnce().catch(() => console.warn('급식창을 자동으로 열지 못했습니다.'));
+    }
     if (currentWindow.label !== "settings") {
       // ✨ [TCREI: Persistence] 전체화면 상태 복원
       // 왜 크기/위치를 먼저 설정하는가: setFullscreen(true) 직전의 크기를 OS가 "이전 크기"로 기억합니다.
@@ -984,6 +991,7 @@
     }
 
     if (currentWindow.label !== "settings") {
+      unlistenHeaderDesign = await listen('req-set-header-design', (event) => applyHeaderDesignChoice(appState, event.payload, currentWindow.label));
       unlistenApplySettings = await listen(
         "req-apply-settings",
         async (event) => {
@@ -1013,6 +1021,7 @@
             return;
           }
 
+          if (s.headerDesign !== undefined) appState.headerDesign = s.headerDesign === 'modern' ? 'modern' : 'classic';
           appState.fontSize = s.fontSize;
           appState.uiFontSize = s.uiFontSize;
           appState.themeColor = s.themeColor;
@@ -1063,6 +1072,7 @@
           // 커스텀 폰트 목록은 앱 전체가 공유하는 자원이라 창 하나의 "설정 초기화"로 비우지 않습니다.
           // (예전에는 이 창의 글꼴 목록에서만 사라져 재시작 전까지 선택할 수 없었습니다.)
           appState.fontSize = 10;
+          appState.headerDesign = 'classic';
           appState.uiFontSize = 10;
           appState.themeColor = "amber";
           appState.opacity = 1.0;
@@ -1130,7 +1140,7 @@
           const existingWin = await WebviewWindow.getByLabel('settings');
           const payload = {
             targetLabel: currentWindow.label,
-            settings: appState.takeSnapshot()
+            settings: { ...appState.takeSnapshot(), headerDesign: appState.headerDesign }
           };
 
           if (existingWin) {
@@ -1220,6 +1230,7 @@
   });
 
   onDestroy(() => {
+    if (unlistenHeaderDesign) unlistenHeaderDesign();
     if (unlistenApplySettings) unlistenApplySettings();
     if (unlistenResetData) unlistenResetData();
     if (unlistenResetConfig) unlistenResetConfig();

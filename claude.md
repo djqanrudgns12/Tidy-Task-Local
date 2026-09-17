@@ -55,7 +55,7 @@
 - 데이터가 비어 있는 창이 닫힐 때는 레지스트리에서 해당 창을 완벽하게 삭제하는 "유령 청소기" 로직이 내장되어 불필요한 리소스 낭비를 막습니다.
 
 ## 4. 디자인 시스템 및 UI/UX (Design & UI/UX)
-- **Themes & Fonts:** 7가지 내장 컬러 테마(White, Amber, Blue, Green, Rose, Purple, Slate)와 라이트/다크 모드를 지원합니다. 사용자가 직접 폰트 파일(`.ttf` 등)을 드래그 앤 드롭하여 추가할 수 있는 시스템 폰트 커스터마이징을 지원합니다.
+- **Themes & Fonts:** 15가지 내장 컬러 테마(`src/lib/themes.js`의 공통 레지스트리)와 라이트/다크 모드를 지원합니다. 사용자가 직접 폰트 파일(`.ttf` 등)을 드래그 앤 드롭하여 추가할 수 있는 시스템 폰트 커스터마이징을 지원합니다.
 - **Layout:** 할 일(Todos)과 노트(Notes), 보관함(Archived) 영역의 크기를 사용자가 드래그(Splitter)로 조절할 수 있습니다. 레이아웃 조절 시 화면이 튀는 현상(Jumping bug)을 방지하는 정밀한 로직이 적용되어 있습니다.
 - **Responsiveness & Smoothness:** 창의 크기와 뷰포트 변화에 따라 즉각적으로 레이아웃이 반응하며, 유리 질감(Glassmorphism) 및 트랜지션 효과를 통해 세련된 사용자 경험을 목표로 합니다.
 
@@ -66,3 +66,11 @@
 2. **State Persistence (상태 영속성 보장):** 창별로 저장할 새 상태값은 `appState.svelte.js`에 `$state` 필드를 선언한 뒤, **`src/lib/storage/windowDataCodec.js`의 `WINDOW_FIELDS` 표에 한 줄을 추가**합니다(되돌리기 대상이면 `snapshot: true` + `SNAPSHOT_FIELDS`). `init`·`performSave`·`takeSnapshot`·`applySnapshot`은 이 표를 자동으로 따릅니다. 기본값 규칙(`||` vs `??`)을 지키고, `windowDataCodec.test.js`에 경계값 테스트를 추가하세요. 초기화 로직(`resetContent` 등)도 함께 점검합니다.
 3. **Execution Hierarchy:** 이 규칙은 모든 UI/비즈니스 로직 작업 시 최우선적으로 지켜져야 하며, 예기치 못한 데이터 유실 리스크(예: 초기화 버그, 잘못된 윈도우 라벨 기반 스토어 덮어쓰기)가 있을 경우 반드시 작업을 중단하고 사용자에게 대안을 제안해야 합니다.
 4. **가독성 및 주석 (Readability):** 변수명은 직관적으로 작성하고, 주석은 항상 '한국어'로 '왜(Why)' 이렇게 코드를 짰는지 의도를 명확하게 남깁니다.
+
+
+### 급식 창
+- `main.js`가 `meal`, `meal-search`, `meal-settings`를 별도 `MealApp`으로 분기합니다. 이 경로에서 메모의 App/appState 효과를 실행하지 않습니다.
+- 컴포넌트는 `src/components/meal/`, 파서·캐시·설정·창 도우미는 `src/lib/meal/`, 나이스 요청은 `src-tauri/src/neis.rs`입니다.
+- 저장소는 `tidy-task-meal.json`이며 설정을 필드별 키로 저장합니다. 메인 모양/커스텀 글꼴은 기존 저장소를 읽기만 합니다. 내장 글꼴 목록은 `src/lib/builtinFonts.js`를 공유하고 appState가 기존 export를 유지합니다.
+- 개발 시 `?meal-design`으로 실제 컴포넌트 시안을, `?meal-matrix`로 크기·배율 검수 화면을 엽니다. 시안 데이터는 실제 조회 결과와 구분합니다.
+- 인증키 주입·검수와 남은 네이티브 확인 사항은 `docs/급식창-구현-검수.md`를 참고하세요.
