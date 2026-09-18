@@ -47,6 +47,8 @@ struct Disk {
     install_id: String,
     last_version: String,
     active_day: Option<u64>,
+    active_minute: Option<u64>,
+    project: String,
     queue: Vec<Queued>,
 }
 struct Engine {
@@ -58,7 +60,6 @@ struct Engine {
     test_mode: bool,
     session: String,
     last_activity: Option<u64>,
-    active_minute: Option<u64>,
     used_windows: HashSet<String>,
     started: bool,
     last_sent: Option<u64>,
@@ -170,6 +171,28 @@ fn properties(event: &str, count: Option<u32>, choice: Option<&str>) -> Option<V
 }
 
 impl Engine {
+    fn bind_project(&mut self) -> bool {
+        // The project token is public, but storing only a stable fingerprint keeps
+        // unnecessary credentials out of the local analytics state file.
+        let mut fingerprint = 0xcbf29ce484222325u64;
+        for byte in self.host.bytes().chain([b'|']).chain(self.token.bytes()) {
+            fingerprint ^= u64::from(byte);
+            fingerprint = fingerprint.wrapping_mul(0x100000001b3);
+        }
+        let project = format!("v1:{fingerprint:016x}");
+        if self.disk.project == project {
+            return false;
+        }
+        if !self.disk.project.is_empty() {
+            // A different destination needs a fresh identity and explicit consent.
+            self.disk = Disk::default();
+        } else {
+            // Legacy files cannot prove the destination of pending events.
+            self.disk.queue.clear();
+        }
+        self.disk.project = project;
+        true
+    }
     fn configured(&self) -> bool {
         !self.token.is_empty()
     }
@@ -249,8 +272,8 @@ impl Engine {
             self.disk.active_day = Some(at / 86400);
             self.push("app_active", json!({}), at);
         }
-        if self.active_minute != Some(at / 60) {
-            self.active_minute = Some(at / 60);
+        if self.disk.active_minute != Some(at / 60) {
+            self.disk.active_minute = Some(at / 60);
             self.push("active_minute", json!({"window_kind": kind}), at);
         }
         if self.used_windows.insert(kind.to_string()) {
@@ -283,11 +306,11 @@ impl Engine {
         } else {
             self.disk = Disk {
                 consent: Some(false),
+                project: self.disk.project.clone(),
                 ..Disk::default()
             };
             self.session.clear();
             self.last_activity = None;
-            self.active_minute = None;
             self.used_windows.clear();
             self.started = false;
         }
@@ -307,14 +330,18 @@ pub fn setup(app: &tauri::AppHandle) {
     let Ok(dir) = app.path().app_data_dir() else {
         return;
     };
-    let path = dir.join("tidy-task-analytics.json");
+    let test_mode = cfg!(debug_assertions);
+    let path = dir.join(if test_mode {
+        "tidy-task-analytics-test.json"
+    } else {
+        "tidy-task-analytics.json"
+    });
     let disk = std::fs::read(&path)
         .ok()
         .and_then(|b| serde_json::from_slice::<Disk>(&b).ok())
         .unwrap_or_default();
     let raw_token = option_env!("POSTHOG_PROJECT_TOKEN").unwrap_or("");
     let host = option_env!("POSTHOG_HOST").unwrap_or("https://us.i.posthog.com");
-    let test_mode = cfg!(debug_assertions);
     let allowed = (!test_mode || option_env!("POSTHOG_DEV_ENABLED") == Some("1"))
         && (raw_token.starts_with("phc_") || raw_token.starts_with("ph_project_"))
         && ["https://us.i.posthog.com", "https://eu.i.posthog.com"].contains(&host);
@@ -331,15 +358,15 @@ pub fn setup(app: &tauri::AppHandle) {
         test_mode,
         session: String::new(),
         last_activity: None,
-        active_minute: None,
         used_windows: HashSet::new(),
         started: false,
         last_sent: None,
         transport: "idle",
     };
+    let project_changed = engine.configured() && engine.bind_project();
     engine.prune(now());
     engine.start(now());
-    if engine.enabled() && engine.persist().is_err() {
+    if (project_changed || engine.enabled()) && engine.persist().is_err() {
         engine.disk.consent = Some(false);
         engine.disk.queue.clear();
     }
@@ -477,7 +504,6 @@ mod tests {
             test_mode: true,
             session: String::new(),
             last_activity: None,
-            active_minute: None,
             used_windows: HashSet::new(),
             started: false,
             last_sent: None,
@@ -590,10 +616,66 @@ mod tests {
         assert_eq!(count(&next, "installation_first_seen"), 0);
         assert_eq!(count(&next, "app_version_seen"), 0);
         assert_eq!(count(&next, "app_active"), 0);
+        assert_eq!(count(&next, "active_minute"), 0);
+        next.activity("tiny_note", 120);
+        assert_eq!(count(&next, "active_minute"), 1);
         next.version = "5.2.0".into();
         next.started = false;
         next.start(102);
         assert_eq!(count(&next, "app_version_seen"), 1);
+    }
+    #[test]
+    fn project_change_cannot_forward_another_projects_queue() {
+        let mut e = engine();
+        e.bind_project();
+        assert!(!e.disk.project.contains("phc_test"));
+        e.activity("meal", 100);
+        let id = e.disk.install_id.clone();
+        let original = e.disk.queue[0].payload.clone();
+        e.bind_project();
+        assert_eq!(e.disk.install_id, id);
+        assert_eq!(e.disk.queue[0].payload, original);
+        e.token = "phc_another_project".into();
+        e.bind_project();
+        assert!(e.disk.queue.is_empty());
+        assert!(e.disk.install_id.is_empty());
+        assert_eq!(e.disk.consent, None);
+    }
+    #[test]
+    fn legacy_migration_keeps_identity_but_drops_unscoped_pending_events() {
+        let mut e = engine();
+        e.activity("meal", 100);
+        let id = e.disk.install_id.clone();
+        e.bind_project();
+        assert_eq!(e.disk.install_id, id);
+        assert_eq!(e.disk.consent, Some(true));
+        assert!(e.disk.queue.is_empty());
+    }
+    #[test]
+    fn opt_in_again_starts_a_fresh_session_and_activity_minute() {
+        let mut e = engine();
+        e.bind_project();
+        e.activity("meal", 100);
+        let id = e.disk.install_id.clone();
+        let session = e.session.clone();
+        let project = e.disk.project.clone();
+        e.consent(false, 101).unwrap();
+        assert_eq!(e.disk.project, project);
+        e.consent(true, 102).unwrap();
+        e.activity("meal", 103);
+        assert_ne!(e.disk.install_id, id);
+        assert_ne!(e.session, session);
+        assert_eq!(count(&e, "active_minute"), 1);
+        std::fs::remove_file(e.path).unwrap();
+    }
+    #[test]
+    fn activity_crossing_korean_midnight_is_observable_on_both_days() {
+        let mut e = engine();
+        // 15:00 UTC = 00:00 Asia/Seoul, inside the same UTC day.
+        e.activity("meal", 15 * 3600 - 1);
+        e.activity("meal", 15 * 3600);
+        assert_eq!(count(&e, "active_minute"), 2);
+        assert_eq!(count(&e, "app_active"), 1);
     }
     #[test]
     fn actual_http_batch_has_expected_posthog_contract() {

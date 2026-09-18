@@ -1,4 +1,5 @@
 import { invoke, isTauri } from '@tauri-apps/api/core';
+import { shouldReportActivity } from './analyticsActivity.js';
 
 /** @typedef {{configured: boolean, consent: boolean|null, queued: number, last_sent: number|null, transport: string, region: string}} AnalyticsStatus */
 /** @returns {Promise<AnalyticsStatus>} */
@@ -35,8 +36,9 @@ export function initAnalytics() {
   /** @param {Event} event */
   const active = (event) => {
     if (!event.isTrusted || document.visibilityState !== 'visible') return;
-    if (Date.now() - lastActivity < 15000) return;
-    lastActivity = Date.now();
+    const now = Date.now();
+    if (!shouldReportActivity(lastActivity, now)) return;
+    lastActivity = now;
     track('activity');
   };
   for (const type of ['pointerdown', 'keydown', 'input', 'wheel']) {

@@ -2,11 +2,23 @@
 
 앱 데이터는 계속 로컬에 저장합니다. 사용 통계에 참여한 설치본만 제한된 이벤트를 PostHog로 전송합니다. 계정 로그인, 메모 동기화, 화면 녹화, 자동 클릭 수집은 도입하지 않습니다.
 
+## 처음 사용하는 분께
+
+PostHog는 앱이 보내는 작은 활동 기록을 모아 그래프로 보여 주는 서비스입니다. 예를 들어 할 일을 하나 추가하면 `todo_created`라는 기록을 보냅니다. 할 일의 내용은 보내지 않습니다. 이미 앱에 전송 로직이 있으므로 웹사이트용 JavaScript 코드를 추가하거나 SDK를 다시 설치할 필요가 없습니다.
+
+세 가지만 구분하면 됩니다.
+
+- **이벤트**: 한 번의 활동 기록. 한 설치본에서 100번 조작하면 여러 이벤트가 생깁니다.
+- **고유 이용자(Unique users)**: 같은 설치 ID는 선택한 기간에 한 번만 셉니다. 이 앱에서는 사람 수가 아니라 참여한 설치본 수입니다.
+- **프로젝트 토큰(Project token)**: 어느 PostHog 프로젝트로 보낼지 정하는 공개 수집용 값입니다. 개인 API 키와 다릅니다.
+
+한 사람이 PC 두 대를 쓰면 두 설치본입니다. 여러 사람이 같은 설치본을 쓰면 하나입니다. 통계 미참여자는 포함되지 않습니다. 따라서 차트 이름도 ‘전체 이용자’보다는 **‘통계 참여 활성 설치 수’**로 붙이는 것이 정확합니다.
+
 ## 연결하기
 
-1. https://app.posthog.com 에서 계정과 프로젝트를 만듭니다. EU 프로젝트는 https://eu.posthog.com 을 사용합니다.
+1. [PostHog](https://app.posthog.com)에서 계정과 프로젝트를 만듭니다. 처음에는 운영용 `Tidy Task`와 개발 확인용 `Tidy Task Test` 두 프로젝트를 구분해 두면 편합니다. EU 프로젝트는 [EU PostHog](https://eu.posthog.com)을 사용합니다.
 2. 프로젝트 설정에서 **공개 Project token**을 확인합니다. `phc_…` 또는 `ph_project_…` 형식입니다. 개인 API 키나 secret key는 앱에 넣지 않습니다.
-3. `src-tauri/.env`에 다음 값을 추가합니다. 기존 NEIS 설정을 보존합니다.
+3. `src-tauri/.env`에 다음 값을 추가합니다. 파일이 없다면 같은 폴더의 `.env.example`을 복사해 `.env`로 이름을 바꿉니다. 기존 NEIS 설정을 보존합니다. 예시 문구 대신 실제 토큰을 넣으세요.
 
 ```dotenv
 POSTHOG_PROJECT_TOKEN=프로젝트의_공개_토큰
@@ -22,12 +34,34 @@ npm.cmd run tauri build
 
 토큰이 비어 있거나 지역 주소가 허용된 주소가 아니면 수집을 시작하지 않습니다. 개발 빌드는 기본적으로 꺼져 있습니다. 개발 검증은 별도 테스트 프로젝트와 `POSTHOG_DEV_ENABLED=1`을 사용하세요. 개발 빌드 이벤트에는 `environment=test`가 붙습니다.
 
+처음 확인할 때는 테스트 프로젝트의 토큰과 `POSTHOG_DEV_ENABLED=1`을 저장한 다음 프로젝트 폴더에서 `npm.cmd run tauri dev`를 실행합니다. `npm.cmd run dev`만 실행한 웹 브라우저 미리보기에서는 통계를 보내지 않습니다. 토큰을 바꿨다면 실행 중인 개발 앱을 완전히 종료하고 다시 실행하세요.
+
+배포할 때는 운영 프로젝트 토큰과 `POSTHOG_DEV_ENABLED=0`으로 바꾸고 위의 `tauri build`를 실행합니다. 만들어진 설치 파일은 `src-tauri/target/release/bundle/nsis` 또는 `msi` 폴더에서 확인합니다. 기존 설치 파일에는 설정 변경이 반영되지 않습니다. NEIS 키가 없는 배포 빌드는 별도 빌드 규칙에 따라 실패하므로 기존 급식 API 설정을 지우지 마세요.
+
 ## 이용자 선택
 
 - 연결된 배포 빌드의 메인 창에 통계 참여 안내가 나타납니다. 기본 상태는 미동의이며 기록·전송하지 않습니다.
 - 설정 → 사용 통계에서 참여/중지와 연결 상태, 대기 건수, 마지막 전송 시각을 확인합니다.
 - 중지하면 새 수집을 차단하고 로컬 대기열과 설치 ID를 지웁니다. 이미 전송됐거나 전송 중인 요청은 되돌릴 수 없습니다. 재참여하면 새로운 설치 ID를 만듭니다.
-- 주 설정 파일과 분리된 `tidy-task-analytics.json`을 앱 데이터 폴더에 저장합니다. 메모 백업/복구에 통계 ID를 섞지 않습니다.
+- 주 설정 파일과 분리된 `tidy-task-analytics.json`을 앱 데이터 폴더에 저장합니다. 개발 빌드는 `tidy-task-analytics-test.json`을 사용해 동의·ID·전송 대기열까지 분리합니다. 메모 백업/복구에 통계 ID를 섞지 않습니다.
+- 프로젝트 토큰이나 지역을 바꾸면 새 동의를 받고 새 ID로 시작합니다. 이전 프로젝트의 대기 이벤트는 새 프로젝트에 보내지 않습니다. 목적지가 저장되지 않은 구버전 파일을 처음 읽을 때는 ID와 동의를 유지하되, 목적지를 검증할 수 없는 기존 대기 이벤트를 한 번 비웁니다.
+
+## 첫 번째 이용자 그래프 만들기
+
+1. 앱에서 **설정 → 사용 통계 → 통계 참여**를 누릅니다. 할 일 추가나 메모 입력을 한 번 해 보세요.
+2. PostHog의 **Activity / Live events**에서 `app_started`, `active_minute`, `todo_created` 등을 찾습니다. 정상 연결에서는 전송이 보통 15초 단위이며 서버 처리·화면 갱신 시간이 더 걸릴 수 있습니다.
+3. 이벤트 하나를 열고 `distinct_id`, `environment`, `app_version`을 확인합니다. 창을 여러 개 사용해도 `distinct_id`는 같아야 합니다.
+4. **Product analytics → New insight → Trends**에서 이벤트로 `active_minute`를 선택합니다. 화면 버전에 따라 메뉴 표현은 조금 다를 수 있습니다.
+5. 집계 방식을 **Unique users**로 고릅니다. **Total count**로 두면 이용자 수 대신 활동 이벤트 수가 나옵니다.
+6. 테스트 확인 중에는 `environment = test`, 실제 배포 통계에서는 `environment = production` 필터를 추가합니다.
+7. 기간은 최근 7일, 표시 간격은 일별로 선택합니다. 한국 날짜 기준으로 보려면 프로젝트 보고 시간대를 `Asia/Seoul`로 맞춥니다.
+8. ‘일별 통계 참여 활성 설치 수’라는 이름으로 저장하고 대시보드에 추가합니다.
+
+예: 오늘 같은 PC에서 창 3개를 열고 할 일을 20개 추가해도 일별 고유 이용자는 1입니다. 다른 PC에서도 동의 후 사용하면 2입니다. 주간·월간 이용자는 일별 수치를 더하지 말고, 해당 기간의 고유 이용자로 집계하세요.
+
+추가로 `todo_created`의 `count` 속성을 합산하면 만든 할 일 개수를 볼 수 있습니다. 여러 할 일을 한 번에 추가하는 기능은 이벤트 1건에 `count=추가한 개수`로 기록하므로 이벤트 총건수와 항목 개수는 다릅니다. 익명 이벤트 방식이므로 Persons 목록 개수를 이용자 지표로 사용하지 마세요.
+
+이벤트가 안 보이면 순서대로 확인하세요: 앱 설정에 ‘통계 서버가 연결되지 않음’이 표시되는지 → 토큰·US/EU 주소·개발 허용 값 → 설정 변경 후 앱 재빌드 여부 → 통계 참여 여부 → PostHog에서 올바른 프로젝트·기간·환경 필터를 보고 있는지. ‘전송 대기’가 계속 늘면 네트워크와 ‘연결 설정 확인 필요’ 표시를 확인합니다.
 
 ## 대시보드 권장 구성
 
@@ -46,7 +80,7 @@ npm.cmd run tauri build
 | 오류 영향 설치 수 | `app_error` / Unique users / `error_code`로 분류 | 오류 원문·경로 없이 영향 범위 관측 |
 | 초기 사용 전환 | `installation_first_seen` → `window_used` → `todo_created` / Funnel | 참여 후 기능 사용 전환 |
 
-`app_active`는 **UTC 날짜당 한 번** 보조 이벤트입니다. 한국 시간 등 임의 시간대의 DAU 차트에는 `active_minute`를 사용하세요. 앱을 켜 두기만 하면 실제 활동으로 잡지 않습니다. 포인터 클릭·키보드 입력·입력 변경·스크롤을 관측하되 키 값과 대상 요소는 읽거나 보내지 않습니다. 15초 내 연속 입력은 합치므로 분 경계에는 소량의 누락이 생길 수 있습니다.
+`app_active`는 **UTC 날짜당 한 번** 보조 이벤트입니다. 한국 시간 등 임의 시간대의 DAU 차트에는 `active_minute`를 사용하세요. 앱을 켜 두기만 하면 실제 활동으로 잡지 않습니다. 포인터 클릭·키보드 입력·입력 변경·스크롤을 관측하되 키 값과 대상 요소는 읽거나 보내지 않습니다. 같은 분의 15초 내 연속 입력은 합치지만 새 분의 첫 입력은 즉시 반영합니다. 읽기만 하는 시간은 활동으로 측정되지 않습니다.
 
 ## 이벤트 사전
 
@@ -59,7 +93,7 @@ npm.cmd run tauri build
 | `app_started` | 참여 중인 앱 프로세스 시작. 창 개수와 무관 |
 | `session_started` | 첫 실제 사용 또는 30분 비활동 이후 사용 |
 | `app_active` | UTC 날짜별 실제 사용 1회 |
-| `active_minute` | 앱 전체에서 UTC 분별 실제 사용 1회 (프로세스 재시작 경계는 예외) |
+| `active_minute` | 앱 전체에서 UTC 분별 실제 사용 1회. 재시작해도 같은 분은 중복 생성하지 않음 |
 | `window_used` | 세션별 창 종류를 처음 사용 |
 | `todo_created` | 단일·여러 할 일 추가 / `count` |
 | `todo_completed` | 단일 할 일 완료 / `count` |
@@ -100,6 +134,18 @@ npm.cmd run tauri build
 6. 참여 중지 후 새 이벤트가 생기지 않고 대기열이 비는지 확인합니다.
 7. 배포 프로젝트 토큰과 `POSTHOG_DEV_ENABLED=0`으로 재빌드합니다. 대시보드에 `environment=production` 필터를 설정합니다.
 
-이번 구현 검증: 로컬 Rust 테스트/JS 테스트/프런트 빌드. PostHog 프로젝트가 아직 없어 실제 수신과 대시보드 생성은 별도 확인이 필요합니다.
+실제 PostHog 프로젝트 연결 후에는 위 순서로 서버 수신과 그래프를 확인해야 합니다. 로컬 테스트와 빌드 성공만으로 실제 프로젝트의 토큰·수신·대시보드 설정까지 검증되는 것은 아닙니다.
 
-공식 참고: https://posthog.com/docs/api/capture · https://posthog.com/docs/product-analytics/retention
+## 2026-09-18 점검 결과
+
+후속 연결 확인: 사용자가 제공한 정확한 Project token을 적용한 개발 앱에서 실제 `installation_first_seen`, `app_started`, `active_minute`, `todo_created` 등이 PostHog Activity에 표시되는 것을 캡처로 확인했습니다. 최초 테스트에서는 토큰 전사 오류가 있었으며 이를 수정했습니다. HTTP 성공 응답이나 대기열 0건만으로 프로젝트에서의 수신 완료를 단정하지 않고, Activity에서 해당 이벤트가 보이는 것으로 최종 확인합니다.
+
+배포 준비: 로컬 `.env`의 개발 전송 옵션은 `POSTHOG_DEV_ENABLED=0`으로 복구합니다. release 설치 파일은 동의한 이용자에 한해 `environment=production`으로 전송합니다. 현재 개발 이벤트만 있는 프로젝트에서 운영 필터를 적용하면 배포본 수신 전까지 그래프가 비는 것이 정상입니다.
+
+- 수정: 분 경계의 첫 입력 누락 방지, 재시작 시 같은 분 활동 중복 방지, 개발·운영 저장 파일 분리, 프로젝트 변경 시 이전 대기열 전송 차단.
+- 통계 엔진 Rust 테스트 13개 통과. 로컬 HTTP 서버에 실제 batch 요청을 보내 형식과 ID·시각·속성을 검증한 테스트 포함.
+- JavaScript 테스트 145개와 프런트 빌드 통과. 통계 JavaScript 파일 별도 타입 검사 통과.
+- 전체 정적 검사: 기존 `output/analytics-check-before.txt`와 동일하게 오류 873개·경고 14개. 전체 프로젝트가 정적 검사까지 통과한 상태는 아님.
+- 점검 환경에는 `src-tauri/.env`와 PostHog 환경변수 설정이 없어 실제 PostHog 프로젝트 수신은 확인하지 않음. 설치 파일 재빌드·배포는 수행하지 않음.
+
+공식 참고: [Capture API](https://posthog.com/docs/api/capture) · [Trends](https://posthog.com/docs/product-analytics/trends/overview) · [익명 이벤트](https://posthog.com/docs/data/anonymous-vs-identified-events) · [Retention](https://posthog.com/docs/product-analytics/retention)
