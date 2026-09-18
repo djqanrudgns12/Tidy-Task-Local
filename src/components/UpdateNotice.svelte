@@ -196,8 +196,9 @@
         <section class="polish" aria-labelledby="polish-title">
           <span class="eyebrow">더 편안하게 쓰도록</span>
           <h2 id="polish-title">작은 불편도 함께 다듬었어요</h2>
-          <p><Check size={14} /><span>창 위치·크기 복원 등 자잘한 오류를 수정했어요.</span></p>
-          <p><Check size={14} /><span>저장·창 관리 코드를 정리하고 안정성을 다듬었어요.</span></p>
+          <p><Check size={14} /><span>새 버전을 더 빨리 확인하고, 내려받기 직전에 최신 설치 파일을 다시 확인해요.</span></p>
+          <p><Check size={14} /><span>더 나은 프로그램과 업데이트를 위한 익명 사용 통계를 안정적으로 집계해요.</span></p>
+          <p><Check size={14} /><span>창 위치·저장·창 관리 코드를 정리하고 안정성을 다듬었어요.</span></p>
         </section>
 
       <aside class="rolling-card" aria-labelledby="rolling-title">

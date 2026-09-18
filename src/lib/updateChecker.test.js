@@ -168,6 +168,10 @@ test('shouldAutoCheck: 주기가 지나야 다시 확인한다', () => {
   assert.equal(shouldAutoCheck({ lastCheckedAt: now - AUTO_CHECK_INTERVAL_MS, now }), true);
 });
 
+test('자동 확인 주기는 새 릴리스를 빠르게 알 수 있도록 30분이다', () => {
+  assert.equal(AUTO_CHECK_INTERVAL_MS, 30 * 60 * 1000);
+});
+
 test('shouldAutoCheck: 시계가 뒤로 돌아가도 영구 잠김에 빠지지 않는다', () => {
   // 저장된 마지막 확인 시각이 미래면(시계 조정 등) 즉시 다시 확인해야 합니다.
   assert.equal(shouldAutoCheck({ lastCheckedAt: 20_000, now: 10_000 }), true);
@@ -258,6 +262,21 @@ test('fetchLatestRelease: 성공하면 원본 JSON을 그대로 돌려준다', a
   const fetchImpl = async () => ({ status: 200, ok: true, json: async () => ({ tag_name: 'v5.1.0' }) });
   const release = await fetchLatestRelease({ fetchImpl });
   assert.equal(release.tag_name, 'v5.1.0');
+});
+
+test('fetchLatestRelease: 이전 latest 응답을 재사용하지 않도록 캐시를 끈다', async () => {
+  /** @type {RequestInit | undefined} */
+  let requestOptions;
+  /** @type {typeof fetch} */
+  const fetchImpl = async (_url, options) => {
+    requestOptions = options;
+    return new Response(JSON.stringify({ tag_name: 'v5.1.2' }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  };
+  await fetchLatestRelease({ fetchImpl });
+  assert.equal(requestOptions?.cache, 'no-store');
 });
 
 test('describeUpdateError: 모든 코드가 사용자에게 보여줄 한국어 안내를 가진다', () => {

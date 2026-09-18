@@ -4527,7 +4527,7 @@ dependencies = [
 
 [[package]]
 name = "tidy_task"
-version = "5.1.0"
+version = "5.1.2"
 dependencies = [
  "chrono",
  "dotenvy",

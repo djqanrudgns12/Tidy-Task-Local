@@ -1,5 +1,4 @@
 <script>
-  import AnalyticsSettings from './AnalyticsSettings.svelte';
   import { track } from '../lib/analytics.js';
   import { X, Palette, Type, PenLine, Monitor, Layout, Upload, Moon, Archive, FileText, Database, RefreshCw, Bell, VolumeX, Download } from 'lucide-svelte';
   import { appState } from '../lib/appState.svelte.js';
@@ -183,7 +182,6 @@
     </div>
 
     <div class="flex-1 overflow-y-auto p-4 flex flex-col gap-3.5 custom-scrollbar">
-      <AnalyticsSettings dark={localIsDarkMode} />
       <fieldset class="header-design-settings" class:design-dark={localIsDarkMode} style="--design-accent:{updateAccent};">
         <legend>Tidy task 상단 디자인</legend>
         <div class="design-options">
@@ -478,7 +476,7 @@
         </div>
         <!-- 버전을 코드에 박아두면 배포 때 갱신을 빠뜨려 실제 버전과 어긋납니다.
              appState.appVersion은 tauri.conf.json의 version을 그대로 읽어옵니다. -->
-        <span class="text-[9px] font-medium opacity-30 select-none uppercase tracking-widest" style="color: {localIsDarkMode ? '#ffffff' : '#000000'};">v.{appState.appVersion || '5.1.0'}</span>
+        <span class="text-[9px] font-medium opacity-30 select-none uppercase tracking-widest" style="color: {localIsDarkMode ? '#ffffff' : '#000000'};">v.{appState.appVersion || '5.1.2'}</span>
       </div>
 
       <div class="flex items-center justify-center gap-1 pt-3 text-[9px]" style="color: {localIsDarkMode ? '#94a3b8' : '#64748b'};">

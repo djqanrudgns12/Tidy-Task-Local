@@ -127,7 +127,7 @@ test('창 옵션: 환영 창과 공지 창은 크기 상수와 일치한다', ()
 });
 
 test('공지 숨김 저장 키는 릴리스 버전별로 분리된다', () => {
-  assert.match(UPDATE_NOTICE_STORE_KEY, /v5\.1\.0/);
+  assert.match(UPDATE_NOTICE_STORE_KEY, /v5\.1\.2/);
 });
 
 test('업데이트 공지는 메인 화면을 덮지 않는 독립 이동 창으로 연다', () => {

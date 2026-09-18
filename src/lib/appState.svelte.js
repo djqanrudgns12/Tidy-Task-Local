@@ -755,8 +755,9 @@ async init() {
     if (this._updateScheduleStarted) return;
     this._updateScheduleStarted = true;
 
-    // 부팅 직후 바로 네트워크를 쓰면 앱이 느리게 켜지는 것처럼 보이므로 잠시 뒤에 확인합니다.
-    this._updateBootTimer = setTimeout(() => this.checkForUpdates(), BOOT_CHECK_DELAY_MS);
+    // 저장된 확인 시각과 관계없이 시작할 때는 최신 릴리스를 다시 받습니다.
+    // 왜: 예전 릴리스의 직접 파일 주소가 로컬에 남으면 파일 교체 뒤 404가 날 수 있습니다.
+    this._updateBootTimer = setTimeout(() => this.checkForUpdates({ force: true }), BOOT_CHECK_DELAY_MS);
     // 앱을 며칠씩 켜 두는 사용자를 위해 주기적으로도 확인합니다.
     this._updateIntervalTimer = setInterval(() => this.checkForUpdates(), AUTO_CHECK_INTERVAL_MS);
   }
@@ -769,7 +770,7 @@ async init() {
   }
 
   // 실제 확인. manual=true면 사용자가 직접 버튼을 누른 경우입니다.
-  async checkForUpdates({ manual = false, requesterLabel = null } = {}) {
+  async checkForUpdates({ manual = false, requesterLabel = null, force = false } = {}) {
     // 매니저가 아닌 창이 실수로 직접 호출해도 네트워크를 건드리지 않도록 막습니다.
     if (!this.isManager) return;
 
@@ -781,7 +782,7 @@ async init() {
     if (this.updatePhase === 'checking') return;
 
     // 자동 확인은 주기를 지킵니다(호출 제한 보호). 사용자가 직접 누른 확인은 항상 진행합니다.
-    if (!manual && !shouldAutoCheck({ lastCheckedAt: this._updateLastCheckedAt, now: Date.now() })) {
+    if (!manual && !force && !shouldAutoCheck({ lastCheckedAt: this._updateLastCheckedAt, now: Date.now() })) {
       return;
     }
 
@@ -926,7 +927,36 @@ async init() {
   // 왜 앱이 직접 받지 않는가: B 방식의 핵심은 "다운로드/설치는 사용자와 OS가 하게 두는 것"입니다.
   //   앱이 파일을 만지지 않으므로 사용자의 메모·할 일 데이터가 위험해질 여지가 없습니다.
   async openUpdateDownload() {
-    const url = this.updateInfo?.downloadUrl || RELEASES_PAGE_URL;
+    let url = RELEASES_PAGE_URL;
+    try {
+      // 배너에 저장된 주소를 그대로 열지 않습니다. 릴리스 자산이 교체되거나 이전 릴리스가
+      // 정리되면 그 주소는 404가 되므로, 클릭 순간의 최신 릴리스와 설치 파일을 다시 고릅니다.
+      const release = await fetchLatestRelease();
+      const freshInfo = buildUpdateInfo(release);
+      if (freshInfo) {
+        const checkedAt = Date.now();
+        this.updateInfo = freshInfo;
+        this.updateCheckedAt = checkedAt;
+        this._updateLastCheckedAt = checkedAt;
+
+        if (!isNewerVersion(freshInfo.version, this.appVersion)) {
+          this.updatePhase = 'uptodate';
+          this.isUpdateBannerVisible = false;
+          this.isUpdateGuideOpen = false;
+          this._flashUpToDateToast();
+          await this._persistUpdateState();
+          return false;
+        }
+
+        this.updatePhase = 'available';
+        url = freshInfo.downloadUrl || freshInfo.pageUrl || RELEASES_PAGE_URL;
+        await this._persistUpdateState();
+      }
+    } catch (e) {
+      // API 확인이 실패해도 저장된 낡은 파일 주소는 쓰지 않습니다.
+      // GitHub의 /releases/latest 페이지가 현재 공개 릴리스로 안전하게 안내합니다.
+      console.warn('최신 설치 파일 주소를 다시 확인하지 못해 릴리스 페이지를 엽니다:', e);
+    }
     try {
       await openUrl(url);
       track('update_download_opened');

@@ -23,12 +23,13 @@ export const RELEASES_PAGE_URL =
   `https://github.com/${GITHUB_OWNER}/${GITHUB_REPO}/releases/latest`;
 
 // ── 정책 상수 ──────────────────────────────────────────────────────────
-// 자동 확인 주기(6시간). GitHub 비인증 API는 IP당 시간당 60회 제한이 있어
+// 자동 확인 주기(30분). GitHub 비인증 API는 IP당 시간당 60회 제한이 있어
 // 창을 여러 개 켜도 호출이 몰리지 않도록 매니저 창에서만, 주기를 지켜 호출합니다.
-export const AUTO_CHECK_INTERVAL_MS = 1000 * 60 * 60 * 6;
+export const AUTO_CHECK_INTERVAL_MS = 1000 * 60 * 30;
 
-// 부팅 직후 바로 네트워크를 건드리면 앱 시작이 느려 보이므로 8초 뒤에 확인합니다.
-export const BOOT_CHECK_DELAY_MS = 8000;
+// 화면이 먼저 뜬 직후 최신 정보를 확인합니다. 저장된 예전 다운로드 주소를 오래 보여 주지 않게
+// 짧게 잡되, 첫 화면 렌더링과 경쟁하지 않도록 2초의 여유만 둡니다.
+export const BOOT_CHECK_DELAY_MS = 2000;
 
 // "나중에 알림"을 누르면 하루 동안 조용히 있습니다.
 export const SNOOZE_DURATION_MS = 1000 * 60 * 60 * 24;
@@ -235,6 +236,8 @@ export async function fetchLatestRelease({ fetchImpl = globalThis.fetch, timeout
   try {
     response = await fetchImpl(LATEST_RELEASE_API, {
       method: 'GET',
+      // 웹뷰/프록시 캐시에 남은 이전 latest 응답 때문에 새 릴리스 발견이 늦어지지 않게 합니다.
+      cache: 'no-store',
       headers: {
         Accept: 'application/vnd.github+json',
         'X-GitHub-Api-Version': '2022-11-28',

@@ -43,7 +43,6 @@ struct Queued {
 #[derive(Clone, Default, Serialize, Deserialize)]
 #[serde(default)]
 struct Disk {
-    consent: Option<bool>,
     install_id: String,
     last_version: String,
     active_day: Option<u64>,
@@ -79,16 +78,6 @@ async fn send_batch(
         .json(&json!({"api_key": token, "batch": batch}))
         .send()
         .await
-}
-
-#[derive(Serialize)]
-pub struct Status {
-    configured: bool,
-    consent: Option<bool>,
-    queued: usize,
-    last_sent: Option<u64>,
-    transport: String,
-    region: String,
 }
 
 fn window_kind(label: &str) -> &'static str {
@@ -184,7 +173,7 @@ impl Engine {
             return false;
         }
         if !self.disk.project.is_empty() {
-            // A different destination needs a fresh identity and explicit consent.
+            // 다른 PostHog 프로젝트의 대기 이벤트와 설치 ID가 새 프로젝트로 넘어가면 안 됩니다.
             self.disk = Disk::default();
         } else {
             // Legacy files cannot prove the destination of pending events.
@@ -197,7 +186,7 @@ impl Engine {
         !self.token.is_empty()
     }
     fn enabled(&self) -> bool {
-        self.configured() && self.disk.consent == Some(true)
+        self.configured()
     }
     fn prune(&mut self, at: u64) {
         self.disk
@@ -280,50 +269,6 @@ impl Engine {
             self.push("window_used", json!({"window_kind": kind}), at);
         }
     }
-    fn status(&self) -> Status {
-        Status {
-            configured: self.configured(),
-            consent: self.disk.consent,
-            queued: self.disk.queue.len(),
-            last_sent: self.last_sent,
-            transport: self.transport.into(),
-            region: if self.host.contains("eu.i.") {
-                "EU"
-            } else {
-                "US"
-            }
-            .into(),
-        }
-    }
-    fn consent(&mut self, enabled: bool, at: u64) -> Result<(), String> {
-        if enabled && !self.configured() {
-            return Err("not_configured".into());
-        }
-        let previous = self.disk.clone();
-        if enabled {
-            self.disk.consent = Some(true);
-            self.start(at);
-        } else {
-            self.disk = Disk {
-                consent: Some(false),
-                project: self.disk.project.clone(),
-                ..Disk::default()
-            };
-            self.session.clear();
-            self.last_activity = None;
-            self.used_windows.clear();
-            self.started = false;
-        }
-        if let Err(error) = self.persist() {
-            // Fail closed even if a preference cannot be saved.
-            self.disk = previous;
-            self.disk.consent = Some(false);
-            self.disk.queue.clear();
-            self.started = false;
-            return Err(error);
-        }
-        Ok(())
-    }
 }
 
 pub fn setup(app: &tauri::AppHandle) {
@@ -367,8 +312,10 @@ pub fn setup(app: &tauri::AppHandle) {
     engine.prune(now());
     engine.start(now());
     if (project_changed || engine.enabled()) && engine.persist().is_err() {
-        engine.disk.consent = Some(false);
+        // 설치 ID를 안정적으로 보존할 수 없으면 매 실행을 새 이용자로 잘못 세게 됩니다.
+        // 이 경우에는 해당 실행의 통계를 끄고 다음 실행에서 저장소를 다시 확인합니다.
         engine.disk.queue.clear();
+        engine.token.clear();
     }
     let shared = Analytics(Arc::new(Mutex::new(engine)));
     app.manage(shared.clone());
@@ -443,23 +390,6 @@ pub fn setup(app: &tauri::AppHandle) {
 }
 
 #[tauri::command]
-pub fn analytics_status(state: tauri::State<'_, Analytics>) -> Result<Status, String> {
-    state
-        .0
-        .lock()
-        .map(|e| e.status())
-        .map_err(|_| "unavailable".into())
-}
-#[tauri::command]
-pub fn analytics_consent(
-    state: tauri::State<'_, Analytics>,
-    enabled: bool,
-) -> Result<Status, String> {
-    let mut e = state.0.lock().map_err(|_| "unavailable")?;
-    e.consent(enabled, now())?;
-    Ok(e.status())
-}
-#[tauri::command]
 pub fn analytics_track(
     window: tauri::WebviewWindow,
     state: tauri::State<'_, Analytics>,
@@ -493,14 +423,11 @@ mod tests {
     use super::*;
     fn engine() -> Engine {
         Engine {
-            disk: Disk {
-                consent: Some(true),
-                ..Disk::default()
-            },
+            disk: Disk::default(),
             path: std::env::temp_dir().join(format!("analytics-{}.json", uuid())),
             token: "phc_test".into(),
             host: "https://us.i.posthog.com".into(),
-            version: "5.1.0".into(),
+            version: "5.1.2".into(),
             test_mode: true,
             session: String::new(),
             last_activity: None,
@@ -554,19 +481,6 @@ mod tests {
         );
     }
     #[test]
-    fn opt_out_clears_queue_identity_and_blocks_new_events() {
-        let mut e = engine();
-        e.activity("meal", 100);
-        e.consent(false, 101).unwrap();
-        e.activity("meal", 102);
-        assert!(e.disk.queue.is_empty());
-        assert!(e.disk.install_id.is_empty());
-        let reloaded: Disk = serde_json::from_slice(&std::fs::read(&e.path).unwrap()).unwrap();
-        assert_eq!(reloaded.consent, Some(false));
-        assert!(reloaded.queue.is_empty());
-        std::fs::remove_file(e.path).unwrap();
-    }
-    #[test]
     fn queue_is_bounded_and_expired_events_are_removed() {
         let mut e = engine();
         e.start(1);
@@ -592,17 +506,12 @@ mod tests {
         std::fs::remove_file(e.path).unwrap();
     }
     #[test]
-    fn no_consent_or_missing_configuration_collects_nothing() {
+    fn missing_configuration_collects_nothing() {
         let mut e = engine();
-        e.disk.consent = None;
+        e.token.clear();
         e.activity("meal", 100);
         assert!(e.disk.queue.is_empty());
         assert!(e.disk.install_id.is_empty());
-        e.disk.consent = Some(true);
-        e.token.clear();
-        e.activity("meal", 101);
-        assert!(e.disk.queue.is_empty());
-        assert!(e.consent(true, 102).is_err());
     }
     #[test]
     fn restart_keeps_install_identity_and_does_not_repeat_first_seen() {
@@ -639,7 +548,6 @@ mod tests {
         e.bind_project();
         assert!(e.disk.queue.is_empty());
         assert!(e.disk.install_id.is_empty());
-        assert_eq!(e.disk.consent, None);
     }
     #[test]
     fn legacy_migration_keeps_identity_but_drops_unscoped_pending_events() {
@@ -648,25 +556,19 @@ mod tests {
         let id = e.disk.install_id.clone();
         e.bind_project();
         assert_eq!(e.disk.install_id, id);
-        assert_eq!(e.disk.consent, Some(true));
         assert!(e.disk.queue.is_empty());
     }
     #[test]
-    fn opt_in_again_starts_a_fresh_session_and_activity_minute() {
+    fn old_opt_out_file_migrates_to_automatic_collection() {
+        let legacy =
+            br#"{"consent":false,"install_id":"","last_version":"","project":"","queue":[]}"#;
+        let disk: Disk = serde_json::from_slice(legacy).unwrap();
         let mut e = engine();
-        e.bind_project();
+        e.disk = disk;
         e.activity("meal", 100);
-        let id = e.disk.install_id.clone();
-        let session = e.session.clone();
-        let project = e.disk.project.clone();
-        e.consent(false, 101).unwrap();
-        assert_eq!(e.disk.project, project);
-        e.consent(true, 102).unwrap();
-        e.activity("meal", 103);
-        assert_ne!(e.disk.install_id, id);
-        assert_ne!(e.session, session);
+        assert!(!e.disk.install_id.is_empty());
+        assert_eq!(count(&e, "installation_first_seen"), 1);
         assert_eq!(count(&e, "active_minute"), 1);
-        std::fs::remove_file(e.path).unwrap();
     }
     #[test]
     fn activity_crossing_korean_midnight_is_observable_on_both_days() {

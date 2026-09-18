@@ -1,5 +1,4 @@
 <script>
-  import AnalyticsSettings from './components/AnalyticsSettings.svelte';
   import { applyHeaderDesignChoice } from './lib/headerDesign.js';
   import { onMount, onDestroy } from "svelte";
   import { launchMealOnce } from './lib/meal/mealWindows.js';
@@ -1807,9 +1806,6 @@
   </div>
 
   <FloatingRTE />
-  {#if appState.windowLabel === 'main'}
-    <AnalyticsSettings prompt dark={appState.isDarkMode} />
-  {/if}
 {:else}
   <div
     class="h-screen w-screen flex flex-col items-center justify-center transition-colors"

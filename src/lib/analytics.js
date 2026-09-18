@@ -1,15 +1,6 @@
 import { invoke, isTauri } from '@tauri-apps/api/core';
 import { shouldReportActivity } from './analyticsActivity.js';
 
-/** @typedef {{configured: boolean, consent: boolean|null, queued: number, last_sent: number|null, transport: string, region: string}} AnalyticsStatus */
-/** @returns {Promise<AnalyticsStatus>} */
-export async function getAnalyticsStatus() {
-  if (!isTauri()) return { configured: false, consent: null, queued: 0, last_sent: null, transport: 'idle', region: 'US' };
-  return invoke('analytics_status');
-}
-/** @param {boolean} enabled @returns {Promise<AnalyticsStatus>} */
-export function setAnalyticsConsent(enabled) { return invoke('analytics_consent', { enabled }); }
-
 /** No text/DOM/error objects accepted. Native code independently validates all properties.
  * @param {string} event
  * @param {{count?:number, choice?:string}} [properties]

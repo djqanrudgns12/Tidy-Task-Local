@@ -269,7 +269,7 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_opener::init())
-        .invoke_handler(tauri::generate_handler![save_custom_font, store_health, neis::neis_search_schools, neis::neis_meals, neis::neis_schedule, neis::meal_take_launch_token, analytics::analytics_status, analytics::analytics_consent, analytics::analytics_track])
+        .invoke_handler(tauri::generate_handler![save_custom_font, store_health, neis::neis_search_schools, neis::neis_meals, neis::neis_schedule, neis::meal_take_launch_token, analytics::analytics_track])
         .setup(|app| {
             // 어떤 창보다 먼저 저장 파일을 점검·백업합니다.
             protect_store_file(app.handle());
