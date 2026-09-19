@@ -1,0 +1,12 @@
+Toolkit sound effects
+
+Tick: "Tick and Tock" by cemkalyoncu, CC0 1.0
+https://opengameart.org/content/tick-and-tock
+Source: tick.wav; shortened, filtered and gain adjusted.
+
+Warning and end: "Interface Sounds" by Kenney, CC0 1.0
+https://kenney.nl/assets/interface-sounds
+Sources: select_002.ogg and confirmation_002.ogg; decoded to mono WAV and gain reduced.
+
+CC0 1.0: https://creativecommons.org/publicdomain/zero/1.0/
+No attribution is required; credits retained for provenance.

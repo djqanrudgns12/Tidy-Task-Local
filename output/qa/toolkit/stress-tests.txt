@@ -1,0 +1,1 @@
+PASS: 1000 lap records, session discard on reload, 8 independent browser pages, 20 create/run/close cycles (not a native memory leak measurement)

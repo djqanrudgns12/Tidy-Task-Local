@@ -1,0 +1,23 @@
+[
+  {
+    "file": "end.wav",
+    "seconds": 0.5390208333333333,
+    "channels": 1,
+    "sampleRate": 48000,
+    "sha256": "0a4a267a4725709b3a969590bfcf1de2461c9f1335d5b4fbf00035094ce9c2fb"
+  },
+  {
+    "file": "tick.wav",
+    "seconds": 0.23,
+    "channels": 1,
+    "sampleRate": 48000,
+    "sha256": "1084dbe5f434aa8b3c1a3188f740377f3887cbf893938272b5cd63aa2246e0b7"
+  },
+  {
+    "file": "warning.wav",
+    "seconds": 0.04039583333333333,
+    "channels": 1,
+    "sampleRate": 48000,
+    "sha256": "55f9380dc953fa31e762210e132237dced9017796049dfda2c1db1d122c9cb89"
+  }
+]

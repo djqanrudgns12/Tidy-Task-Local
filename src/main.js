@@ -12,6 +12,11 @@ const label = isTauri()
 async function start() {
   const target = document.getElementById("app");
   if (!target) throw new Error("Application root is missing");
+  const toolkitLabel = isTauri() ? label : (import.meta.env.DEV ? new URLSearchParams(location.search).get('toolkit-preview') : null);
+  if (toolkitLabel && (toolkitLabel.startsWith('toolkit') || toolkitLabel.startsWith('timer-') || ['digital','analog','hourglass','stopwatch'].includes(toolkitLabel))) {
+    const { default: ToolkitApp } = await import('./components/toolkit/ToolkitApp.svelte');
+    return mount(ToolkitApp, { target, props: { label: toolkitLabel } });
+  }
   if (isMealWindowLabel(label)) {
     const { default: MealApp } =
       await import("./components/meal/MealApp.svelte");

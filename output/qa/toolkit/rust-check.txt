@@ -1,0 +1,2 @@
+   Compiling tidy_task v5.1.2 (C:\Users\rudgn\Desktop\vibecoding\Tidy-Task-Local\src-tauri)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 20.33s

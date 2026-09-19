@@ -1,4 +1,5 @@
 <script>
+  import ToolkitToggle from './toolkit/ToolkitToggle.svelte';
   import { track } from '../lib/analytics.js';
   import { X, Palette, Type, PenLine, Monitor, Layout, Upload, Moon, Archive, FileText, Database, RefreshCw, Bell, VolumeX, Download } from 'lucide-svelte';
   import { appState } from '../lib/appState.svelte.js';
@@ -182,6 +183,7 @@
     </div>
 
     <div class="flex-1 overflow-y-auto p-4 flex flex-col gap-3.5 custom-scrollbar">
+      <ToolkitToggle/>
       <fieldset class="header-design-settings" class:design-dark={localIsDarkMode} style="--design-accent:{updateAccent};">
         <legend>Tidy task 상단 디자인</legend>
         <div class="design-options">

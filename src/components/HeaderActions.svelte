@@ -1,4 +1,5 @@
 <script>
+  import ToolkitToggle from './toolkit/ToolkitToggle.svelte';
   import { Plus, ChevronDown, Menu, StickyNote, CopyPlus, Archive, MousePointer2, Settings, CircleHelp, Trash2, Check } from 'lucide-svelte';
   import { getCurrentWindow } from '@tauri-apps/api/window';
   import { handleSettings } from '../lib/headerWindows.js';
@@ -43,6 +44,7 @@
       <button class="tidy-header-menuitem" onclick={() => { close(); run(onArchive); }}><Archive size={17}/><span>보관함</span></button>
       <button class="tidy-header-menuitem" aria-pressed={appState.isEditMode} onclick={() => { appState.toggleEditMode(); close(); }}><MousePointer2 size={17}/><span>{appState.isEditMode ? '여러 항목 선택 종료' : '여러 항목 선택'}</span>{#if appState.isEditMode}<Check size={15}/>{/if}</button>
       <div class="tidy-header-divider"></div>
+      <ToolkitToggle/>
       <label class="tidy-header-opacity"><span>창 불투명도</span><output>{Math.round(appState.opacity * 100)}%</output><input aria-label="창 불투명도" type="range" min="0.2" max="1" step="0.05" bind:value={appState.opacity} onchange={() => appState.save()}/></label>
       <div class="tidy-header-divider"></div>
       <button class="tidy-header-menuitem" onclick={() => { close(); run(handleSettings); }}><Settings size={17}/><span>설정</span></button>

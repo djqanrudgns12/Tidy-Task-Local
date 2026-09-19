@@ -1,0 +1,99 @@
+{
+  "auditReportVersion": 2,
+  "vulnerabilities": {
+    "devalue": {
+      "name": "devalue",
+      "severity": "moderate",
+      "isDirect": false,
+      "via": [
+        {
+          "source": 1237790,
+          "name": "devalue",
+          "dependency": "devalue",
+          "title": "Svelte devalue: DoS via malformed input",
+          "url": "https://github.com/advisories/GHSA-9rgm-9g3h-6x36",
+          "severity": "moderate",
+          "cwe": [
+            "CWE-770"
+          ],
+          "cvss": {
+            "score": 5.3,
+            "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:L"
+          },
+          "range": "<5.9.1"
+        }
+      ],
+      "effects": [],
+      "range": "<5.9.1",
+      "nodes": [
+        "node_modules/devalue"
+      ],
+      "fixAvailable": true
+    },
+    "dompurify": {
+      "name": "dompurify",
+      "severity": "moderate",
+      "isDirect": true,
+      "via": [
+        {
+          "source": 1124022,
+          "name": "dompurify",
+          "dependency": "dompurify",
+          "title": "DOMPurify: `CUSTOM_ELEMENT_HANDLING` bypasses `afterSanitizeElements` for allowed custom elements.",
+          "url": "https://github.com/advisories/GHSA-c2j3-45gr-mqc4",
+          "severity": "low",
+          "cwe": [
+            "CWE-79",
+            "CWE-184",
+            "CWE-693"
+          ],
+          "cvss": {
+            "score": 0,
+            "vectorString": null
+          },
+          "range": "<=3.4.11"
+        },
+        {
+          "source": 1138538,
+          "name": "dompurify",
+          "dependency": "dompurify",
+          "title": "DOMPurify: IN_PLACE hook removal leaves a detached subtree executable, causing XSS",
+          "url": "https://github.com/advisories/GHSA-55q2-fjhq-7xh7",
+          "severity": "moderate",
+          "cwe": [
+            "CWE-79"
+          ],
+          "cvss": {
+            "score": 0,
+            "vectorString": null
+          },
+          "range": "<=3.4.12"
+        }
+      ],
+      "effects": [],
+      "range": "<=3.4.12",
+      "nodes": [
+        "node_modules/dompurify"
+      ],
+      "fixAvailable": true
+    }
+  },
+  "metadata": {
+    "vulnerabilities": {
+      "info": 0,
+      "low": 0,
+      "moderate": 2,
+      "high": 0,
+      "critical": 0,
+      "total": 2
+    },
+    "dependencies": {
+      "prod": 45,
+      "dev": 90,
+      "optional": 55,
+      "peer": 3,
+      "peerOptional": 0,
+      "total": 136
+    }
+  }
+}

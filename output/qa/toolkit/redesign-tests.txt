@@ -1,0 +1,11 @@
+{
+  scroll: 521,
+  client: 521,
+  css: '15px 18px 10px',
+  sections: [
+    { height: 201, margin: '0px', padding: '0px' },
+    { height: 77, margin: '10px 0px 0px', padding: '10px 0px 0px' },
+    { height: 195, margin: '10px 0px 0px', padding: '10px 0px 0px' }
+  ]
+}
+PASS: curved sand levels at 0/1/25/50/75/99/100%, explicit dark input remains light, entire analog settings fits at 960x680

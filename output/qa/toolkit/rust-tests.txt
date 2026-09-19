@@ -1,0 +1,32 @@
+   Compiling tidy_task v5.1.2 (C:\Users\rudgn\Desktop\vibecoding\Tidy-Task-Local\src-tauri)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 4.39s
+     Running unittests src\lib.rs (src-tauri\target\debug\deps\app_lib-c5b15c6aaefd23e5.exe)
+
+running 25 tests
+test analytics::tests::missing_configuration_collects_nothing ... ok
+test analytics::tests::background_start_is_not_active_usage ... ok
+test analytics::tests::legacy_migration_keeps_identity_but_drops_unscoped_pending_events ... ok
+test analytics::tests::activity_crossing_korean_midnight_is_observable_on_both_days ... ok
+test analytics::tests::schema_rejects_content_and_unknown_events ... ok
+test analytics::tests::project_change_cannot_forward_another_projects_queue ... ok
+test analytics::tests::multiwindow_activity_deduplicates_install_day_minute_and_session ... ok
+test neis::tests::live_school_and_meals ... ignored, live NEIS API; run explicitly
+test analytics::tests::old_opt_out_file_migrates_to_automatic_collection ... ok
+test analytics::tests::restart_keeps_install_identity_and_does_not_repeat_first_seen ... ok
+test neis::tests::input_boundaries ... ok
+test tests::centers_in_work_area ... ok
+test tests::title_above_screen_is_not_grabbable ... ok
+test neis::tests::no_data_and_redacted_errors ... ok
+test tests::visible_windows_are_kept ... ok
+test toolkit::tests::future_version_is_not_overwritten ... ok
+test toolkit::tests::only_work_windows_keep_app_alive ... ok
+test toolkit::tests::runtime_data_is_rejected ... ok
+test tests::offscreen_window_is_detected ... ok
+test toolkit::tests::patches_preserve_other_fields_and_kinds ... ok
+test analytics::tests::actual_http_batch_has_expected_posthog_contract ... ok
+test tests::shrunk_or_broken_file_never_overwrites_good_backup ... ok
+test analytics::tests::persisted_retry_preserves_identity_uuid_and_timestamp ... ok
+test tests::backups_rotate_and_skip_unchanged_content ... ok
+test analytics::tests::queue_is_bounded_and_expired_events_are_removed ... ok
+
+test result: ok. 24 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 0.03s

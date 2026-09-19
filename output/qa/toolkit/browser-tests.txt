@@ -1,0 +1,1 @@
+PASS: completion, restart, pause, preference persistence, session discard, laps/reset, toolbar clicks, 12 responsive views, no page errors

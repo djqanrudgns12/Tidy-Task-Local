@@ -12,6 +12,11 @@ dist
 dist-ssr
 *.local
 
+# Re-creatable local QA and asset-selection outputs
+/output/qa/*-dist/
+/output/timer-sound-samples/
+/artwork/toolkit/audio/*backup*.zip
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

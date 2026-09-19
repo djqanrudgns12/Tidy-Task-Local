@@ -5,6 +5,7 @@ use tauri::{Manager, Emitter};
 use tauri_plugin_autostart::MacosLauncher;
 mod neis;
 mod analytics;
+mod toolkit;
 
 // 모든 창이 함께 쓰는 저장 파일과 그 백업 파일 이름
 const STORE_FILE: &str = "tidy-task-config.json";
@@ -246,7 +247,7 @@ pub fn run() {
                 let mut has_active_notes = false;
                 for label in windows.keys() {
                     // 삭제 중인 창 자신은 제외하고 남은 창이 있는지 검사합니다.
-                    if label != destroyed_label && (label == "main" || label.starts_with("note-") || label.starts_with("tinynote-") || label == "reminder" || label == "archive" || matches!(label.as_str(), "meal" | "meal-search" | "meal-settings")) {
+                    if label != destroyed_label && (toolkit::is_work_window(label) || label == "main" || label.starts_with("note-") || label.starts_with("tinynote-") || label == "reminder" || label == "archive" || matches!(label.as_str(), "meal" | "meal-search" | "meal-settings")) {
                         has_active_notes = true;
                         break;
                     }
@@ -269,8 +270,9 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_opener::init())
-        .invoke_handler(tauri::generate_handler![save_custom_font, store_health, neis::neis_search_schools, neis::neis_meals, neis::neis_schedule, neis::meal_take_launch_token, analytics::analytics_track])
+        .invoke_handler(tauri::generate_handler![save_custom_font, store_health, neis::neis_search_schools, neis::neis_meals, neis::neis_schedule, neis::meal_take_launch_token, analytics::analytics_track, toolkit::toolkit_read, toolkit::toolkit_patch, toolkit::toolkit_open, toolkit::toolkit_set_enabled])
         .setup(|app| {
+            toolkit::startup(app.handle().clone());
             // 어떤 창보다 먼저 저장 파일을 점검·백업합니다.
             protect_store_file(app.handle());
             analytics::setup(app.handle());
@@ -327,6 +329,7 @@ pub fn run() {
                     .tooltip("Tidy Task")
                     .on_menu_event(|app, event| match event.id.as_ref() {
                         "quit" => {
+                            toolkit::QUITTING.store(true, std::sync::atomic::Ordering::SeqCst);
                             // 종료 직전 모든 창에 "지금 저장하세요"를 알리고, 기록할 시간을 잠시 준 뒤 종료합니다.
                             // 왜: 바로 종료하면 입력 후 0.5초 안에 예약돼 있던 저장이 사라질 수 있습니다.
                             let _ = app.emit("before-quit", ());
