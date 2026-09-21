@@ -10,6 +10,9 @@
   import "../../lib/toolkit/toolkit.css";
 
   let appearance = $state<Record<string, any>>({});
+  $effect(() => {
+    document.documentElement.style.cssText = appearanceStyle(appearance);
+  });
 
   onMount(() => {
     let disposed = false;

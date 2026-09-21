@@ -1,0 +1,57 @@
+{
+  "fetchedAt": "2026-09-21T01:32:38.387Z",
+  "sources": [
+    {
+      "id": "bell",
+      "title": "Pleasing Bell Sound Effect",
+      "author": "Julie Damsgaard / Spring Spring",
+      "slug": "pleasing-bell-sound-effect",
+      "file": "pleasing-bell.wav",
+      "page": "https://opengameart.org/content/pleasing-bell-sound-effect",
+      "download": "https://opengameart.org/sites/default/files/pleasing-bell.wav",
+      "license": "CC0-1.0",
+      "licenseUrl": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "bytes": 109392,
+      "sha256": "3c851939ccf9146e49c1be0272386fdca1b1442bb034a5e6dcdfb3e0e144a411"
+    },
+    {
+      "id": "bomb",
+      "title": "Synthesized explosion",
+      "author": "qubodup",
+      "slug": "synthesized-explosion",
+      "file": "synthetic_explosion_1.flac",
+      "page": "https://opengameart.org/content/synthesized-explosion",
+      "download": "https://opengameart.org/sites/default/files/synthetic_explosion_1.flac",
+      "license": "CC0-1.0",
+      "licenseUrl": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "bytes": 164444,
+      "sha256": "54b42deac4e2180f68bc87c86fd325b5b5896be3d35882ecaefd06fc756565b1"
+    },
+    {
+      "id": "fart",
+      "title": "Gastric Distress",
+      "author": "LFA",
+      "slug": "gastric-distress",
+      "file": "gastricdistress_bylfa_0.wav",
+      "page": "https://opengameart.org/content/gastric-distress",
+      "download": "https://opengameart.org/sites/default/files/gastricdistress_bylfa_0.wav",
+      "license": "CC0-1.0",
+      "licenseUrl": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "bytes": 1841474,
+      "sha256": "ba19e9e10e668e15092b1ffff7f8bd0e19fc0a3667b56a586b029ec77df52dba"
+    },
+    {
+      "id": "siren",
+      "title": "Alarm",
+      "author": "Frenchyboy",
+      "slug": "alarm-2",
+      "file": "alarm_0.wav",
+      "page": "https://opengameart.org/content/alarm-2",
+      "download": "https://opengameart.org/sites/default/files/alarm_0.wav",
+      "license": "CC0-1.0",
+      "licenseUrl": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "bytes": 384044,
+      "sha256": "bd4c4654688af6e1f8f1c6bad9f9e97e62a0422104d849cbb6192f3e38a5e2bc"
+    }
+  ]
+}

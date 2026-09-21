@@ -1,7 +1,7 @@
 <script>
+  // @ts-nocheck — 타입 주석이 아직 없는 기존 코드라 타입 검사에서 뺍니다. 고칠 때 JSDoc 타입을 붙이고 이 줄을 지워 주세요.
   import { applyHeaderDesignChoice } from './lib/headerDesign.js';
   import { onMount, onDestroy } from "svelte";
-  import { launchMealOnce } from './lib/meal/mealWindows.js';
   import { slide, fade, scale } from "svelte/transition";
   import { Check, Eraser } from "lucide-svelte";
   import { appState } from "./lib/appState.svelte.js";
@@ -12,14 +12,8 @@
   import { playChime } from "./lib/sound.js";
   import { ensureWindowOnScreen, getMonitorGeometries } from "./lib/windows/windowRegistry.js";
   import { resolveSavedPosition } from "./lib/windows/windowPlacement.js";
-  import {
-    UPDATE_NOTICE_STORE_KEY,
-    UPDATE_NOTICE_WINDOW_LABEL,
-    calculateStartupWindowLayout,
-    getUpdateNoticeWindowOptions,
-    getWelcomeWindowOptions,
-    shouldShowUpdateNotice,
-  } from "./lib/updateNotice.js";
+  import { UPDATE_NOTICE_WINDOW_LABEL } from "./lib/updateNotice.js";
+  import { startStartupNotices } from "./lib/startupNotices.js";
 
   import Titlebar from "./components/Titlebar.svelte";
   import MainToolbar from "./components/MainToolbar.svelte";
@@ -38,7 +32,7 @@
   import UpdateNotice from "./components/UpdateNotice.svelte";
 
   import { convertFileSrc } from "@tauri-apps/api/core";
-  import { getCurrentWindow, primaryMonitor } from "@tauri-apps/api/window";
+  import { getCurrentWindow } from "@tauri-apps/api/window";
   import { enable, isEnabled } from "@tauri-apps/plugin-autostart";
   import { listen, emit, emitTo } from "@tauri-apps/api/event";
   import { WebviewWindow } from "@tauri-apps/api/webviewWindow";
@@ -65,58 +59,6 @@
   // 설정·컨텍스트메뉴·환영 같은 임시 UI 창은 저장 플러시 대상이 아닙니다.
   // (판별 규칙은 appState와 똑같아야 하므로 windowLabels.js 한 곳을 공유합니다.)
   const isDataWindow = isDataWindowLabel;
-
-  // 시작 시 뜨는 창들(환영 · 업데이트 공지)을 겹치지 않게 놓기 위한 화면 크기 조회입니다.
-  // 왜 논리 좌표(logical)로 계산하는가: WebviewWindow의 x/y도 논리 좌표라 단위를 맞춰야
-  //   고해상도(배율 150% 등) 화면에서 창이 엉뚱한 곳으로 날아가지 않습니다.
-  async function getStartupLayout() {
-    try {
-      const monitor = await primaryMonitor();
-      if (!monitor) return null;
-
-      const scale = monitor.scaleFactor || 1;
-      return calculateStartupWindowLayout({
-        screenWidth: monitor.size.width / scale,
-        screenHeight: monitor.size.height / scale,
-      });
-    } catch (error) {
-      // 화면 정보를 못 읽어도 앱은 그대로 동작해야 하므로, 배치만 포기하고 중앙 정렬로 넘깁니다.
-      console.warn("화면 크기를 읽지 못해 시작 창을 중앙에 배치합니다:", error);
-      return null;
-    }
-  }
-
-  async function openUpdateNoticeWindow(position = null) {
-    try {
-      const store = new LazyStore("tidy-task-config.json");
-      const hiddenUntil = await store.get(UPDATE_NOTICE_STORE_KEY);
-      if (!shouldShowUpdateNotice(hiddenUntil)) return;
-
-      const existing = await WebviewWindow.getByLabel(UPDATE_NOTICE_WINDOW_LABEL);
-      if (existing) {
-        await existing.show();
-        await existing.setFocus();
-        return;
-      }
-
-      const noticeWindow = new WebviewWindow(
-        UPDATE_NOTICE_WINDOW_LABEL,
-        getUpdateNoticeWindowOptions(position),
-      );
-
-      noticeWindow.once("tauri://created", async () => {
-        try {
-          await noticeWindow.show();
-          await noticeWindow.setFocus();
-        } catch (_) {}
-      });
-      noticeWindow.once("tauri://error", (event) => {
-        console.warn("업데이트 공지 창을 열지 못했습니다:", event.payload);
-      });
-    } catch (error) {
-      console.warn("업데이트 공지 노출 여부를 확인하지 못했습니다:", error);
-    }
-  }
 
   // 창이 백그라운드로 가거나 언로드될 때 예약된 저장을 즉시 확정합니다.
   function handleVisibilityFlush(e) {
@@ -595,37 +537,9 @@
       playChime('start');
     }
 
-    // ── [시작 창 배치] 환영 창과 업데이트 공지 창을 나란히 띄웁니다 ──
-    //
-    // 왜 이렇게 바뀌었는가:
-    //   예전에는 두 창이 모두 화면 정중앙(center:true)에 떠서 완전히 포개졌습니다.
-    //   그래서 "환영 창을 본 적 있는 기존 사용자에게만 공지를 띄운다"는 배타 조건으로
-    //   겹침을 피했는데, 그 결과 처음 설치한 사용자는 업데이트 공지를 영영 못 봤습니다.
-    //   이제 좌우로 나눠 놓기 때문에 신규 사용자도 두 안내를 한눈에 함께 볼 수 있습니다.
+    // 공지 대기는 메인 창 복원과 분리해 앱 사용을 막지 않습니다.
     if (currentWindow.label === "main") {
-      const showWelcome = !appState.hideWelcomeMessage;
-      // 공지를 이미 닫은 사용자에게는 굳이 화면 크기를 조회하지 않습니다.
-      const layout = await getStartupLayout();
-
-      if (showWelcome) {
-        // 환영 창만 뜨는 상황(공지를 이미 닫음)이면 굳이 옆으로 밀지 않고 중앙에 둡니다.
-        // 왜: 짝이 없는데 한쪽으로 치우쳐 뜨면 사용자에게 어색하게 보입니다.
-        // 저장소를 못 읽어도 시작 과정이 멈추지 않도록, 실패는 "숨기지 않음"으로 취급합니다.
-        // (예전에는 여기서 예외가 나면 창을 보여 주는 코드까지 도달하지 못했습니다)
-        let noticeHiddenUntil;
-        try {
-          noticeHiddenUntil = await new LazyStore("tidy-task-config.json").get(UPDATE_NOTICE_STORE_KEY);
-        } catch (error) {
-          noticeHiddenUntil = undefined;
-        }
-        const noticeHidden = !shouldShowUpdateNotice(noticeHiddenUntil);
-        const welcomePos = (layout && !noticeHidden) ? layout.welcome : null;
-        new WebviewWindow('welcome', getWelcomeWindowOptions(welcomePos));
-      }
-
-      // 공지 창은 신규·기존 사용자 모두에게 띄웁니다.
-      // 환영 창이 함께 뜰 때만 짝 배치 좌표를 쓰고, 혼자 뜰 때는 중앙에 둡니다.
-      await openUpdateNoticeWindow(showWelcome && layout ? layout.notice : null);
+      void startStartupNotices(!appState.hideWelcomeMessage);
     }
 
     const isValidPos = (val) =>
@@ -638,9 +552,6 @@
       (val) => isValidPos(val) && val > -10000 && val < 20000;
     const isValidSize = (val) => isValidPos(val) && val > 0;
 
-    if (currentWindow.label === 'main') {
-      void launchMealOnce().catch(() => console.warn('급식창을 자동으로 열지 못했습니다.'));
-    }
     if (currentWindow.label !== "settings") {
       // ✨ [TCREI: Persistence] 전체화면 상태 복원
       // 왜 크기/위치를 먼저 설정하는가: setFullscreen(true) 직전의 크기를 OS가 "이전 크기"로 기억합니다.
@@ -911,11 +822,14 @@
         document.activeElement.blur();
       }
 
-      // ✨ Phase 3: 매니저 창이 닫힐 때 권한 승계를 위한 이벤트 송신
+      // ✨ 매니저 창이 닫힐 때 권한을 미리 넘깁니다.
       // 권한과 점검 타이머를 내려놓은 뒤, 누가 닫히는지(라벨)를 함께 알려 후보에서 빼게 합니다.
+      // 왜 여기서도 알리는가: 창이 실제로 사라지는 것은 아래의 저장이 모두 끝난 뒤라서,
+      //   Rust의 "창이 사라졌다" 알림만 기다리면 그 사이 매니저가 비어 있게 됩니다.
+      //   (두 알림 모두 같은 규칙으로 다시 계산하므로 두 번 와도 결과는 같습니다)
       if (appState.isManager) {
         appState.resignManager();
-        await emit('manager-closing', { label: win.label });
+        await emit('window-roster-changed', { closed: win.label });
       }
 
       try {

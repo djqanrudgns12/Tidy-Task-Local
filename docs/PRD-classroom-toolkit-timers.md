@@ -1,6 +1,6 @@
 # 학급 툴킷 · 타이머 1차 PRD
 
-작성: 2026-09-19 · 상태: 1차 구현 완료 · 검수 범위 별도 기록 · 현재 제품: Tidy Task 5.1.2
+작성: 2026-09-19 · 상태: 1차 구현 완료 · 검수 범위 별도 기록 · 현재 제품: Tidy Task 5.5.0
 
 연결 문서: [항목별 상세 구현 계획](./PLAN-classroom-toolkit-timers.md) · [실제 검수 결과](./QA-classroom-toolkit-timers.md)
 

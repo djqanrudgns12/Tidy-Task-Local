@@ -6,7 +6,9 @@ use tauri_plugin_autostart::MacosLauncher;
 mod neis;
 mod analytics;
 mod toolkit;
+mod tray;
 mod picker;
+mod tournament;
 mod noticeboard;
 mod noticeboard_quit;
 mod classroom;
@@ -175,7 +177,7 @@ fn centered_in(work: PixelRect, width: i64, height: i64) -> (i64, i64) {
 
 // 창이 어느 모니터에서도 제목줄을 잡을 수 없는 위치(화면 밖)라면 주 모니터 작업영역 가운데로 옮깁니다.
 // 왜: 모니터 구성·배율이 바뀌면 저장된 좌표가 화면 밖을 가리켜, 트레이의 "좌표 초기화" 전까지 창이 보이지 않았습니다.
-fn ensure_window_on_screen(window: &tauri::WebviewWindow) {
+pub(crate) fn ensure_window_on_screen(window: &tauri::WebviewWindow) {
     // 최소화된 창의 좌표(-32000)는 위치가 아니므로 건드리지 않습니다.
     if window.is_minimized().unwrap_or(false) {
         return;
@@ -212,7 +214,7 @@ fn ensure_window_on_screen(window: &tauri::WebviewWindow) {
 
 // main 창을 앞으로 가져오거나, 닫혀 있으면 새로 만듭니다.
 // 왜 함수로 모았는가: 두 번째 실행·트레이 "열기"·트레이 더블클릭 세 곳에 같은 코드가 복사돼 있었습니다.
-fn show_or_create_main(app: &tauri::AppHandle) {
+pub(crate) fn show_or_create_main(app: &tauri::AppHandle) {
     if let Some(window) = app.get_webview_window("main") {
         let _ = window.show();
         let _ = window.unminimize();
@@ -252,6 +254,18 @@ pub fn run() {
                 let windows = app.webview_windows();
                 let destroyed_label = window.label();
 
+                // 메모 창이 닫히면 남은 창들이 매니저를 다시 뽑도록 알립니다.
+                // 왜 Rust가 알리는가: 창이 스스로 알리는 방식은 닫기 처리기가 실행되지 못한 경우
+                //   (강제 종료·오류로 창이 사라진 경우)에 아무도 권한을 이어받지 못했습니다.
+                // 왜 닫힌 라벨을 같이 보내는가: 이 시점에는 닫히는 창이 아직 목록에 남아 있어
+                //   후보에서 빼 주어야 정확히 뽑힙니다.
+                if tray::is_data_window(destroyed_label) {
+                    let _ = app.emit(
+                        "window-roster-changed",
+                        serde_json::json!({ "closed": destroyed_label }),
+                    );
+                }
+
                 // 살아있는 메모장(main 또는 note-x)이나 리마인더·아카이브가 있는지 확인합니다.
                 // 왜 아카이브를 포함하는가: 아카이브만 남기고 마지막 메모 창을 닫으면 앱이 바로 종료되어
                 //   아카이브에서 편집 중이던 내용이 저장되기 전에 사라질 수 있었습니다.
@@ -281,9 +295,8 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_opener::init())
-        .invoke_handler(tauri::generate_handler![picker::picker_read, picker::picker_write, noticeboard::noticeboard_execute, noticeboard_quit::noticeboard_quit_reply, noticeboard_quit::noticeboard_cancel_quit, save_custom_font, store_health, neis::neis_search_schools, neis::neis_meals, neis::neis_schedule, neis::meal_take_launch_token, analytics::analytics_track, classroom::classroom_quit_reply, classroom::classroom_read, classroom::classroom_execute, classroom::classroom_clear_history, classroom::import::classroom_take_drop, classroom::import::classroom_parse, classroom::import::classroom_cancel_parse, classroom::import::classroom_project, toolkit::toolkit_read, toolkit::toolkit_patch, toolkit::toolkit_open, toolkit::toolkit_set_enabled])
+        .invoke_handler(tauri::generate_handler![tournament::tournament_read, tournament::tournament_write, picker::picker_read, picker::picker_write, noticeboard::noticeboard_execute, noticeboard_quit::noticeboard_quit_reply, noticeboard_quit::noticeboard_cancel_quit, save_custom_font, store_health, neis::neis_search_schools, neis::neis_meals, neis::neis_schedule, neis::meal_take_launch_token, analytics::analytics_track, classroom::classroom_quit_reply, classroom::classroom_read, classroom::classroom_execute, classroom::classroom_clear_history, classroom::import::classroom_take_drop, classroom::import::classroom_parse, classroom::import::classroom_cancel_parse, classroom::import::classroom_project, toolkit::toolkit_read, toolkit::toolkit_patch, toolkit::toolkit_open, toolkit::toolkit_set_enabled, tray::tray_request_done, tray::tray_take_pending_request])
         .setup(|app| {
-            toolkit::startup(app.handle().clone());
             // 어떤 창보다 먼저 저장 파일을 점검·백업합니다.
             protect_store_file(app.handle());
             analytics::setup(app.handle());
@@ -322,64 +335,7 @@ pub fn run() {
             }
 
             #[cfg(desktop)]
-            {
-                use tauri::menu::{Menu, MenuItem};
-                use tauri::tray::TrayIconBuilder;
-
-                let open_i = MenuItem::with_id(app, "open", "열기 (Open)", true, None::<&str>)?;
-                let meal_i = MenuItem::with_id(app, "meal", "급식창 열기", true, None::<&str>)?;
-                let new_main_i = MenuItem::with_id(app, "new_main", "새 Tidy Task", true, None::<&str>)?;
-                let new_tiny_i = MenuItem::with_id(app, "new_tiny", "새 Tiny Note", true, None::<&str>)?;
-                let reset_coord_i = MenuItem::with_id(app, "reset_coord", "좌표 초기화", true, None::<&str>)?;
-                let quit_i = MenuItem::with_id(app, "quit", "종료 (Quit)", true, None::<&str>)?;
-                let menu = Menu::with_items(app, &[&open_i, &meal_i, &new_main_i, &new_tiny_i, &reset_coord_i, &quit_i])?;
-
-                let _tray = TrayIconBuilder::new()
-                    .icon(app.default_window_icon().cloned().unwrap())
-                    .menu(&menu)
-                    .tooltip("Tidy Task")
-                    .on_menu_event(|app, event| match event.id.as_ref() {
-                        "quit" => {
-                            if !noticeboard_quit::request(&app) { classroom::request_quit(app); }
-                        }
-                        // ✨ 3. 트레이 메뉴 '열기' 시에도 방어 로직
-                        "open" => show_or_create_main(app),
-                        "meal" => {
-                            if let Some(win) = app.get_webview_window("meal") {
-                                let _ = win.unminimize();
-                                ensure_window_on_screen(&win);
-                                let _ = win.show();
-                                let _ = win.set_focus();
-                            } else {
-                                // 메모 창이 없어도 열리며, 화면에서 급식 전용 저장소의 위치를 복원합니다.
-                                let _ = tauri::WebviewWindowBuilder::new(app, "meal", tauri::WebviewUrl::App("index.html".into()))
-                                    .title("오늘의 급식").inner_size(320.0,460.0).min_inner_size(180.0,120.0)
-                                    // Windows의 undecorated shadow가 투명 모서리에 만드는 1px 흰 테두리를 제거합니다.
-                                    // 창 내부의 MealFrame이 자체 보더와 둥근 모서리를 그립니다.
-                                    .decorations(false).transparent(true).shadow(false).resizable(true).visible(false).build();
-                            }
-                        }
-                        // 아래 요청은 모든 창에 방송하고, 매니저 창 하나만 처리합니다.
-                        // 왜: 예전에는 main 창에만 보내서 main을 닫으면 메뉴가 아무 반응이 없었습니다.
-                        "new_main" => {
-                            let _ = app.emit("spawn-new-window", ());
-                        }
-                        "new_tiny" => {
-                            let _ = app.emit("spawn-tiny-note", ());
-                        }
-                        "reset_coord" => {
-                            let _ = app.emit("req-reset-coordinates", ());
-                        }
-                        _ => (),
-                    })
-                    .on_tray_icon_event(|tray, event| {
-                        if let tauri::tray::TrayIconEvent::DoubleClick { .. } = event {
-                            // ✨ 4. 트레이 아이콘 '더블 클릭' 시에도 방어 로직
-                            show_or_create_main(tray.app_handle());
-                        }
-                    })
-                    .build(app)?;
-            }
+            tray::install(app)?;
 
             Ok(())
         })

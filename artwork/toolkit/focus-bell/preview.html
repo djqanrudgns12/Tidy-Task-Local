@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="ko"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Tidy 집중벨 · 음원 미리듣기</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#f3f7fb;color:#263449;font-family:system-ui,sans-serif;padding:36px}main{max-width:950px;margin:auto}h1{font-size:30px;margin-bottom:8px}p{color:#637187;line-height:1.6}.stage{background:#e7f2ff;border-radius:24px;text-align:center;padding:36px;margin:24px 0}.symbol{font-size:100px;display:inline-block}.playing{animation:bounce .45s ease-in-out infinite alternate}@keyframes bounce{to{transform:rotate(10deg) scale(1.08)}}.cards{display:grid;grid-template-columns:repeat(4,1fr);gap:14px}article{background:white;padding:20px;border:1px solid #e1e8f0;border-radius:18px}button{border:0;border-radius:12px;background:#326dad;color:white;padding:12px 18px;font:inherit;cursor:pointer}button:focus-visible,input:focus-visible{outline:3px solid #f1b62a;outline-offset:3px}a{color:#326dad}label{display:flex;gap:14px;align-items:center;flex-wrap:wrap;margin:24px 0}input{width:240px}small{display:block;color:#637187;line-height:1.6;margin:12px 0}footer{margin-top:28px;font-size:13px;color:#637187}@media(max-width:760px){.cards{grid-template-columns:repeat(2,1fr)}body{padding:20px}}@media(prefers-reduced-motion:reduce){.playing{animation:none}}
+</style>
+<main><h1>집중벨 음원 미리듣기</h1><p>종소리와 사이렌을 새 음원으로 교체한 2초로 다듬은 음원입니다. 버튼을 누르면 한 번 재생됩니다. 집중벨은 Tidy 툴킷에도 연결했습니다.</p>
+<div class="stage"><span id="symbol" class="symbol" aria-hidden="true">🔔</span><p id="status" role="status">아래 버튼을 눌러 들어보세요</p><button id="stop">■ 정지</button></div>
+<label>음량 <input id="volume" type="range" min="0" max="100" value="40"><output id="value">40%</output></label>
+<div class="cards">
+<article><h2>🔔 종소리</h2><small>금속 핸드벨 연속 울림 · 2초</small><button data-id="bell" data-symbol="🔔" data-name="종소리">재생</button><small><a href="https://bigsoundbank.com/bell-1-s2113.html">Joseph SARDIN · 원본 출처</a></small></article>
+<article><h2>💣 폭탄</h2><small>합성 폭발음 · 1.18초</small><button data-id="bomb" data-symbol="💥" data-name="폭탄">재생</button><small><a href="https://opengameart.org/content/synthesized-explosion">qubodup · 원본 출처</a></small></article>
+<article><h2>💨 방구</h2><small>짧은 코믹 효과음 · 1.50초</small><button data-id="fart" data-symbol="💨" data-name="방구">재생</button><small><a href="https://opengameart.org/content/gastric-distress">LFA · 원본 출처</a></small></article>
+<article><h2>🚨 사이렌</h2><small>삐뽀삐뽀 두 음 사이렌 · 2초</small><button data-id="siren" data-symbol="🚨" data-name="사이렌">재생</button><small><a href="https://bigsoundbank.com/ambulance-siren-2-s1464.html">Joseph SARDIN · 원본 출처</a></small></article>
+</div><footer>CC0-1.0 · 네 음원은 ITU-R BS.1770 방식으로 측정해 각각 -12 LUFS로 맞췄습니다. 출처와 가공 이력은 sources.json·sources-v2.json과 음원 manifest.json에 기록했습니다.</footer></main>
+<script>
+const audio=new Audio(),volume=document.querySelector('#volume'),status=document.querySelector('#status'),symbol=document.querySelector('#symbol');
+let request=0,clipGain=1;
+audio.volume=.4;
+function stop(){request++;audio.pause();audio.currentTime=0;symbol.classList.remove('playing');status.textContent='정지했어요';}
+document.querySelector('#stop').onclick=stop;
+volume.oninput=()=>{audio.volume=Number(volume.value)/100*clipGain;document.querySelector('#value').value=volume.value+'%';};
+document.querySelectorAll('[data-id]').forEach(button=>button.onclick=async()=>{
+stop();const token=request;
+audio.src='../../../public/audio/toolkit/focus-bell/'+button.dataset.id+'.wav?revision=4';
+clipGain=1;audio.volume=Number(volume.value)/100;
+symbol.textContent=button.dataset.symbol;status.textContent='준비 중…';
+try{await audio.play();if(token!==request)return;symbol.classList.add('playing');status.textContent=button.dataset.name+' 재생 중';}catch{if(token===request)status.textContent='재생하지 못했어요. 다시 눌러주세요';}
+});
+audio.onended=()=>{symbol.classList.remove('playing');status.textContent='한 번 더 누르면 다시 재생됩니다';};
+window.addEventListener('pagehide',stop);
+document.addEventListener('keydown',event=>{if(event.key==='Escape')stop();});
+</script></html>

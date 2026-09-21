@@ -1,0 +1,41 @@
+Tidy focus bell: initial sound candidates
+Retrieved: 2026-09-21
+All four source entries explicitly offer CC0-1.0.
+License: https://creativecommons.org/publicdomain/zero/1.0/
+Full legal text: https://creativecommons.org/publicdomain/zero/1.0/legalcode
+
+bell.wav — replacement revision 3
+Bell #1 — Joseph SARDIN / BigSoundBank
+https://bigsoundbank.com/bell-1-s2113.html
+Original MP3: https://bigsoundbank.com/UPLOAD/mp3/2113.mp3
+Edit: 2 seconds from 0.11s, mono 48kHz PCM16, DC removal, 5ms fade-in and smooth fade-out,
+350ms cosine-squared release after soft peak compression (tanh drive 4), normalized to -3 dBFS after processing.
+
+bomb.wav (runtime normalized copy; bomb.flac is the preserved source copy)
+Synthesized explosion — qubodup
+https://opengameart.org/content/synthesized-explosion
+Original: synthetic_explosion_1.flac
+Source FLAC decoded to mono PCM16. Soft peak compression and loudness normalization applied.
+
+fart.wav
+Gastric Distress — LFA
+https://opengameart.org/content/gastric-distress
+Original: gastricdistress_bylfa_0.wav
+Edit: first 1.5 seconds, mono, peak gain and short fades.
+
+siren.wav — replacement revision 3
+2 Ton Siren — Joseph SARDIN / BigSoundBank
+https://bigsoundbank.com/ambulance-siren-2-s1464.html
+Original MP3: https://bigsoundbank.com/UPLOAD/mp3/1464.mp3
+Edit: 2 seconds from 0.01s, mono 48kHz PCM16, DC removal, 5ms fade-in and smooth fade-out,
+250ms cosine-squared release, normalized to -3 dBFS after processing.
+
+Sources and original hashes: artwork/toolkit/focus-bell/sources.json (bomb/fart), sources-v2.json (bell/siren)
+Prepared file hashes and exact processing: manifest.json in this directory.
+Attribution retained for provenance, without claiming authorship of the sources.
+
+Runtime loudness revision 4
+All four files are measured with mono ITU-R BS.1770 K-weighting and gating, then normalized to
+-12 LUFS integrated. A -1.5 dBFS peak ceiling is used for compressed files. Bell and siren need
+only linear attenuation; bomb and fart use soft tanh compression so their average loudness can
+rise without digital clipping. Exact before/after values: output/qa/focus-bell-loudness-normalization.json.

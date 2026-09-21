@@ -1,4 +1,5 @@
 <script>
+  // @ts-nocheck — 타입 주석이 아직 없는 기존 코드라 타입 검사에서 뺍니다. 고칠 때 JSDoc 타입을 붙이고 이 줄을 지워 주세요.
   import ToolkitToggle from './toolkit/ToolkitToggle.svelte';
   import { track } from '../lib/analytics.js';
   import { X, Palette, Type, PenLine, Monitor, Layout, Upload, Moon, Archive, FileText, Database, RefreshCw, Bell, VolumeX, Download } from 'lucide-svelte';
@@ -316,6 +317,7 @@
             다크 모드
           </label>
           <button
+            aria-label="다크 모드" aria-pressed={localIsDarkMode}
             onclick={() => { localIsDarkMode = !localIsDarkMode; }} 
             class="relative inline-flex items-center w-9 h-5 rounded-full transition-all" 
             style="background-color: {localIsDarkMode ? '#f59e0b' : '#d1d5db'};"
@@ -332,6 +334,7 @@
             마감된 일 표시
           </label>
           <button
+            aria-label="마감된 일 표시" aria-pressed={localShowArchived}
             onclick={() => { localShowArchived = !localShowArchived; }} 
             class="relative inline-flex items-center w-9 h-5 rounded-full transition-all" 
             style="background-color: {localShowArchived ? '#f59e0b' : '#d1d5db'};"
@@ -348,6 +351,7 @@
             중요한 메모 표시
           </label>
           <button
+            aria-label="중요한 메모 표시" aria-pressed={localShowNotes}
             onclick={() => { localShowNotes = !localShowNotes; }} 
             class="relative inline-flex items-center w-9 h-5 rounded-full transition-all" 
             style="background-color: {localShowNotes ? '#f59e0b' : '#d1d5db'};"
@@ -364,6 +368,7 @@
             통합 리마인더 (모든 창에 적용)
           </label>
           <button
+            aria-label="통합 리마인더" aria-pressed={localShowReminders}
             onclick={() => { localShowReminders = !localShowReminders; }} 
             class="relative inline-flex items-center w-9 h-5 rounded-full transition-all" 
             style="background-color: {localShowReminders ? '#f59e0b' : '#d1d5db'};"
@@ -380,6 +385,7 @@
             전체 무음 모드
           </label>
           <button
+            aria-label="전체 무음 모드" aria-pressed={localGlobalMuteSound}
             onclick={() => { localGlobalMuteSound = !localGlobalMuteSound; }} 
             class="relative inline-flex items-center w-9 h-5 rounded-full transition-all" 
             style="background-color: {localGlobalMuteSound ? '#f59e0b' : '#d1d5db'};"
@@ -478,7 +484,7 @@
         </div>
         <!-- 버전을 코드에 박아두면 배포 때 갱신을 빠뜨려 실제 버전과 어긋납니다.
              appState.appVersion은 tauri.conf.json의 version을 그대로 읽어옵니다. -->
-        <span class="text-[9px] font-medium opacity-30 select-none uppercase tracking-widest" style="color: {localIsDarkMode ? '#ffffff' : '#000000'};">v.{appState.appVersion || '5.1.2'}</span>
+        <span class="text-[9px] font-medium opacity-30 select-none uppercase tracking-widest" style="color: {localIsDarkMode ? '#ffffff' : '#000000'};">v.{appState.appVersion || '5.5.0'}</span>
       </div>
 
       <div class="flex items-center justify-center gap-1 pt-3 text-[9px]" style="color: {localIsDarkMode ? '#94a3b8' : '#64748b'};">

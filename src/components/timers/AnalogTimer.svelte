@@ -98,7 +98,7 @@
   onlostpointercapture={cancel}
   onkeydown={keys}
 >
-  <circle cx="150" cy="150" r="146" fill="#fff0cb" stroke="#ecdba8" stroke-width="1.5" />
+  <circle cx="150" cy="150" r="146" fill="var(--tk-panel)" stroke="var(--tk-line)" stroke-width="1.5" />
   <circle cx="150" cy="150" r="135" fill="white" />
   <path d={sectorPath(angle / 360)} fill="var(--tk-peach)" />
   {#each Array(range).fill(0) as _, i}
@@ -110,7 +110,7 @@
       y1={p.y}
       x2={q.x}
       y2={q.y}
-      stroke={major ? '#526a65' : '#b8c6be'}
+      stroke={major ? 'var(--tk-muted)' : 'var(--tk-line)'}
       stroke-width={major ? 2.6 : 1.2}
       stroke-linecap="round"
     />
@@ -122,7 +122,7 @@
       y={p.y}
       dy=".35em"
       text-anchor="middle"
-      fill="#304b47"
+      fill="var(--tk-ink)"
       font-size="19"
       font-weight="650">{i * 5}</text
     >
@@ -132,11 +132,11 @@
     y1="150"
     x2={tip.x}
     y2={tip.y}
-    stroke="#287768"
+    stroke="var(--tk-accent)"
     stroke-width="4.5"
     stroke-linecap="round"
   />
-  <circle cx="150" cy="150" r="10" fill="#287768" /><circle
+  <circle cx="150" cy="150" r="10" fill="var(--tk-accent)" /><circle
     cx="150"
     cy="150"
     r="3.5"
@@ -147,7 +147,7 @@
       cy={tip.y}
       r="5.5"
       fill="white"
-      stroke="#287768"
+      stroke="var(--tk-accent)"
       stroke-width="2.5"
     />{/if}
 </svg>

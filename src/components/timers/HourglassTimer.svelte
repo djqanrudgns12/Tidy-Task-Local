@@ -19,12 +19,12 @@
       ><path d="M153 186 H167 Q242 240 242 294 H78 Q78 240 153 186 Z" /></clipPath
     >
   </defs>
-  <rect x="53" y="54" width="11" height="250" rx="5.5" fill="#b3d3bd" />
-  <rect x="256" y="54" width="11" height="250" rx="5.5" fill="#b3d3bd" />
+  <rect x="53" y="54" width="11" height="250" rx="5.5" fill="var(--tk-line)" />
+  <rect x="256" y="54" width="11" height="250" rx="5.5" fill="var(--tk-line)" />
   <path
     d="M79 58 H241 Q253 58 253 70 Q253 124 177 178 Q175 180 177 182 Q253 236 253 294 Q253 306 241 306 H79 Q67 306 67 294 Q67 236 143 182 Q145 180 143 178 Q67 124 67 70 Q67 58 79 58 Z"
-    fill="#f3faf5"
-    stroke="#8fb5a1"
+    fill="var(--tk-panel)"
+    stroke="var(--tk-line)"
     stroke-width="2.5"
   />
   <rect
@@ -67,7 +67,7 @@
     stroke-width="5"
     stroke-linecap="round"
   />
-  <rect x="39" y="37" width="242" height="25" rx="11" fill="#85b69a" />
-  <rect x="39" y="300" width="242" height="25" rx="11" fill="#85b69a" />
-  <path d="M53 330 H267" stroke="#ecf1e6" stroke-width="4" stroke-linecap="round" />
+  <rect x="39" y="37" width="242" height="25" rx="11" fill="var(--tk-action)" />
+  <rect x="39" y="300" width="242" height="25" rx="11" fill="var(--tk-action)" />
+  <path d="M53 330 H267" stroke="var(--tk-soft)" stroke-width="4" stroke-linecap="round" />
 </svg>

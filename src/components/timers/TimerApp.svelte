@@ -265,15 +265,21 @@
     e.preventDefault();
     void act(view.phase === 'running' ? 'pause' : view.phase === 'completed' ? 'restart' : 'start');
   }
+  // 왜 진행 중일 때만 도는가: 준비·일시정지·종료 화면은 멈춰 있으므로,
+  // 창을 여러 개 띄워 두어도 쉬는 타이머가 매 프레임 CPU를 쓰지 않게 합니다.
+  let frame = 0;
+  function animate() {
+    frame = 0;
+    if (disposed || model.phase !== 'running') return;
+    if (document.visibilityState === 'visible') update();
+    frame = requestAnimationFrame(animate);
+  }
+  $effect(() => {
+    if (model.phase === 'running' && !frame && !disposed) frame = requestAnimationFrame(animate);
+  });
   onMount(() => {
-    let frame = 0;
     let interval: ReturnType<typeof setInterval>;
     const offs: (() => void)[] = [];
-    const animate = () => {
-      if (disposed) return;
-      if (document.visibilityState === 'visible' && model.phase === 'running') update();
-      frame = requestAnimationFrame(animate);
-    };
     const cleanup = () => {
       disposed = true;
       cancelAnimationFrame(frame);
@@ -315,7 +321,6 @@
         loaded = true;
       }
     })();
-    frame = requestAnimationFrame(animate);
     interval = setInterval(() => {
       if (document.visibilityState !== 'visible' && model.phase === 'running') update();
     }, 250);

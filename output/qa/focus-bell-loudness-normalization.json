@@ -1,0 +1,60 @@
+{
+  "normalizedAt": "2026-09-21T02:09:18.179Z",
+  "standard": "ITU-R BS.1770 mono K-weighting with 400ms absolute/relative gated blocks",
+  "targetIntegratedLufs": -12,
+  "peakCeilingDbFS": -1.5,
+  "sounds": [
+    {
+      "id": "bell",
+      "sourceFile": "bell.wav",
+      "file": "bell.wav",
+      "durationSeconds": 2,
+      "initialBaselineLufs": -9.4,
+      "immediateInputLufs": -12.000134185885843,
+      "afterLufs": -12.000000000000009,
+      "rmsDbFS": -15.662717408958448,
+      "peakDbFS": -5.603852281620496,
+      "compressionDrive": 0,
+      "sha256": "074e5f69aade8665dcf2a8b8e3606da6cdafd49abfac3f41b3f2115b4523804a"
+    },
+    {
+      "id": "bomb",
+      "sourceFile": "bomb.flac",
+      "file": "bomb.wav",
+      "durationSeconds": 1.1836458333333333,
+      "initialBaselineLufs": -19.94,
+      "immediateInputLufs": -19.940500389471136,
+      "afterLufs": -11.999999823479214,
+      "rmsDbFS": -7.394581532168133,
+      "peakDbFS": -1.4999999999999993,
+      "compressionDrive": 5.112529164291918,
+      "sha256": "bc5971be54cafff47b9b87589d93a152dcb2e07da792ae435a864e362f549a9a"
+    },
+    {
+      "id": "fart",
+      "sourceFile": "fart.wav",
+      "file": "fart.wav",
+      "durationSeconds": 1.5,
+      "initialBaselineLufs": -19.8,
+      "immediateInputLufs": -12.000156523401534,
+      "afterLufs": -11.99997615777331,
+      "rmsDbFS": -14.1827393776509,
+      "peakDbFS": -1.4999999999999993,
+      "compressionDrive": 0.010000238381326198,
+      "sha256": "5a6aee794ff7ce2b70936d401bf65f4694f94e787e1810ebd10a904238091f4e"
+    },
+    {
+      "id": "siren",
+      "sourceFile": "siren.wav",
+      "file": "siren.wav",
+      "durationSeconds": 2,
+      "initialBaselineLufs": -8.48,
+      "immediateInputLufs": -12.000128221881546,
+      "afterLufs": -11.999999999999995,
+      "rmsDbFS": -13.647732206602656,
+      "peakDbFS": -6.520748766728239,
+      "compressionDrive": 0,
+      "sha256": "e50feff6e06a916cbae56bee4a7b7d76e667e0d73d7b0ce410a08d21f85cb824"
+    }
+  ]
+}

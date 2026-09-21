@@ -35,6 +35,8 @@
     </div>
     <div class="flex items-center gap-1">
       {#if appState.filteredArchivedTodos.length > 0}
+        <!-- 접기 머리글 안의 전체 삭제 버튼입니다. {#if} 조각으로 따로 만들어져 브라우저 재배치 문제는 없고, 클릭은 stopPropagation으로 분리됩니다. -->
+        <!-- svelte-ignore node_invalid_placement_ssr -->
         <button
           onclick={(e) => { e.stopPropagation(); appState.deleteAllArchivedTodos(); }}
           onmousedown={(e) => e.preventDefault()}

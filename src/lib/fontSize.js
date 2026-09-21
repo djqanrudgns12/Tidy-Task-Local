@@ -1,3 +1,4 @@
+// @ts-nocheck — 타입 주석이 아직 없는 기존 코드라 타입 검사에서 뺍니다. 고칠 때 JSDoc 타입을 붙이고 이 줄을 지워 주세요.
 // ✨ [공용] 글자 크기 프리셋 + 표출 정규화 유틸 (레거시 없이 순수 JS)
 // 왜 별도 모듈인가: MainToolbar·FloatingRTE·ArchiveToolbar·ArchiveWindow 등 여러 곳에서
 //   동일한 프리셋/정규화 로직을 공유해야 하므로 단일 소스로 관리합니다.

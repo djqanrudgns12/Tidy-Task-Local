@@ -5,7 +5,7 @@ export const SOURCES = [
   { value: 'custom', label: '직접 명단 등록' },
 ];
 export const MODES = [{ id: 'classic', label: '클래식' }, { id: 'claw', label: '인형 뽑기' }, { id: 'balloon', label: '풍선 다트' }];
-export const DURATION = { classic: 280, claw: 4300, balloon: 3100 };
+export const DURATION = { classic: 2000, claw: 4700, balloon: 3300 };
 export const randomWord = () => crypto.getRandomValues(new Uint32Array(1))[0];
 /** @param {number} n @param {()=>number} [word] */
 export function randomIndex(n, word = randomWord) {

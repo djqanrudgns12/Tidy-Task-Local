@@ -1,3 +1,4 @@
+// @ts-nocheck — 타입 주석이 아직 없는 기존 코드라 타입 검사에서 뺍니다. 고칠 때 JSDoc 타입을 붙이고 이 줄을 지워 주세요.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createSerialQueue } from './serialQueue.js';

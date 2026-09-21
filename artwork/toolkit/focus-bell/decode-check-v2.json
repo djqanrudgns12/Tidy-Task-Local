@@ -1,0 +1,21 @@
+{
+  "checkedAt": "2026-09-21T01:48:14.952Z",
+  "checks": [
+    {
+      "id": "bell",
+      "seconds": 4,
+      "peakDbFS": -3.0003622493859567,
+      "rmsDbFS": -12.217075574203895,
+      "playing": "종소리 재생 중"
+    },
+    {
+      "id": "siren",
+      "seconds": 4,
+      "peakDbFS": -3.0003622493859567,
+      "rmsDbFS": -10.153003685627013,
+      "playing": "사이렌 재생 중"
+    }
+  ],
+  "clickStopAndEnd": "passed",
+  "listening": "not physically auditioned"
+}

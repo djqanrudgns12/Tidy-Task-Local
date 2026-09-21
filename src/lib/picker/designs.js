@@ -12,7 +12,7 @@ export const BALLOONS = [
   {id:'bear',label:'곰 풍선',path:'M-30 -30 C-64 -35 -58 -70 -31 -57 Q-20 -51 -22 -41 Q0 -48 22 -41 C18 -68 57 -74 59 -49 Q59 -31 30 -30 C67 10 37 52 0 49 C-37 52 -67 10 -30 -30Z'},
 ];
 export const PALETTES = [{id:'sage',label:'세이지',bg:'#eef4ee',accent:'#337969'}, {id:'butter',label:'버터',bg:'#faf4e5',accent:'#946d36'}, {id:'sky',label:'스카이',bg:'#edf4f8',accent:'#487d9b'}];
-export const COLORS = ['#c7ddcf','#e9c1b3','#e9d698','#b9d3e0','#d0c9df','#b8d8cf'];
+export const COLORS = ['#a7cdb4','#e7ad96','#e8cd7c','#9cbed7','#bcaad6','#92c8bb'];
 export const clamp = (/** @type {number} */ n) => Math.max(0, Math.min(1,n));
 const ease = (/** @type {number} */ n) => {n=clamp(n);return n*n*(3-2*n);};
 const mix = (/** @type {number} */ a,/** @type {number} */ b,/** @type {number} */ n) => a+(b-a)*ease(n);
@@ -49,4 +49,27 @@ export function dartPose(/** @type {number} */ ms,/** @type {{x:number,y:number}
   const x=(1-t)**2*sx+2*(1-t)*t*cx+t*t*end.x,y=(1-t)**2*sy+2*(1-t)*t*cy+t*t*end.y;
   const dx=2*(1-t)*(cx-sx)+2*t*(end.x-cx),dy=2*(1-t)*(cy-sy)+2*t*(end.y-cy);
   return {x,y,angle:Math.atan2(dy,dx)*180/Math.PI};
+}
+/** Visual suspense is sampled separately from the committed winner. */
+export function createSuspense(/** @type {number[]} */ available, /** @type {number} */ target, /** @type {()=>number} */ random = Math.random) {
+  const alternatives=available.filter(i=>i!==target);
+  const count=3+Math.floor(random()*3);
+  let previous=-1;
+  const visits=Array.from({length:count},(_,i)=>{
+    const options=alternatives.length>1?alternatives.filter(slot=>slot!==previous):alternatives;
+    const slot=options.length?options[Math.floor(random()*options.length)]:target;
+    previous=slot;
+    return {slot,pause:.16+random()*.28,dip:i%2===0?14+random()*28:0};
+  });
+  return {duration:1900+Math.floor(random()*1300),visits};
+}
+/** @param {ReturnType<typeof createSuspense>} plan @param {number} ms @param {{x:number,y:number}[]} slots @param {'claw'|'balloon'} kind @param {{x:number,y:number}} end */
+export function suspensePose(plan,ms,slots,kind,end) {
+  const start=kind==='claw'?{x:330,y:95}:{x:400,y:180};
+  const points=[start,...plan.visits.map(v=>{const p=slots[v.slot]??start;return {x:p.x,y:kind==='claw'?95+v.dip:p.y};}),end];
+  const position=clamp(ms/Math.max(1,plan.duration))*(points.length-1);
+  const index=Math.min(points.length-2,Math.floor(position));
+  const pause=plan.visits[Math.min(index,plan.visits.length-1)]?.pause??.2;
+  const progress=clamp((position-index)/(1-pause));
+  return {x:mix(points[index].x,points[index+1].x,progress),y:mix(points[index].y,points[index+1].y,progress)};
 }

@@ -1,4 +1,5 @@
 <script>
+  // @ts-nocheck — 타입 주석이 아직 없는 기존 코드라 타입 검사에서 뺍니다. 고칠 때 JSDoc 타입을 붙이고 이 줄을 지워 주세요.
   import { appState } from '../lib/appState.svelte.js';
   import { onMount } from 'svelte';
   import { getCurrentWindow } from '@tauri-apps/api/window';
@@ -112,6 +113,9 @@
   <!-- 그러나 혹시 남는 빈공간(패딩) 처리용으로 투명 div -->
   <div class="context-overlay" onclick={close} oncontextmenu={(e) => { e.preventDefault(); close(); }}></div>
 
+  <!-- 메뉴 판의 클릭 처리는 바깥 오버레이로 클릭이 새지 않게 막을 뿐이고, 항목 선택은 안쪽 버튼이 키보드로 처리합니다. -->
+  <!-- svelte-ignore a11y_click_events_have_key_events -->
+  <!-- svelte-ignore a11y_interactive_supports_focus -->
   <div
     bind:this={menuRef}
     class="context-menu"

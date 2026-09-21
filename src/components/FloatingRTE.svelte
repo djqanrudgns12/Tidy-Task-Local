@@ -1,4 +1,5 @@
 <script>
+  // @ts-nocheck — 타입 주석이 아직 없는 기존 코드라 타입 검사에서 뺍니다. 고칠 때 JSDoc 타입을 붙이고 이 줄을 지워 주세요.
   import { onMount, onDestroy } from "svelte";
   import { Bold, Underline, Italic, Link, AlignJustify, GripVertical } from "lucide-svelte";
   import { appState } from "../lib/appState.svelte.js";
@@ -388,6 +389,8 @@
   >
     {#if !activePopup}
       <div class="flex items-center gap-0.5 px-1.5 py-1">
+        <!-- 툴바를 옮기는 마우스 전용 손잡이입니다(키보드 사용자는 툴바 위치와 무관하게 서식 버튼을 씁니다). -->
+        <!-- svelte-ignore a11y_no_static_element_interactions -->
         <div
           class="cursor-move pr-1 pl-0.5 flex items-center justify-center text-gray-400 hover:text-gray-700 transition-colors shrink-0"
           onpointerdown={handleDragStart}

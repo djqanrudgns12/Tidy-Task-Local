@@ -12,6 +12,17 @@ const label = isTauri()
 async function start() {
   const target = document.getElementById("app");
   if (!target) throw new Error("Application root is missing");
+  if (
+    label === 'initial-setup' ||
+    (!isTauri() && import.meta.env.DEV && new URLSearchParams(location.search).has('initial-setup-preview'))
+  ) {
+    const { default: InitialSetup } = await import('./components/InitialSetup.svelte');
+    return mount(InitialSetup, { target, props: { preview: !isTauri() } });
+  }
+  if (label === 'release-toolkit' || (!isTauri() && import.meta.env.DEV && new URLSearchParams(location.search).has('toolkit-release-preview'))) {
+    const { default: ToolkitReleaseNotice } = await import('./components/ToolkitReleaseNotice.svelte');
+    return mount(ToolkitReleaseNotice, { target, props: { preview: !isTauri() } });
+  }
   const toolkitLabel = isTauri()
     ? label
     : import.meta.env.DEV
@@ -34,6 +45,8 @@ async function start() {
         "stopwatch",
         "roster",
         "picker",
+        "tournament",
+        "focus-bell",
         "noticeboard",
       ].includes(toolkitLabel))
   ) {

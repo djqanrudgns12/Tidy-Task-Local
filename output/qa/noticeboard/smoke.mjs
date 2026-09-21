@@ -1,3 +1,0 @@
-import { chromium } from 'file:///C:/Users/rudgn/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules/playwright/index.mjs';
-const browser=await chromium.launch({headless:true});const page=await browser.newPage({viewport:{width:1100,height:760}});page.on('pageerror',e=>console.log('PAGEERROR',e.message));await page.goto('http://127.0.0.1:5194/?toolkit-preview=noticeboard');await page.getByRole("textbox",{name:"알림장 내용"}).waitFor({timeout:60000});console.log((await page.locator('body').innerText()).slice(0,1500));await page.screenshot({path:'output/qa/noticeboard/initial.png'});await browser.close();
-

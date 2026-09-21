@@ -40,19 +40,71 @@
     .footer-title { font-size: 13px; font-weight: bold; color: #d97706; }
     .footer-credit { font-size: 11px; color: #a1a1aa; }
   </style>
+  <link rel="stylesheet" href="help.css">
 </head>
 <body>
 
   <div class="header">
-    <h1>📖 Tidy Task 스마트 가이드 <span class="version-badge">v5.1.2</span></h1>
-    <p>Tiny Note와 아카이브 등 새롭게 추가된 핵심 기능을 카테고리별로 안내합니다.</p>
+    <h1>📖 Tidy Task 스마트 가이드 <span class="version-badge">v5.5.0</span></h1>
+    <p>메모와 할 일부터 Tidy 툴킷까지. 필요한 기능을 찾아 바로 시작하세요.</p>
   </div>
 
-  <div class="content">
+  <div class="guide-layout"><nav class="guide-nav" aria-label="가이드 목차"><span>QUICK GUIDE</span><a href="#toolkit">Tidy 툴킷 시작하기</a><a href="#timers">시간과 집중</a><a href="#classroom">명단 · 뽑기 · 토너먼트</a><a href="#noticeboard">알림장</a><a href="#toolkit-settings">툴킷 맞춤 설정</a><hr><a href="#shortcuts">단축키</a><a href="#notes">노트와 창 관리</a><a href="#archive">아카이브</a><a href="#reminders">리마인더</a><a href="#editing">편집과 서식</a><a href="#meals">오늘의 급식</a><a href="#settings">환경 설정과 백업</a><a href="#privacy">사용 통계</a></nav><main class="content">
+    <section class="section feature-panel" id="toolkit">
+      <div class="guide-intro"><span class="guide-kicker">NEW IN 5.5.0</span><h2>수업에 필요한 순간,<br>가볍게 꺼내는 Tidy 툴킷.</h2><p>각 도구를 독립된 창으로 열어 수업 화면 옆에 두세요. 필요한 도구만 표시하고 원하는 크기와 방향으로 정리할 수 있어요.</p></div>
+      <figure class="guide-dock"><img src="images/update-5.5/toolbar.png" alt="타이머, 간단 뽑기, 알림장, 토너먼트, 집중벨, 학급 명단이 모인 실제 툴킷 툴바"><figcaption>실제 Tidy 툴킷 화면</figcaption></figure>
+      <div class="guide-steps"><article><span>01</span><h3>툴킷 켜기</h3><p>Tidy Task 설정에서 <b>Tidy 툴킷</b>을 켜세요. 작업 표시줄의 Tidy Task 아이콘을 우클릭한 뒤 <b>Tidy 툴킷 열기</b>로도 열 수 있어요.</p></article><article><span>02</span><h3>도구 선택하기</h3><p>툴바의 도구 이름을 누르세요. 타이머는 버튼을 누른 다음 전광판·아날로그·모래시계·스톱워치 중에서 선택합니다.</p></article><article><span>03</span><h3>내 자리 만들기</h3><p>툴바를 원하는 자리로 옮기고 설정에서 방향·크기를 맞추세요. 창이 화면 밖으로 나갔다면 트레이 메뉴의 <b>좌표 초기화</b>를 이용하세요.</p></article></div>
+    </section>
+    <section class="section" id="timers">
+      <h2 class="section-head">시간과 집중 <span class="new-tag">TOOLKIT</span></h2>
+      <div class="guide-visual"><img src="images/update-5.5/analog.png" alt="실제 아날로그 타이머 화면" loading="lazy"><div><h3>남은 시간은 보여 주고,<br>활동의 끝은 소리로 알려요.</h3><p>활동에 맞게 시간을 정한 뒤 시작하세요. 진행 중에는 일시정지하고 다시 이어갈 수 있어요.</p></div></div>
+      <table><tbody>
+        <tr><td>전광판 타이머</td><td>큼직한 숫자로 남은 시간을 확인합니다. 시간 설정을 마친 뒤 시작하고, 필요하면 일시정지하거나 다시 설정하세요.</td></tr>
+        <tr><td>아날로그 타이머</td><td>시계판의 색으로 남은 시간을 표현합니다. 설정에서 한 바퀴 기준을 <b>30분 또는 60분</b>으로 선택할 수 있어요.</td></tr>
+        <tr><td>모래시계</td><td>모래가 줄어드는 모습으로 시간을 보여 줍니다. 설정에서 <b>남은 시간 표시</b>를 켜거나 끌 수 있어요.</td></tr>
+        <tr><td>스톱워치</td><td>시작한 뒤 경과한 시간을 측정합니다. 일시정지·재개와 초기화를 사용하고, 설정에서 진행음을 바꿀 수 있어요.</td></tr>
+        <tr><td>소리와 단축키</td><td>카운트다운 도구에서는 진행음, 종료 전 알림, 종료음을 각각 설정합니다. 종료 전 알림의 시점과 길이도 조절할 수 있어요. 입력란에 커서가 없을 때 <kbd class="kbd">Space</kbd>로 시작·일시정지합니다.</td></tr>
+        <tr><td>집중벨</td><td>벨·사이렌·폭탄·방구 네 가지 소리를 골라 재생합니다. 음량과 음소거를 확인하고, 멈추려면 <b>정지</b>를 누르세요. 다른 소리를 선택하면 재생할 소리가 전환됩니다.</td></tr>
+      </tbody></table>
+    </section>
+    <section class="section" id="classroom">
+      <h2 class="section-head">학급 명단 · 뽑기 · 토너먼트 <span class="new-tag">TOOLKIT</span></h2>
+      <div class="guide-visual"><img src="images/update-5.5/picker.png" alt="예시 명단을 사용하는 실제 인형 뽑기 화면" loading="lazy"><div><h3>우리 반의 이름으로<br>더 즐거운 참여를.</h3><p>학급 명단을 먼저 등록하면 뽑기와 토너먼트에서 학생 명단을 불러올 수 있어요.</p></div></div>
+      <table><tbody>
+        <tr><td>학급 만들기</td><td>학급 명단에서 학급을 만들고 번호·이름·성별을 관리하세요. 여러 학급과 기본 학급을 관리하고, 검색·정렬로 학생을 찾아 편집합니다.</td></tr>
+        <tr><td>명단 가져오기</td><td><b>PDF · XLSX · CSV · HWPX</b> 파일 또는 이름·표 붙여넣기로 가져옵니다. 파일은 최대 20MB이며, 미리보기에서 번호·이름·성별 열과 가져올 내용을 확인한 뒤 적용하세요.</td></tr>
+        <tr><td>모둠 관리</td><td>모둠을 만들고 학생을 배정하세요. 모둠 이름과 순서를 정리할 수 있습니다. 토너먼트에서 참가 단위를 <b>모둠</b>으로 선택해 불러올 수 있어요.</td></tr>
+        <tr><td>간단 뽑기 시작</td><td><b>학급 명단 / 모둠 뽑기 / 직접 입력</b> 중 대상을 정합니다. 모둠 뽑기와 직접 입력은 목록에 이름을 한 줄씩 넣어 준비하세요. <b>클래식·인형 뽑기·풍선 다트</b> 중 디자인을 고르고 <b>뽑기 시작</b> 또는 <kbd class="kbd">Space</kbd>를 누르세요.</td></tr>
+        <tr><td>뽑기 세부 설정</td><td><b>한 번씩 골고루</b>를 켜면 뽑힌 대상을 제외합니다. 대상 관리에서 제외할 대상을 확인하고, 직전 뽑기 취소·다시 시작을 사용할 수 있어요. 소리와 동작 감소 모드도 조절할 수 있습니다.</td></tr>
+        <tr><td>토너먼트 만들기</td><td><b>4·8·16·32·64강</b> 중 규모를 고르고 대진표를 만드세요. 이름을 직접 입력·붙여넣기하거나 학급 명단에서 불러옵니다. 빈 자리는 부전승으로 처리됩니다.</td></tr>
+        <tr><td>대진 준비와 진행</td><td>준비 화면에서 대진을 섞거나 자리 번호 두 개를 선택해 맞바꾸세요. 경기를 시작한 뒤 승자를 눌러 진출시키고, 같은 승자를 다시 눌러 취소할 수 있어요. 전체·왼쪽·오른쪽·결승 보기와 확대·축소로 대진표를 살펴보세요. 저장된 대회는 목록에서 이어서 진행합니다.</td></tr>
+      </tbody></table>
+    </section>
+    <section class="section" id="noticeboard">
+      <h2 class="section-head">우리 반 알림장 <span class="new-tag">TOOLKIT</span></h2>
+      <div class="guide-visual"><img src="images/update-5.5/noticeboard.png" alt="예시 안내문이 담긴 실제 알림장 화면" loading="lazy"><div><h3>오늘의 안내를 기록하고,<br>큰 화면으로 함께 읽어요.</h3><p>날짜별 안내와 준비물을 적어 두고 화이트 보드로 펼쳐 보세요.</p></div></div>
+      <table><tbody>
+        <tr><td>날짜별 기록</td><td>날짜 선택 또는 좌우 화살표로 날짜를 이동해 내용을 작성하세요. <b>기록 열기</b>에서 이전 기록을 찾고 <b>오늘</b>로 돌아올 수 있어요.</td></tr>
+        <tr><td>본문 서식</td><td>글꼴과 글자 크기, 굵게·색상 등 서식 도구로 중요한 안내를 강조합니다. 실행 취소·다시 실행으로 편집 내용을 되돌릴 수 있어요.</td></tr>
+        <tr><td>화이트 보드</td><td><b>화이트 보드(전체화면)</b>를 누르면 교실 화면에 크게 띄울 수 있어요. 화면을 넓게 활용하고 필요한 순간에 서식 도구를 펼쳐 사용하세요.</td></tr>
+        <tr><td>자료 보관</td><td>작성 중인 내용은 초안으로 자동 보관됩니다. <b>저장</b>을 누르면 저장본으로 확정하고, 수정 중에는 <b>저장본으로</b> 되돌릴 수 있어요. 최근 알림장에서 날짜·내용을 검색하고 휴지통에서 삭제한 기록을 확인하세요. Tidy Task의 메모 TXT 내보내기에는 알림장이 포함되지 않습니다.</td></tr>
+      </tbody></table>
+    </section>
+    <section class="section" id="toolkit-settings">
+      <h2 class="section-head">나만의 툴킷 설정</h2>
+      <table><tbody>
+        <tr><td>방향과 크기</td><td>툴바의 설정 버튼에서 <b>가로·세로</b> 방향과 <b>매우 작게부터 매우 크게까지 5단계</b> 크기를 선택하세요. 툴바의 접기 기능으로 공간을 줄일 수도 있어요.</td></tr>
+        <tr><td>테마와 다크 모드</td><td><b>세이지·앰버·오션·로즈·라벤더·슬레이트</b> 6가지 테마를 제공합니다. 다크 모드에서는 어두운 공통 화면을 사용하고, 다크 모드를 끄면 선택한 색상이 적용됩니다. Tidy Task 메모의 15가지 테마와는 별도 설정입니다.</td></tr>
+        <tr><td>보이는 도구</td><td>자주 쓰는 도구만 툴바에 표시하세요. 표시를 끄는 것은 도구 버튼을 숨기는 설정이며 기록 삭제 기능이 아닙니다.</td></tr>
+        <tr><td>외부 툴</td><td>롤린썬더와 클래너를 브라우저에서 열 수 있습니다. 외부 툴 사용 여부와 표시할 서비스를 설정할 수 있으며, 웹 서비스 이용에는 인터넷 연결이 필요합니다.</td></tr>
+        <tr><td>공지 표시 설정</td><td><b>오늘 그만보기</b>는 오늘 자정까지, <b>더 이상 보지 않기</b>는 해당 공지에만 적용됩니다. <b>닫기</b>는 숨김 설정을 바꾸지 않습니다. 환영 안내·툴킷 출시·기존 업데이트 공지는 앞 창을 닫은 뒤 순서대로 표시됩니다.</td></tr>
+      </tbody></table>
+    </section>
+
 
     <!-- 1. 단축키 사전 -->
-    <div class="section">
-      <div class="section-head">⌨️ Tidy Task 전체 단축키 사전</div>
+    <section class="section" id="shortcuts">
+      <h2 class="section-head">⌨️ Tidy Task 전체 단축키 사전</h2>
       <table>
         <tr>
           <td><kbd class="kbd">Enter</kbd></td>
@@ -79,15 +131,15 @@
           <td><b>스타일 편집</b>: 편집 모드에서 여러 항목을 선택한 후 누르면 각각 굵게(Bold), 기울임(Italic), 밑줄(Underline)이 일괄 적용됩니다.</td>
         </tr>
       </table>
-    </div>
+    </section>
 
     <!-- 2. 다중 윈도우 (Tiny Note) 단독 세션 -->
-    <div class="section">
-      <div class="section-head">🪟 다중 윈도우 & Tiny Note <span class="new-tag">NEW</span></div>
+    <section class="section" id="notes">
+      <h2 class="section-head">🪟 다중 윈도우 & Tiny Note <span class="new-tag">NEW</span></h2>
       <table>
         <tr>
-          <td>무제한 서브 노트</td>
-          <td>상단 바의 <b>포스트잇 아이콘</b>이나 시스템 트레이의 <b>'새 Tiny Note'</b>를 누르면, 조그마한 포스트잇 형태의 <b>Tiny Note</b>를 여러 개 띄울 수 있습니다. (우클릭 메뉴의 <b>'새 창 띄우기'</b>는 일반 메모 창을 엽니다) 각 노트는 별도의 데이터를 가집니다.</td>
+          <td>독립된 서브 노트</td>
+          <td>상단 바의 <b>포스트잇 아이콘</b>이나 시스템 트레이의 <b>'새 Tiny Note'</b>를 누르면, 조그마한 포스트잇 형태의 <b>Tiny Note</b>를 최대 10개까지 띄울 수 있습니다. (우클릭 메뉴의 <b>'새 창 띄우기'</b>는 일반 메모 창을 엽니다) 각 노트는 별도의 데이터를 가집니다.</td>
         </tr>
         <tr>
           <td>Tiny Note 아카이빙</td>
@@ -102,11 +154,11 @@
           <td>메인 화면 내 할 일 목록과 하단 텍스트 메모장 사이의 경계선을 드래그하여, 작업 공간의 높이 비율을 내 마음대로 분할할 수 있습니다.</td>
         </tr>
       </table>
-    </div>
+    </section>
 
     <!-- 3. 아카이브 보관함 -->
-    <div class="section">
-      <div class="section-head">🗄️ 아카이브 보관함 <span class="new-tag">NEW</span></div>
+    <section class="section" id="archive">
+      <h2 class="section-head">🗄️ 아카이브 보관함 <span class="new-tag">NEW</span></h2>
       <table>
         <tr>
           <td>중앙 보관함 저장</td>
@@ -117,11 +169,11 @@
           <td>보관함 상단의 검색창을 통해 수개월 전의 기록도 즉시 찾을 수 있으며, 클릭 한 번에 다시 메인 노트로 꺼내올 수 있습니다.</td>
         </tr>
       </table>
-    </div>
+    </section>
 
     <!-- 4. 데드라인 및 리마인더 -->
-    <div class="section">
-      <div class="section-head">🔔 스마트 리마인더 시스템 <span class="new-tag">NEW</span></div>
+    <section class="section" id="reminders">
+      <h2 class="section-head">🔔 스마트 리마인더 시스템 <span class="new-tag">NEW</span></h2>
       <table>
         <tr>
           <td>마감일 뱃지</td>
@@ -136,11 +188,11 @@
           <td>리마인더 팝업 하단의 <b>'시간 지정'</b> 🕒 버튼을 누르면, 내가 원하는 정확한 <b>시간과 분 단위</b>로 알람을 조용히 연기(Snooze)시킬 수 있습니다.</td>
         </tr>
       </table>
-    </div>
+    </section>
 
     <!-- 5. 편집 모드 및 서식 -->
-    <div class="section">
-      <div class="section-head">✏️ 다중 편집 모드 & 일괄 디자인</div>
+    <section class="section" id="editing">
+      <h2 class="section-head">✏️ 다중 편집 모드 & 일괄 디자인</h2>
       <table>
         <tr>
           <td>편집 모드 전환</td>
@@ -155,22 +207,23 @@
           <td>각 할 일의 글자를 마우스로 누르면 즉석에서 타이핑하여 내용을 수정할 수 있습니다.</td>
         </tr>
       </table>
-    </div>
+    </section>
 
-    <div class="section">
-      <div class="section-head">🍲 오늘의 급식</div>
+    <section class="section" id="meals">
+      <h2 class="section-head">🍲 오늘의 급식</h2>
       <table>
         <tr><td>학교 연결</td><td>상단 도구 모음의 급식 아이콘을 누르고 학교 이름을 두 글자 이상 입력하세요. 주소를 확인한 뒤 학교를 등록하면 식단이 열립니다.</td></tr>
         <tr><td>창 크기와 날짜</td><td>크기에 따라 미니·컴팩트·기본·와이드·주간 보기로 바뀝니다. 좌우 화살표로 날짜를 바꾸고 T로 오늘로 돌아옵니다. 주간 보기에서는 한 주씩 이동합니다.</td></tr>
         <tr><td>내게 맞게 보기</td><td>급식 설정에서 표시할 끼니, 알레르기, 영양·원산지 정보, 테마, 글꼴과 글자 크기를 바꿀 수 있습니다. 선택한 알레르기는 메뉴 옆에 별도로 표시합니다.</td></tr>
         <tr><td>복사와 오프라인</td><td>메뉴 복사 버튼 또는 Ctrl+C로 현재 날짜의 메뉴를 복사합니다. 인터넷이 끊겨도 저장된 식단은 계속 볼 수 있습니다. 트레이 메뉴에서도 급식창을 다시 열 수 있습니다.</td></tr>
       </table>
-    </div>
+    </section>
 
     <!-- 6. 시스템 환경 설정 -->
-    <div class="section">
-      <div class="section-head">⚙️ 환경 설정 및 백업</div>
+    <section class="section" id="settings">
+      <h2 class="section-head">⚙️ 환경 설정 및 백업</h2>
       <table>
+        <tr><td>상단 디자인과 테마</td><td>설정에서 <b>클래식·모던</b> 상단 디자인을 고릅니다. 모던에서는 서식 도구를 필요할 때 펼칠 수 있어요. 메모의 15가지 색상 테마와 다크 모드, 글꼴·크기도 조절할 수 있습니다.</td></tr><tr><td>앱 업데이트</td><td>설정에서 설치된 버전과 새 버전을 확인합니다. 업데이트 안내에서 내려받기를 진행하거나 내일 다시 알림·이 버전 건너뛰기를 선택할 수 있어요.</td></tr><tr><td>화면 밖의 창 찾기</td><td>모니터를 바꾼 뒤 창이 보이지 않으면 작업 표시줄의 Tidy Task 아이콘을 우클릭해 <b>좌표 초기화</b>를 선택하세요.</td></tr>
         <tr>
           <td>사용자 커스텀 폰트</td>
           <td>시스템 설정 창에서 PC 내의 .ttf 파일 등을 등록해 나만의 글꼴을 사용하세요. UI 전용 글꼴과 본문용 글꼴을 분리해 적용할 수 있습니다.</td>
@@ -181,13 +234,13 @@
         </tr>
         <tr>
           <td>데이터 안전 내보내기</td>
-          <td>상단 바 우클릭 메뉴의 '메모장으로 내보내기'를 통해 지금까지 쓴 모든 기록을 .txt 로 안전하게 로컬 백업합니다.</td>
+          <td>상단 바 우클릭 메뉴의 '메모장으로 내보내기'를 통해 현재 창의 할 일·보관 목록·메모를 TXT 파일로 내보냅니다. 다른 노트와 툴킷 자료는 포함되지 않으므로 필요한 창과 도구에서 각각 내보내세요.</td>
         </tr>
       </table>
-    </div>
+    </section>
 
-    <div class="section">
-      <div class="section-head">📊 앱 개선을 위한 사용 통계</div>
+    <section class="section" id="privacy">
+      <h2 class="section-head">📊 앱 개선을 위한 사용 통계</h2>
       <table>
         <tr>
           <td>자동 익명 집계</td>
@@ -198,13 +251,13 @@
           <td>메모·할 일 내용, 학교명과 학교 코드, 파일 경로, 키보드 입력 내용은 수집하지 않습니다. 화면 녹화나 자동 클릭 수집도 사용하지 않습니다.</td>
         </tr>
       </table>
-    </div>
+    </section>
 
-  </div>
+  </main></div>
 
   <div class="footer">
     <span class="footer-title">당신의 일상을 정돈하는 가장 스마트한 방법</span>
-    <span class="footer-credit">Tidy Task v5.1.2 &nbsp;·&nbsp; © 2026 <img src="chaltteok.webp" alt="" width="28" height="28" style="object-fit:contain;vertical-align:middle"> 찰떡쌤. All rights reserved.</span>
+    <span class="footer-credit">Tidy Task v5.5.0 &nbsp;·&nbsp; © 2026 <img src="chaltteok.webp" alt="" width="28" height="28" style="object-fit:contain;vertical-align:middle"> 찰떡쌤. All rights reserved.</span>
   </div>
 
 </body>

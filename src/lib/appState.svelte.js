@@ -3,7 +3,6 @@ import { track, trackThrottled } from './analytics.js';
 import { getCurrentWindow, primaryMonitor } from '@tauri-apps/api/window';
 import { WebviewWindow } from '@tauri-apps/api/webviewWindow';
 import { emit, listen } from '@tauri-apps/api/event';
-import { LogicalPosition, PhysicalPosition } from '@tauri-apps/api/dpi';
 import { TINY_NOTE_MIN_WIDTH, TINY_NOTE_ROLLED_HEIGHT } from './tinyNoteWindow.js';
 import { NOTE_PREFIX, TINY_NOTE_PREFIX, isDataWindowLabel } from './windows/windowLabels.js';
 import { pickManager } from './windows/managerElection.js';
@@ -41,7 +40,12 @@ import {
   shouldNotifyUser,
 } from './updateChecker.js';
 
-let tauriStore = null;
+// 저장소가 실제 LazyStore든 읽기 실패 시의 안전 스텁이든 같은 모양으로 씁니다.
+/** @typedef {{ get(key: string): Promise<any>, set(key: string, value: unknown): Promise<void>, has(key: string): Promise<boolean>, delete(key: string): Promise<boolean | void>, keys(): Promise<string[]>, entries(): Promise<[string, any][]>, length(): Promise<number>, clear(): Promise<void>, save(): Promise<void>, reload(): Promise<void> }} KeyValueStore */
+/** @typedef {ReturnType<typeof setTimeout>} TimerHandle */
+
+/** @type {KeyValueStore} */
+let tauriStore = /** @type {any} */ (null);
 
 // 모든 창이 공유하는 통합 저장 파일
 const STORE_FILE = 'tidy-task-config.json';
@@ -49,7 +53,9 @@ const STORE_FILE = 'tidy-task-config.json';
 // 창 명부·폰트 목록처럼 "모든 창이 함께 쓰는 키"를 읽고 쓸 때 사용하는 실제 저장소입니다.
 // 왜 tauriStore를 쓰지 않는가: 이 창의 읽기 검증이 실패하면 tauriStore는 빈 값을 돌려주는 안전 스텁으로
 //   바뀌는데, 그 상태로 빈 번호를 찾으면 내용이 있는 창을 빈 창으로 오판할 수 있습니다. (5.0.0과 같은 방식)
+/** @type {LazyStore | null} */
 let sharedStoreInstance = null;
+/** @returns {LazyStore} */
 function sharedStore() {
   if (!sharedStoreInstance) sharedStoreInstance = new LazyStore(STORE_FILE);
   return sharedStoreInstance;
@@ -62,11 +68,20 @@ function sharedStore() {
 //      사용자가 누른 "건너뛰기 / 나중에" 선택이 창을 닫는 순간 증발해 버립니다.
 const UPDATE_STATE_KEY = 'updateState';
 
+// ✨ [매니저 선출] 권한을 다시 계산하는 주기 — 신호를 놓쳤을 때를 위한 안전망입니다.
+const MANAGER_RECHECK_MS = 5 * 60 * 1000;
+// 창이 막 뜬 직후 첫 리마인더 점검까지 두는 여유 (화면이 다 그려진 뒤 알림이 뜨도록)
+const MANAGER_BOOT_DELAY_MS = 3000;
+
+// 새 창 만들기 잠금이 풀리지 않을 때 강제로 푸는 시간
+const SPAWN_LOCK_TIMEOUT_MS = 5000;
+
 // 저장소를 읽지 못했을 때 끼워 넣는 "안전 스텁".
 // 왜 필요한가: get()이 예외를 던지면 init() 전체가 중단되어 IPC 이벤트 리스너 등록까지
 //   실패합니다(매니저 승계, 리마인더 동기화 등이 통째로 죽습니다).
 //   빈 값을 돌려주는 스텁으로 대체하면 앱은 평소처럼 동작하고,
 //   실제 쓰기는 _hydrated 가드가 막아 주므로 디스크의 원본 데이터는 안전합니다.
+/** @returns {KeyValueStore} */
 function createStubStore() {
   return {
     async keys() { return []; },
@@ -91,7 +106,9 @@ export { BUILTIN_FONTS } from './builtinFonts.js';
 //   예전에는 본문 저장(save)과 설정 저장(saveSettingsOnly)이 saveTimeout 하나를 공유했습니다.
 //   그래서 글을 쓰는 도중 테마/폰트/창 크기 같은 설정이 바뀌면 "본문 저장 예약"이 취소되고
 //   설정 키만 부분 저장되어, 마지막에 입력한 할 일·메모가 통째로 사라졌습니다.
+/** @type {TimerHandle | null} */
 let contentSaveTimer = null;
+/** @type {TimerHandle | null} */
 let settingsSaveTimer = null;
 
 // ✨ [직렬화 큐] 디스크 쓰기를 한 줄로 세웁니다.
@@ -99,6 +116,7 @@ let settingsSaveTimer = null;
 //     나중 작업이 옛 스냅샷을 읽어 방금 저장한 내용을 덮어씁니다.
 //     큐에 태워 한 번에 하나씩만 실행하면 이 경합(race)이 원천 차단됩니다.
 const writeQueue = createSerialQueue();
+/** @template T @param {() => Promise<T>} task @returns {Promise<T>} */
 function enqueueWrite(task) {
   return writeQueue.enqueue(task);
 }
@@ -108,7 +126,9 @@ export function whenWritesSettled() {
 
 export class AppState {
 
+  /** @type {any[]} */
   todos = $state([]);
+  /** @type {any[]} */
   archivedTodos = $state([]);
   notes = $state('');
   headerDesign = $state('classic');
@@ -123,6 +143,7 @@ export class AppState {
   //   멀쩡히 남아 있던 메모가 빈 값으로 덮여 영구 삭제됐습니다.
   //   읽기가 검증되기 전에는 단 한 글자도 디스크에 쓰지 않습니다.
   _hydrated = false;
+  /** @type {TimerHandle | null} */
   _hydrationRetryTimer = null;
   // 창이 준비된 시각. 부팅 직후 몇백 ms 동안은 "유령 청소기"를 잠가 두기 위해 씁니다.
   _readyAt = 0;
@@ -139,6 +160,7 @@ export class AppState {
   uiFontSize = $state(10);
   letterSpacing = $state(0);
 
+  /** @type {{ name: string, path: string }[]} */
   customFonts = $state([]);
   isPinned = $state(false);
   searchQuery = $state('');
@@ -149,6 +171,7 @@ export class AppState {
   showReminders = $state(true);
   globalMuteSound = $state(false);
   reminderSuppressUntil = $state(0);
+  /** @type {any[]} */
   popupImminentTodos = $state([]);
   isEditMode = $state(false);
 
@@ -162,6 +185,7 @@ export class AppState {
       return '#d97706';
     }
   }
+  /** @type {string[]} */
   selectedTodoIds = $state([]);
   hideWelcomeMessage = $state(false);
   isManager = false; // ✨ Phase 3: 매니저 창 권한 식별자
@@ -178,6 +202,7 @@ export class AppState {
 
   appVersion = $state('');          // tauri.conf.json의 version (설치된 내 버전)
   updatePhase = $state('idle');     // idle | checking | available | uptodate | error
+  /** @type {any} */
   updateInfo = $state(null);        // buildUpdateInfo()가 만든 새 버전 정보
   updateErrorCode = $state('');     // 실패 사유 코드 (사용자 안내 문구로 변환됨)
   updateCheckedAt = $state(0);      // 마지막으로 확인에 성공한 시각
@@ -191,30 +216,39 @@ export class AppState {
   _updateSnoozeUntil = 0;
 
   // 내부 관리용 핸들 (스냅샷/저장 대상이 아닌 순수 런타임 값)
+  /** @type {TimerHandle | null} */
   _updateToastTimer = null;
+  /** @type {TimerHandle | null} */
   _updateRelayTimer = null;
   _updateScheduleStarted = false;
   // 확인이 진행되는 동안 "나도 결과를 알려 달라"고 요청한 창들의 명단
+  /** @type {string[]} */
   _pendingUpdateRequesters = [];
+  /** @type {(() => void) | null} */
   _unlistenUpdateResult = null;
+  /** @type {(() => void) | null} */
   _unlistenUpdateDismissed = null;
 
 // ✨ [멀티 윈도우 명단 관리 변수]
+  /** @type {string[]} */
   activeExtraWindows = $state([]);
   windowLabel = 'main';
   showMaxWindowToast = $state(false);
+  /** @type {TimerHandle | null} */
   maxWindowToastTimer = null;
 
 // ✨ [다중 복사/붙여넣기 시스템 알림 변수]
   showCopySuccessToast = $state(false);
   showPasteSuccessToast = $state(false);
   showPasteLimitToast = $state(false);
+  /** @type {TimerHandle | null} */
   toastTimer = null;
   reminderTitle = $state('통합 리마인더');
 
   // Ctrl+S 즉시 저장 안내 (도움말에 적힌 단축키)
   showSaveToast = $state(false);
 
+  /** @param {'copy' | 'paste' | 'limit' | 'save'} type */
   triggerToast(type) {
     this.showCopySuccessToast = false;
     this.showPasteSuccessToast = false;
@@ -236,12 +270,18 @@ export class AppState {
   }
 
 // ✨ [창 위치 및 크기 기억 변수 추가]
+  /** @type {number | null} */
   windowPosX = $state(null);
+  /** @type {number | null} */
   windowPosY = $state(null);
   // 5.0.5: 물리 좌표(모니터 배율과 무관한 실제 화면 픽셀). 창 위치 복원은 이 값을 우선합니다.
+  /** @type {number | null} */
   windowPhysX = $state(null);
+  /** @type {number | null} */
   windowPhysY = $state(null);
+  /** @type {number | null} */
   windowWidth = $state(null);
+  /** @type {number | null} */
   windowHeight = $state(null);
   // ✨ 전체화면 상태 보존: 앱 재시작 시 전체화면이 풀리지 않도록
   // 왜 takeSnapshot에 넣지 않는가: 전체화면은 Undo/Redo 대상이 아닌 "창 상태"이기 때문
@@ -257,16 +297,20 @@ export class AppState {
   // ✨ [세로 스냅] 위쪽 테두리 더블클릭 시 세로 최대화 토글용 상태
   // 왜 별도 변수가 필요한가: 전체화면(isFullscreen)과 달리 너비는 유지하고 높이만 변경하므로 구분이 필요
   isVerticalSnapped = $state(false);
+  /** @type {number | null} */
   preSnapPosY = $state(null);    // 스냅 전 Y 좌표 백업
+  /** @type {number | null} */
   preSnapHeight = $state(null);  // 스냅 전 높이 백업
   isProgrammaticResize = $state(false); // ✨ [TCREI] 강제 리사이즈로 인한 스냅 해제 방지 락(Lock)
 
   // ✨ [타임머신 엔진] Undo / Redo 상태 관리
   // $state.raw: 스냅샷은 한 번 찍으면 바뀌지 않는 기록이라 속까지 추적할 필요가 없습니다.
   // (깊은 추적을 끄면 스냅샷 20개 × 할 일 전체에 프록시를 씌우던 비용이 사라집니다)
+  /** @type {any[]} */
   historyStack = $state.raw([]);
   currentIndex = $state(-1);
   isRestoring = false; // 복원 중 무한루프 방지 락(Lock)
+  /** @type {TimerHandle | null} */
   historyTimeout = null; // 타자 입력 디바운스용
 
   // ✨ [타임머신 상태 확인] 이전/다음 버튼 활성화 여부 판단
@@ -384,38 +428,37 @@ async init() {
         globalMuteSound: await tauriStore.get('globalMuteSound'),
       });
       for (const [name, value] of Object.entries(decoded)) {
-        this[name] = value;
+        /** @type {any} */ (this)[name] = value;
       }
       // 디스크에서 실제 내용을 읽어왔다면, 이 창은 "내용을 가졌던 창"으로 표시합니다.
       if (hasWindowContent(decoded)) {
         this._everHadContent = true;
       }
 
-      // ── 매니저 선출·승계 ─────────────────────────────────────────────
-      // 매니저 창이 닫히면, 지금 "열려 있는" 데이터 창 중 우선순위 1위가 권한을 이어받습니다.
-      // (우선순위: main → note-1..10 → tinynote-1..10 — windows/managerElection.js)
-      // 왜 열린 창에서 고르는가: 예전에는 저장 명부(닫힌 창 포함)에서 골라서, 번호가 가장 작은 창이
-      //   닫혀 있으면 아무도 매니저가 되지 못해 리마인더와 업데이트 확인이 조용히 멈췄습니다.
-      listen('manager-closing', async (event) => {
-        if (this.isManager) return;
-        const closingLabel = event?.payload?.label || null;
-        const openLabels = await getOpenWindowLabels();
-        if (pickManager(openLabels, { exclude: closingLabel }) === this.windowLabel) {
-          // 이어받는 즉시 한 번 점검합니다 (5.0.0과 같은 동작)
-          await this.becomeManager({ bootDelay: 0 });
-        }
-      });
+      // ── 매니저 선출 (창 구성이 바뀔 때마다 다시 계산) ─────────────────
+      // 규칙: 지금 "열려 있는" 데이터 창 중 우선순위 1위가 매니저입니다.
+      //   (main → note-1..10 → tinynote-1..10 — windows/managerElection.js)
+      // 왜 매번 다시 계산하는가: 예전에는 매니저 창이 닫히면서 보내는 신호 하나에만 기댔습니다.
+      //   그 신호를 놓치면(이어받을 창이 아직 뜨는 중이었거나, 창이 비정상적으로 사라져 신호 자체가
+      //   없었거나) 아무도 권한을 잇지 못한 채 리마인더·업데이트 확인이 조용히 멈췄습니다.
+      //   이제 모든 창이 같은 규칙으로 "내가 1위인가"를 다시 계산해 스스로 맡거나 내려놓으므로,
+      //   한 번 놓쳐도 다음 변화나 주기 점검에서 반드시 제자리를 찾습니다.
+      if (isDataWindowLabel(this.windowLabel)) {
+        // 등록이 끝난 뒤에 선출을 시작하도록 기다립니다 (그 사이의 변화를 놓치지 않게).
+        await listen('window-roster-changed', (event) => {
+          const closed = event?.payload?.closed;
+          this._reconcileManager({ closed: typeof closed === 'string' ? closed : null });
+        });
 
-      // main 창이 새로 뜨면(트레이 "열기" 등) 임시로 권한을 맡던 창은 권한을 돌려줍니다.
-      // 왜: 돌려주지 않으면 매니저가 둘이 되어 리마인더 팝업과 업데이트 확인이 중복됩니다.
-      listen('manager-reclaim', () => {
-        if (this.windowLabel !== 'main') this.resignManager();
-      });
+        // 첫 점검은 화면이 다 뜬 뒤에 오도록 잠시 미룹니다.
+        await this._reconcileManager({ bootDelay: MANAGER_BOOT_DELAY_MS });
 
-      if (this.windowLabel === 'main') {
-        emit('manager-reclaim').catch(() => {});
-        // ✨ 최초 기동 시 main 창이 매니저 (부팅 3초 뒤 첫 점검)
-        await this.becomeManager({ bootDelay: 3000 });
+        // 내가 떴다고 알려, 나보다 순위가 낮은 창이 권한을 내려놓게 합니다.
+        // (예: 트레이 "열기"로 main이 다시 떴을 때 임시로 맡고 있던 메모 창이 돌려줍니다)
+        emit('window-roster-changed', { opened: this.windowLabel }).catch(() => {});
+
+        // 마지막 안전망: 신호를 모두 놓쳐 매니저가 비어도 스스로 되찾습니다.
+        this._managerHeartbeat = setInterval(() => this._reconcileManager(), MANAGER_RECHECK_MS);
       }
 
       // ✨ [업데이트 안내] 버전 확인·리스너 등록.
@@ -453,6 +496,26 @@ async init() {
         listen('before-quit', () => {
           this.flushPendingSaves(true);
         });
+
+        // ✨ 트레이 메뉴 요청 — Rust가 열려 있는 창 하나를 "지명"해서 보냅니다.
+        // 왜 매니저가 아니라 지명인가: 매니저는 메모 창 중 하나인데, 툴킷·급식 창만 띄워 둔
+        //   상태(앱은 계속 살아 있습니다)에서는 매니저가 없어 트레이 메뉴가 아무 반응도 없었습니다.
+        //   이제 Rust가 받을 창을 직접 고르고, 답이 없으면 다음 창으로 넘깁니다. (src-tauri/src/tray.rs)
+        await listen('tray-request', (event) => {
+          const payload = event?.payload;
+          if (!payload || payload.target !== this.windowLabel) return;
+          // 처리보다 먼저 "받았다"고 답합니다.
+          // 왜: 창 만들기가 오래 걸려도 Rust가 다음 창에 또 보내 창이 두 개 열리는 일을 막습니다.
+          if (typeof payload.id === 'number') {
+            invoke('tray_request_done', { id: payload.id }).catch(() => {});
+          }
+          this._runTrayRequest(payload.kind);
+        });
+
+        // 받을 창이 하나도 없을 때 누른 요청은 Rust가 맡아 두었다가 이 창이 준비되면 넘겨줍니다.
+        invoke('tray_take_pending_request')
+          .then((kind) => { if (typeof kind === 'string') this._runTrayRequest(kind); })
+          .catch(() => {});
       }
 
       // 새 커스텀 폰트가 등록되면 모든 창이 목록에 추가하고 글꼴을 불러옵니다.
@@ -476,23 +539,35 @@ async init() {
   }
 
   // ═══════════════════════════════════════════════════════════════════
-  // ✨ [매니저 권한] 리마인더 점검·업데이트 확인·트레이 요청을 맡는 창 하나
+  // ✨ [매니저 권한] 리마인더 점검·업데이트 확인을 맡는 창 하나
   // ═══════════════════════════════════════════════════════════════════
 
   // 매니저 전용 이벤트 수신기 해제 함수 모음 (권한을 내려놓을 때 한 번에 해제)
+  /** @type {(() => void)[]} */
   _managerUnlisteners = [];
+  // 매니저 선출 계산을 한 줄로 세우는 큐 (겹쳐 돌면 옛 목록으로 판단한 쪽이 이겨 버립니다)
+  _electionQueue = createSerialQueue();
+  /** @type {ReturnType<typeof setInterval> | null} */
+  _managerHeartbeat = null;
+  /** @type {TimerHandle | null} */
   _reminderBootTimer = null;
+  /** @type {ReturnType<typeof setInterval> | null} */
   _reminderIntervalTimer = null;
+  /** @type {TimerHandle | null} */
   _updateBootTimer = null;
+  /** @type {ReturnType<typeof setInterval> | null} */
   _updateIntervalTimer = null;
+  /** @type {TimerHandle | null} */
   _opacitySaveTimer = null;
   _isSpawningWindow = false;
+  // 창 만들기 잠금을 건 시각 — 잠금이 풀리지 않는 사고를 대비해 시간으로도 풉니다.
+  _spawnLockedAt = 0;
   _isCreatingReminder = false;
 
   // 매니저 권한을 맡습니다. 최초 기동(main)과 승계 두 경로가 모두 이 함수 하나를 씁니다.
   // 왜 하나로 모았는가: 예전에는 승계 경로에서 "1시간마다 점검" 타이머가 빠져 있어서,
   //   main을 닫은 뒤로는 리마인더가 딱 한 번만 점검되고 멈췄습니다.
-  async becomeManager({ bootDelay = 3000 } = {}) {
+  async becomeManager({ bootDelay = MANAGER_BOOT_DELAY_MS } = {}) {
     if (this.isManager) return;
     this.isManager = true;
     await this.setupManagerListeners();
@@ -520,6 +595,7 @@ async init() {
     this._managerUnlisteners = [];
   }
 
+  /** @param {string} eventName @param {import('@tauri-apps/api/event').EventCallback<any>} handler */
   async _listenAsManager(eventName, handler) {
     this._managerUnlisteners.push(await listen(eventName, handler));
   }
@@ -566,12 +642,7 @@ async init() {
       this.checkForUpdates({ manual: true, requesterLabel });
     });
 
-    // ✨ 트레이 메뉴 요청 (Rust가 모든 창에 방송하고, 매니저만 처리합니다)
-    // 왜 매니저가 받는가: 예전에는 main 창만 받아서, main을 닫으면 트레이의
-    //   "새 Tidy Task / 새 Tiny Note / 좌표 초기화"가 아무 반응이 없었습니다.
-    await this._listenAsManager('spawn-new-window', () => this.spawnNewWindow());
-    await this._listenAsManager('spawn-tiny-note', () => this.spawnTinyNote());
-    await this._listenAsManager('req-reset-coordinates', () => this.resetAllCoordinates());
+    // (트레이 메뉴 요청은 매니저가 아니라 Rust가 지명한 창이 처리합니다 — init의 'tray-request')
 
     // 설정 창의 커스텀 폰트 등록 요청 (저장은 매니저 한 곳에서만 합니다)
     await this._listenAsManager('req-add-custom-font', (event) => this._handleAddCustomFont(event.payload));
@@ -580,60 +651,33 @@ async init() {
     await this._listenAsManager('archive-reminder-item', (event) => this._archiveTodoOfClosedWindow(event.payload));
   }
 
-  // 트레이 "좌표 초기화": 열린 창들을 화면 왼쪽 위부터 계단식으로 모읍니다.
-  // 위치 저장은 각 창의 "창 이동" 처리기가 스스로 합니다.
-  // 왜 여기서 다른 창의 데이터를 직접 쓰지 않는가: 열려 있는 창의 데이터를 밖에서 덮어쓰면
-  //   그 창이 막 입력한 내용과 경합해 한쪽이 사라질 수 있기 때문입니다.
-  async resetAllCoordinates() {
-    // 주 모니터 작업영역(작업 표시줄 제외)의 왼쪽 위를 기준으로, 물리 픽셀로 계단식 배치합니다.
-    // 왜 물리 픽셀인가: 창마다 지금 놓인 모니터의 배율이 달라, 논리 좌표로 옮기면 기준점이 창마다 달라집니다.
-    let originX = 0;
-    let originY = 0;
-    let scale = 1;
-    try {
-      const primary = await primaryMonitor();
-      if (primary) {
-        originX = primary.workArea.position.x;
-        originY = primary.workArea.position.y;
-        scale = primary.scaleFactor || 1;
-      }
-    } catch (e) {}
+  // 지금 열린 창 목록으로 매니저를 다시 계산해, 1위면 맡고 아니면 내려놓습니다.
+  // 왜 한 줄로 세우는가(_electionQueue): 두 계산이 겹치면 옛 목록으로 판단한 쪽이 나중에 끝나
+  //   "맡아야 할 창이 도리어 권한을 내려놓는" 역전이 생깁니다.
+  /** @param {{ closed?: string | null, bootDelay?: number }} [options] */
+  _reconcileManager({ closed = null, bootDelay = 0 } = {}) {
+    if (!isDataWindowLabel(this.windowLabel)) return Promise.resolve();
+    return this._electionQueue.enqueue(async () => {
+      const openLabels = await getOpenWindowLabels();
+      // 창이 닫히는 순간에는 목록에 그 창이 아직 남아 있으므로 후보에서 뺍니다.
+      const winner = pickManager(openLabels, { exclude: closed });
+      if (winner === this.windowLabel) await this.becomeManager({ bootDelay });
+      else if (this.isManager) this.resignManager();
+    });
+  }
 
-    let step = 0;
-    const bringHere = async (win) => {
-      const offset = Math.round((100 + step * 30) * scale);
-      step += 1;
-      const target = new PhysicalPosition(originX + offset, originY + offset);
-      await win.setPosition(target);
-      await win.show();
-      await win.unminimize();
-      await win.setFocus();
-      return target;
-    };
-
-    const mainWin = await WebviewWindow.getByLabel('main');
-    if (mainWin) {
-      try {
-        const target = await bringHere(mainWin);
-        // main 창 자신의 상태와 동기화 (main이 매니저일 때)
-        if (this.windowLabel === 'main') {
-          this.rememberWindowPosition(target, scale);
-          this.saveNow();
-        }
-      } catch (e) {}
-    }
-
-    const activeWindows = (await sharedStore().get('activeExtraWindows')) || [];
-    for (const label of activeWindows) {
-      const win = await WebviewWindow.getByLabel(label);
-      if (!win) continue;
-      try {
-        await bringHere(win);
-      } catch (e) {}
-    }
+  // 트레이 메뉴가 보낸 요청 하나를 실행합니다.
+  // (요청 이름은 src-tauri/src/tray.rs의 Request::name과 같은 값을 씁니다)
+  /** @param {unknown} kind */
+  _runTrayRequest(kind) {
+    if (kind === 'new-note') return this.spawnNewWindow();
+    if (kind === 'new-tiny-note') return this.spawnTinyNote();
+    console.warn('알 수 없는 트레이 요청입니다:', kind);
+    return Promise.resolve();
   }
 
   // 커스텀 폰트를 전역 목록에 저장한 뒤 모든 창에 알립니다.
+  /** @param {{ name?: string, path?: string } | null | undefined} payload */
   async _handleAddCustomFont(payload) {
     const { name, path } = payload || {};
     if (!name || !path) return;
@@ -641,7 +685,7 @@ async init() {
       await enqueueWrite(async () => {
         const store = sharedStore();
         const latestFonts = (await store.get('customFonts')) || [];
-        if (!latestFonts.find((f) => f.name === name)) {
+        if (!latestFonts.find((/** @type {{ name: string }} */ f) => f.name === name)) {
           latestFonts.push({ name, path });
           await store.set('customFonts', latestFonts);
           await store.save();
@@ -655,6 +699,7 @@ async init() {
 
   // 리마인더의 ✓(마감) 처리 — 원래 창이 닫혀 있을 때만 매니저가 저장소를 직접 고칩니다.
   // (열린 창은 그 창이 toggleTodo로 처리합니다. 닫힌 창은 경합할 상대가 없어 안전합니다.)
+  /** @param {{ id?: string, sourceLabel?: string } | null | undefined} payload */
   async _archiveTodoOfClosedWindow(payload) {
     const { id, sourceLabel } = payload || {};
     if (!id || !sourceLabel || sourceLabel === this.windowLabel) return;
@@ -667,14 +712,14 @@ async init() {
         const store = sharedStore();
         const winData = await store.get(sourceLabel);
         const todos = Array.isArray(winData?.todos) ? winData.todos : [];
-        const index = todos.findIndex((t) => t.id === id);
+        const index = todos.findIndex((/** @type {any} */ t) => t.id === id);
         if (index === -1) return;
 
         // toggleTodo와 같은 규칙: 완료 표시 후 마감된 일 맨 앞으로 이동
         const moved = { ...todos[index], completed: true };
         await store.set(sourceLabel, {
           ...winData,
-          todos: todos.filter((_, i) => i !== index),
+          todos: todos.filter((/** @type {unknown} */ _, /** @type {number} */ i) => i !== index),
           archivedTodos: [moved, ...(winData.archivedTodos || [])],
         });
         await store.save();
@@ -770,6 +815,7 @@ async init() {
   }
 
   // 실제 확인. manual=true면 사용자가 직접 버튼을 누른 경우입니다.
+  /** @param {{ manual?: boolean, requesterLabel?: string | null, force?: boolean }} [options] */
   async checkForUpdates({ manual = false, requesterLabel = null, force = false } = {}) {
     // 매니저가 아닌 창이 실수로 직접 호출해도 네트워크를 건드리지 않도록 막습니다.
     if (!this.isManager) return;
@@ -805,7 +851,7 @@ async init() {
         };
       }
     } catch (e) {
-      result = { phase: 'error', errorCode: e?.code || 'UNKNOWN' };
+      result = { phase: 'error', errorCode: /** @type {any} */ (e)?.code || 'UNKNOWN' };
     }
 
     // 확인이 도는 동안 쌓인 요청자까지 모두 답을 받도록 여기서 명단을 확정합니다.
@@ -853,6 +899,7 @@ async init() {
   }
 
   // 확인 결과를 이 창의 화면 상태에 반영합니다(모든 창에서 실행됩니다).
+  /** @param {any} payload 매니저가 방송한 'update-result' 내용 */
   _applyUpdateResult(payload) {
     if (!payload) return;
 
@@ -1040,10 +1087,14 @@ async init() {
     await this._spawnSlotWindow(TINY_NOTE_PREFIX, tinyNoteWindowOptions);
   }
 
+  /** @param {string} prefix @param {(label: string, context: any) => any} buildOptions */
   async _spawnSlotWindow(prefix, buildOptions) {
     // 버튼을 빠르게 두 번 눌러도 같은 번호의 창을 두 번 만들지 않도록 잠급니다.
-    if (this._isSpawningWindow) return;
+    // 왜 시간 제한을 두는가: 저장 줄(쓰기 큐)이 막히면 아래 await가 영원히 끝나지 않아
+    //   잠금이 풀리지 않았고, 그 뒤로는 "새 창" 버튼과 트레이 메뉴가 조용히 무시됐습니다.
+    if (this._isSpawningWindow && Date.now() - this._spawnLockedAt < SPAWN_LOCK_TIMEOUT_MS) return;
     this._isSpawningWindow = true;
+    this._spawnLockedAt = Date.now();
 
     try {
       const store = sharedStore();
@@ -1064,12 +1115,16 @@ async init() {
       });
       if (!targetLabel) return;
 
-      // 명부에 없으면 기존 데이터 손실 없이 안전하게 추가
-      await this._addToWindowRegistry(targetLabel);
-
       // ✨ 저장된 크기/위치로 엽니다 (없으면 기본 크기, 롤업 상태면 띠 높이)
       const winData = await store.get(targetLabel);
       openWindow(targetLabel, buildOptions(targetLabel, winData));
+
+      // 명부 갱신은 창을 띄운 "뒤에" 합니다.
+      // 왜: 명부 쓰기는 저장 줄에 서기 때문에, 앞선 저장이 길어지면 창 뜨는 것까지 함께 늦어집니다.
+      //   (명부에 빠져도 내용이 생기는 순간 performSave가 다시 등록해 줍니다)
+      this._addToWindowRegistry(targetLabel).catch((e) => {
+        console.warn('창 명부를 갱신하지 못했습니다:', e);
+      });
     } catch (e) {
       console.error('새 창을 열지 못했습니다:', e);
     } finally {
@@ -1080,6 +1135,7 @@ async init() {
   // 다음 실행 때 되살릴 창 명부에 라벨을 추가합니다.
   // 왜 쓰기 줄(enqueueWrite)에 태우는가: 이 창의 본문 저장도 같은 명부를 고치므로, 순서대로 실행해야
   //   서로 옛 명부로 덮어쓰지 않습니다.
+  /** @param {string} label */
   async _addToWindowRegistry(label) {
     await enqueueWrite(async () => {
       const store = sharedStore();
@@ -1222,7 +1278,7 @@ async init() {
   // 왜 JSON 왕복 복사를 없앴는가: $state.snapshot()이 이미 프록시 없는 깊은 복사본을 돌려주므로
   //   예전의 JSON.parse(JSON.stringify(...))는 같은 복사를 한 번 더 하는 낭비였습니다.
   takeSnapshot() {
-    return pickSnapshot((name) => $state.snapshot(this[name]));
+    return pickSnapshot((name) => $state.snapshot(/** @type {any} */ (this)[name]));
   }
 
   // ✨ [엔진 코어 2] 사진(스냅샷)을 역사 앨범에 끼워넣기 (최대 20개)
@@ -1270,6 +1326,7 @@ async init() {
   }
 
   // ✨ [엔진 코어 5] 스냅샷을 현실 화면에 적용시키기
+  /** @param {Record<string, any>} snap */
   async applySnapshot(snap) {
     this.isRestoring = true; // 무한 루프 락(Lock) ON
 
@@ -1277,7 +1334,7 @@ async init() {
     for (const name of SNAPSHOT_FIELDS) {
       const value = restoreSnapshotValue(name, snap[name]);
       // 배열(할 일 목록)은 복사해서 넣어, 화면에서 고쳐도 기록 앨범의 원본이 바뀌지 않게 합니다.
-      this[name] = Array.isArray(value) ? structuredClone(value) : value;
+      /** @type {any} */ (this)[name] = Array.isArray(value) ? structuredClone(value) : value;
     }
 
     // 화면엔 반영되었으니, 하드디스크에도 조용히 저장 (역사에 남기진 않음)
@@ -1316,7 +1373,7 @@ async init() {
     try {
       // 저장할 필드 목록·순서는 windowDataCodec.js의 표 하나를 따릅니다 (init·되돌리기와 같은 목록).
       // 전체화면·롤업·세로 스냅·창 위치 같은 창 상태도 모두 이 표에 들어 있습니다.
-      const winDataToSave = encodeWindowData((name) => $state.snapshot(this[name]));
+      const winDataToSave = encodeWindowData((name) => $state.snapshot(/** @type {any} */ (this)[name]));
 
       // ✨ HTML 찌꺼기(<br>, &nbsp; 등)만 남은 창은 "빈 창"으로 봅니다 (판정 기준은 코덱과 공유).
       const hasContent = hasWindowContent(winDataToSave);
@@ -1342,7 +1399,7 @@ async init() {
         // 반드시 하드디스크의 최신 명부를 실시간으로 읽어와서 '나'만 쏙 빼고 다시 넣어야 합니다.
         let latestRegistry = await tauriStore.get('activeExtraWindows') || [];
         if (latestRegistry.includes(this.windowLabel)) {
-          latestRegistry = latestRegistry.filter(l => l !== this.windowLabel);
+          latestRegistry = latestRegistry.filter((/** @type {string} */ l) => l !== this.windowLabel);
           await tauriStore.set('activeExtraWindows', latestRegistry);
         }
         console.log(`🧹 [${this.windowLabel}] 빈 창 감지: 유령 데이터 청소 완료`);
@@ -1389,11 +1446,14 @@ async init() {
   }
 
   // 리마인더 팝업에 보이는 내용의 "요약값". 이 값이 바뀔 때만 팝업 동기화를 요청합니다.
+  /** @type {string | null} */
   _lastReminderSignature = null;
+  /** @param {any} data */
   _reminderSignature(data) {
+    /** @type {{ title: any, todos: any[], manager?: unknown[] }} */
     const base = {
       title: data.title,
-      todos: (data.todos || []).map((t) => [t.id, t.text, t.deadline, Boolean(t.completed)]),
+      todos: (data.todos || []).map((/** @type {any} */ t) => [t.id, t.text, t.deadline, Boolean(t.completed)]),
     };
     // 매니저는 팝업의 모양(테마·글꼴·투명도)과 표시 여부(켜기·미루기)도 결정하므로 함께 봅니다.
     if (this.isManager) {
@@ -1495,6 +1555,7 @@ async init() {
     });
   }
 
+  /** @param {string} text @param {string} [deadline] */
   addTodo(text, deadline = "") {
     this.todos.push({ id: newId(), text, completed: false, deadline });
     track('todo_created');
@@ -1504,9 +1565,10 @@ async init() {
     if (deadline) setTimeout(() => this.checkReminders(), 100);
   }
 
+  /** @param {string[]} texts */
   addMultipleTodos(texts) {
     if (!texts || texts.length === 0) return;
-    const newItems = texts.map((text) => ({
+    const newItems = texts.map((/** @type {string} */ text) => ({
       id: newId(),
       text,
       completed: false
@@ -1516,6 +1578,7 @@ async init() {
     this.saveNow();
   }
 
+  /** @param {string} id */
   toggleTodo(id) {
     const idx = this.todos.findIndex(t => t.id === id);
     if (idx !== -1) {
@@ -1527,6 +1590,7 @@ async init() {
     }
   }
 
+  /** @param {string} id */
   restoreTodo(id) {
     const idx = this.archivedTodos.findIndex(t => t.id === id);
     if (idx !== -1) {
@@ -1538,12 +1602,14 @@ async init() {
     }
   }
 
+  /** @param {string} id */
   deleteTodo(id) {
     if (this.todos.some(t => t.id === id)) track('todo_deleted');
     this.todos = this.todos.filter(t => t.id !== id);
     this.saveNow();
   }
 
+  /** @param {string} id */
   deleteArchivedTodo(id) {
     this.archivedTodos = this.archivedTodos.filter(t => t.id !== id);
     this.saveNow();
@@ -1554,17 +1620,20 @@ async init() {
     this.saveNow();
   }
 
+  /** @param {any[]} newList */
   reorderTodos(newList) {
     this.todos = newList;
     this.saveNow();
   }
 
+  /** @param {number} delta em 단위 증감 */
   adjustLetterSpacing(delta) {
     const sel = window.getSelection();
     let hasSelectionText = false;
-    
+
     if (sel && sel.rangeCount > 0 && !sel.isCollapsed && sel.toString().trim().length > 0) {
       const range = sel.getRangeAt(0);
+      /** @type {Node | null} */
       let node = range.startContainer;
       if (node.nodeType === Node.TEXT_NODE) node = node.parentElement;
       
@@ -1586,6 +1655,7 @@ async init() {
     }
   }
 
+  /** @param {number} delta */
   _applyInlineLetterSpacingToSelection(delta) {
     const sel = window.getSelection();
     if (!sel || sel.rangeCount === 0 || sel.isCollapsed) return;
@@ -1594,11 +1664,13 @@ async init() {
 
     let baseVal = 0;
     const clone = range.cloneContents();
-    const firstSpan = clone.querySelector ? clone.querySelector('span[style*="letter-spacing"]') : null;
+    const firstSpan = /** @type {HTMLElement | null} */ (clone.querySelector ? clone.querySelector('span[style*="letter-spacing"]') : null);
     
     if (firstSpan && firstSpan.style.letterSpacing && firstSpan.style.letterSpacing.includes('em')) {
        baseVal = parseFloat(firstSpan.style.letterSpacing) || 0;
     } else {
+       // 텍스트 노드면 부모 요소로 올라가므로, 이후로는 요소(HTMLElement)로 다룹니다.
+       /** @type {any} */
        let n = range.commonAncestorContainer;
        if (n.nodeType === Node.TEXT_NODE) n = n.parentElement;
        const editor = n.closest('[contenteditable="true"]');
@@ -1614,12 +1686,12 @@ async init() {
     const fragment = range.extractContents();
     
     if (fragment.querySelectorAll) {
-      fragment.querySelectorAll('*').forEach(el => {
+      /** @type {NodeListOf<HTMLElement>} */ (fragment.querySelectorAll('*')).forEach(el => {
         if (el.style) el.style.removeProperty('letter-spacing');
         if (!el.getAttribute('style')) el.removeAttribute('style');
       });
     } else {
-       const walk = (node) => {
+       const walk = (/** @type {any} */ node) => {
          if (node.nodeType === 1) {
            node.style.removeProperty('letter-spacing');
            if (!node.getAttribute('style')) node.removeAttribute('style');
@@ -1629,9 +1701,10 @@ async init() {
        fragment.childNodes.forEach(walk);
     }
     
+    /** @type {HTMLElement} */
     let wrapper;
-    if (fragment.childNodes.length === 1 && fragment.firstChild.nodeName === "SPAN") {
-      wrapper = fragment.firstChild;
+    if (fragment.childNodes.length === 1 && /** @type {ChildNode} */ (fragment.firstChild).nodeName === "SPAN") {
+      wrapper = /** @type {HTMLElement} */ (fragment.firstChild);
     } else {
       wrapper = document.createElement("span");
       wrapper.appendChild(fragment);
@@ -1650,6 +1723,7 @@ async init() {
     this.saveNow();
   }
 
+  /** @param {number} delta */
   _applyInlineLetterSpacingToSelectedTodos(delta) {
     if (this.selectedTodoIds.length === 0) return;
 
@@ -1659,10 +1733,10 @@ async init() {
 
     const parser = new DOMParser();
 
-    const processItemHtml = (html) => {
+    const processItemHtml = (/** @type {string} */ html) => {
       if (!html) return html;
       const doc = parser.parseFromString(html, 'text/html');
-      let root = doc.body.firstElementChild;
+      let root = /** @type {HTMLElement | null} */ (doc.body.firstElementChild);
       if (!root || doc.body.childNodes.length > 1 || root.nodeName !== 'DIV') {
         const wrapper = doc.createElement('div');
         wrapper.innerHTML = doc.body.innerHTML;
@@ -1675,13 +1749,13 @@ async init() {
       if (root.style.letterSpacing && root.style.letterSpacing.includes('em')) {
          baseVal = parseFloat(root.style.letterSpacing) || 0;
       } else {
-         const spanChild = root.querySelector('span[style*="letter-spacing"]');
+         const spanChild = /** @type {HTMLElement | null} */ (root.querySelector('span[style*="letter-spacing"]'));
          if (spanChild && spanChild.style.letterSpacing && spanChild.style.letterSpacing.includes('em')) {
             baseVal = parseFloat(spanChild.style.letterSpacing) || 0;
          }
       }
 
-      root.querySelectorAll('*').forEach(el => {
+      /** @type {NodeListOf<HTMLElement>} */ (root.querySelectorAll('*')).forEach(el => {
          if (el.style) el.style.removeProperty('letter-spacing');
          if (!el.getAttribute('style')) el.removeAttribute('style');
       });
@@ -1725,10 +1799,11 @@ async init() {
     // 열린 창은 그 창이 직접 기록하도록 알리고, 닫힌 창만 매니저가 저장소에 씁니다.
     // 왜: 열린 창의 데이터를 밖에서 고치면 그 창이 다음에 저장할 때 옛 목록으로 덮어써
     //     기록이 사라지고, 같은 할 일이 매시간 다시 알림을 울렸습니다.
+    /** @type {Map<string, any[]>} */
     const byLabel = new Map();
     for (const item of unnotified) {
       if (!byLabel.has(item.label)) byLabel.set(item.label, []);
-      byLabel.get(item.label).push(item);
+      /** @type {any[]} */ (byLabel.get(item.label)).push(item);
     }
     const openLabels = byLabel.size > 0 ? await getOpenWindowLabels() : [];
     let needsSave = false;
@@ -1745,7 +1820,7 @@ async init() {
         const raw = entries.find((entry) => entry.label === label)?.raw;
         if (!raw) continue;
         const indexes = new Set(items.map((item) => item.index));
-        const todos = (raw.todos || []).map((todo, i) => (indexes.has(i) ? { ...todo, lastNotified: today } : todo));
+        const todos = (raw.todos || []).map((/** @type {any} */ todo, /** @type {number} */ i) => (indexes.has(i) ? { ...todo, lastNotified: today } : todo));
         await enqueueWrite(async () => {
           await store.set(label, { ...raw, todos });
           await store.save();
@@ -1765,6 +1840,7 @@ async init() {
 
   // 리마인더 계산에 쓸 "창별 할 일" 목록을 읽습니다.
   // 내 창은 아직 저장 전일 수 있으므로 디스크가 아니라 지금 화면의 값을 씁니다.
+  /** @param {KeyValueStore | LazyStore} store */
   async _readReminderEntries(store) {
     const labels = ['main', ...((await store.get('activeExtraWindows')) || [])];
     const entries = [];
@@ -1786,6 +1862,7 @@ async init() {
 
   // 리마인더 창을 동시에 두 번 만들지 않도록 잠급니다.
   // 왜 1초 동안 잠그는가: 창 생성은 비동기라, 만들자마자 "이미 있나?"를 물으면 아직 없다고 답할 수 있습니다.
+  /** @param {any[]} imminentList */
   async _showFloatingReminder(imminentList) {
     if (this._isCreatingReminder) return;
     this._isCreatingReminder = true;
@@ -1796,6 +1873,7 @@ async init() {
     }
   }
 
+  /** @param {any[]} imminentList */
   async _openFloatingReminder(imminentList) {
     const existingWindow = await WebviewWindow.getByLabel('reminder');
     if (existingWindow) {
@@ -1886,6 +1964,7 @@ async init() {
     } catch (e) {}
   }
 
+  /** @param {string} mode @param {{ hours?: number | string, minutes?: number | string }} [payload] */
   dismissReminderPopup(mode, payload = {}) {
     const now = new Date();
     const todayStr = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
@@ -1920,6 +1999,7 @@ async init() {
     this.saveNow();
   }
 
+  /** @param {string} newFontName */
   applyFontToAllText(newFontName) {
     const fontObj = this.allFonts.find(f => f.name === newFontName);
     const familyTag = fontObj ? fontObj.family : `"${newFontName}", sans-serif`;
@@ -1927,13 +2007,13 @@ async init() {
     this.fontFamily = newFontName;
     const safeFamilyTag = familyTag.replace(/"/g, "'");
 
-    const replaceFontInHtml = (html) => {
+    const replaceFontInHtml = (/** @type {string} */ html) => {
       if (!html) return html;
       let newHtml = html;
       let styleUpdated = false;
 
       if (newHtml.toLowerCase().includes('style=')) {
-        newHtml = newHtml.replace(/(style\s*=\s*)(["'])(.*?)\2/gi, (match, prefix, quote, styles) => {
+        newHtml = newHtml.replace(/(style\s*=\s*)(["'])(.*?)\2/gi, (/** @type {string} */ match, /** @type {string} */ prefix, /** @type {string} */ quote, /** @type {string} */ styles) => {
           let cleanedStyles = styles.replace(/font-family\s*:\s*([^;]+)/gi, '').trim();
           cleanedStyles = cleanedStyles.replace(/;{2,}/g, ';').replace(/^\s*;\s*/, '').trim();
           if (cleanedStyles && !cleanedStyles.endsWith(';')) cleanedStyles += ';';
@@ -1943,7 +2023,7 @@ async init() {
       }
 
       if (newHtml.toLowerCase().includes('face=')) {
-        newHtml = newHtml.replace(/(<font[^>]*?\sface\s*=\s*)(["'])(.*?)\2/gi, (match, prefix, quote, faceVal) => {
+        newHtml = newHtml.replace(/(<font[^>]*?\sface\s*=\s*)(["'])(.*?)\2/gi, (/** @type {string} */ match, /** @type {string} */ prefix, /** @type {string} */ quote, /** @type {string} */ faceVal) => {
           styleUpdated = true;
           return `${prefix}${quote}${safeFamilyTag}${quote}`;
         });
@@ -1968,6 +2048,7 @@ async init() {
     }
   }
 
+  /** @param {string} id */
   toggleTodoSelection(id) {
     if (!this.selectedTodoIds.includes(id)) {
       this.selectedTodoIds = [...this.selectedTodoIds, id];
@@ -1993,6 +2074,7 @@ async init() {
   }
 
   // ✨ 초강력 텍스트 정제 및 HTML 태그 제거 유틸 (외부 복붙 찌꺼기 완벽 차단)
+  /** @param {string} html */
   _stripHtml(html) {
     if (!html) return '';
     
@@ -2015,7 +2097,7 @@ async init() {
 
   // ✨ TXT 내보내기 — Tidy Task 양식 (형식 변환은 io/txtPorter.js)
   exportToTxt() {
-    const toItem = (t) => ({ text: this._stripHtml(t.text), deadline: t.deadline });
+    const toItem = (/** @type {any} */ t) => ({ text: this._stripHtml(t.text), deadline: t.deadline });
     return buildExportText({
       todos: ($state.snapshot(this.todos) || []).map(toItem),
       archived: ($state.snapshot(this.archivedTodos) || []).map(toItem),
@@ -2025,6 +2107,7 @@ async init() {
   }
 
   // ✨ TXT 가져오기 — 위 양식 파싱 (5.0.0이 만든 파일도 읽습니다)
+  /** @param {string} content */
   async importFromTxt(content) {
     if (!content) return false;
     const { todos, archived, notesLines } = parseExportText(content);
@@ -2065,6 +2148,7 @@ async init() {
     await this.saveNow();
   }
 
+  /** @param {'style' | 'format'} actionType @param {any} payload 'style'이면 CSS 속성 객체, 'format'이면 서식 이름 */
   applyStyleToSelected(actionType, payload) {
     if (this.selectedTodoIds.length === 0) return;
 
@@ -2074,9 +2158,9 @@ async init() {
 
     const parser = new DOMParser();
 
-    const processItemHtml = (html) => {
+    const processItemHtml = (/** @type {string} */ html) => {
       if (!html) return html;
-      
+
       const doc = parser.parseFromString(html, 'text/html');
       let root = /** @type {HTMLElement|null} */ (doc.body.firstElementChild);
 
@@ -2088,17 +2172,17 @@ async init() {
         root = wrapper;
       }
 
-      const clearInnerStyles = (cssProps, tagsToRemove = []) => {
-        const elements = root.querySelectorAll('*');
+      const clearInnerStyles = (/** @type {string[]} */ cssProps, /** @type {string[]} */ tagsToRemove = []) => {
+        const elements = /** @type {HTMLElement} */ (root).querySelectorAll('*');
         elements.forEach(el => {
           cssProps.forEach(prop => /** @type {HTMLElement} */ (el).style.removeProperty(prop));
           if (!el.getAttribute('style')) el.removeAttribute('style');
         });
         
         tagsToRemove.forEach(tag => {
-          const els = root.querySelectorAll(tag);
+          const els = /** @type {HTMLElement} */ (root).querySelectorAll(tag);
           els.forEach(el => {
-            const parent = el.parentNode;
+            const parent = /** @type {ParentNode & Node} */ (el.parentNode);
             while (el.firstChild) parent.insertBefore(el.firstChild, el);
             parent.removeChild(el);
           });
@@ -2124,14 +2208,14 @@ async init() {
           strikeThrough: { tag: 'STRIKE', remove: ['S'] } 
         };
 
-        const formatSpec = tagMap[payload];
+        const formatSpec = tagMap[/** @type {keyof typeof tagMap} */ (payload)];
 
         if (formatSpec) {
           const targetTag = formatSpec.tag;
           const tagsToRemove = [targetTag, ...formatSpec.remove];
           
-          if (root.childNodes.length === 1 && root.firstChild.nodeName === targetTag) {
-            const child = root.firstChild;
+          if (root.childNodes.length === 1 && /** @type {ChildNode} */ (root.firstChild).nodeName === targetTag) {
+            const child = /** @type {ChildNode} */ (root.firstChild);
             while (child.firstChild) {
               root.insertBefore(child.firstChild, child);
             }

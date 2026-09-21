@@ -1,7 +1,0 @@
-{
-  "environment": "Headless Chromium, 1366x768, local Windows; browser IPC inclusive input timing",
-  "inputCharacters": 10025,
-  "paragraphs": 200,
-  "inputP95Ms": 3.6680999999999813,
-  "search3650P95Ms": 13.300000011920929
-}

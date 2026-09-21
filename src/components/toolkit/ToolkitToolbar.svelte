@@ -1,12 +1,6 @@
 <script lang="ts">
   import { onMount, tick } from 'svelte';
-  import {
-    Settings2,
-    Timer,
-    UsersRound,
-    BookOpenText,
-    Dices,
-  } from 'lucide-svelte';
+  import ToolIcon from './ToolIcon.svelte';
   import {
     native,
     readSettings,
@@ -14,9 +8,9 @@
     patchSettings,
   } from '../../lib/toolkit/store.js';
   import { TOOL_REGISTRY, PLATFORM_TOOLS } from '../../lib/toolkit/registry.js';
-  import { defaults } from '../../lib/toolkit/preferences.js';
+  import { defaults, TOOLBAR_SIZES } from '../../lib/toolkit/preferences.js';
   import { toolkitDrag } from '../../lib/toolkit/drag.js';
-  import { openTool, openPlatform, showTimerMenu, resizeToolbar } from '../../lib/toolkit/windows.js';
+  import { openTool, showToolkitMenu, showToolkitContextMenu, resizeToolbar } from '../../lib/toolkit/windows.js';
   import { getCurrentWindow } from '@tauri-apps/api/window';
   import { PhysicalPosition } from '@tauri-apps/api/dpi';
   import { resolveSavedPosition } from '../../lib/windows/windowPlacement.js';
@@ -25,26 +19,71 @@
   let config = $state(defaults().toolkit),
     ready = $state(false),
     error = $state(''),
-    previewMenu = $state(false);
+    previewMenu = $state<'' | 'timer' | 'external' | 'context'>('');
+  const visiblePlatforms = $derived(
+    PLATFORM_TOOLS.filter((tool) => config.externalToolsEnabled && !config.hiddenPlatformIds.includes(tool.id)),
+  );
   let bar = $state<HTMLDivElement>();
+  let fittedSize = '';
+  let fitQueue = Promise.resolve();
   async function fit() {
     await tick();
-    if (bar) await resizeToolbar(bar.offsetWidth + 14, bar.offsetHeight + 14);
+    if (!bar) return;
+    const rect = bar.getBoundingClientRect();
+    const width = Math.ceil(rect.width) + 14;
+    const height = Math.ceil(rect.height) + 14;
+    const size = `${width}x${height}`;
+    if (size === fittedSize) return fitQueue;
+    fittedSize = size;
+    // Serialize native resizes so an earlier measurement cannot win a race.
+    fitQueue = fitQueue.catch(() => {}).then(() => resizeToolbar(width, height));
+    try {
+      await fitQueue;
+    } catch (cause) {
+      if (fittedSize === size) fittedSize = '';
+      throw cause;
+    }
+  }
+  function observeToolbar(node: HTMLDivElement) {
+    // CSS, font loading, and tool visibility can change the dock after mount.
+    const observer = new ResizeObserver(() => {
+      void fit().catch(() => (error = '툴바 크기를 맞추지 못했어요.'));
+    });
+    observer.observe(node);
+    return { destroy: () => observer.disconnect() };
   }
   async function patch(patch: Record<string, unknown>) {
     try {
-      previewMenu = false;
+      previewMenu = '';
       config = (await patchSettings('toolkit', patch)).toolkit;
       await fit();
     } catch {
       error = '설정을 저장하지 못했어요.';
     }
   }
-  async function menu(trigger: HTMLButtonElement) {
+  async function menu(trigger: HTMLButtonElement, kind: 'timer' | 'external') {
     try {
-      if (!(await showTimerMenu(trigger!))) previewMenu = !previewMenu;
+      if (!(await showToolkitMenu(trigger, kind, kind === 'external' ? visiblePlatforms.length : undefined)))
+        previewMenu = previewMenu === kind ? '' : kind;
     } catch {
-      error = '타이머 메뉴를 열지 못했어요.';
+      error = `${kind === 'timer' ? '타이머' : '외부 툴'} 메뉴를 열지 못했어요.`;
+    }
+  }
+  // 아이콘·패널 어디서 우클릭해도 WebView 기본 메뉴(뒤로·새로 고침·검사) 대신 툴킷 메뉴를 띄웁니다.
+  async function contextMenu(e: MouseEvent) {
+    e.preventDefault();
+    // 키보드(Shift+F10·메뉴 키)로 열면 좌표가 0이므로, 초점 받은 요소 아래에 붙입니다.
+    let x = e.clientX,
+      y = e.clientY;
+    if (!x && !y && e.target instanceof Element) {
+      const rect = e.target.getBoundingClientRect();
+      x = rect.left;
+      y = rect.bottom;
+    }
+    try {
+      if (!(await showToolkitContextMenu(x, y))) previewMenu = 'context';
+    } catch {
+      error = '툴킷 메뉴를 열지 못했어요.';
     }
   }
   onMount(() => {
@@ -56,7 +95,7 @@
         const off = await subscribeSettings((s) => {
           if (!disposed) {
             config = s.toolkit;
-            void fit();
+            void fit().catch(() => (error = '툴바 크기를 맞추지 못했어요.'));
           }
         });
         if (disposed) {
@@ -69,23 +108,30 @@
           const win = getCurrentWindow();
           const pos = resolveSavedPosition(config.position || {}, await getMonitorGeometries());
           if (pos) await win.setPosition(new PhysicalPosition(pos.x, pos.y));
+          // 왜 비교하는가: 저장은 디스크 쓰기와 모든 툴킷 창으로의 방송을 부르므로,
+          // 같은 자리로 다시 놓였을 때(크기 맞춤 뒤 보정 등)는 건너뜁니다.
+          let savedPosition = JSON.stringify(config.position);
           const moved = await win.onMoved(() => {
             clearTimeout(saveTimer);
             saveTimer = setTimeout(async () => {
               try {
-                const p = await win.outerPosition(),
-                  s = await win.outerSize(),
-                  scale = await win.scaleFactor();
-                await patchSettings('toolkit', {
-                  position: {
-                    physicalX: p.x,
-                    physicalY: p.y,
-                    logicalX: p.x / scale,
-                    logicalY: p.y / scale,
-                    width: s.width / scale,
-                    height: s.height / scale,
-                  },
-                });
+                const [p, s, scale] = await Promise.all([
+                  win.outerPosition(),
+                  win.outerSize(),
+                  win.scaleFactor(),
+                ]);
+                const position = {
+                  physicalX: p.x,
+                  physicalY: p.y,
+                  logicalX: p.x / scale,
+                  logicalY: p.y / scale,
+                  width: s.width / scale,
+                  height: s.height / scale,
+                };
+                const key = JSON.stringify(position);
+                if (key === savedPosition) return;
+                await patchSettings('toolkit', { position });
+                savedPosition = key;
               } catch {}
             }, 250);
           });
@@ -112,11 +158,13 @@
   });
 </script>
 
-{#if ready}<div class="toolkit-wrap">
+{#if ready}<div class="toolkit-wrap" role="presentation" oncontextmenu={contextMenu}>
     <div
       bind:this={bar}
+      use:observeToolbar
       use:toolkitDrag
       class="toolkit-bar"
+      style:zoom={TOOLBAR_SIZES[config.toolbarSize].scale}
       class:vertical={config.orientation === 'vertical'}
       class:collapsed={config.collapsed}
     >
@@ -133,33 +181,35 @@
       {#if !config.collapsed}<div class="toolkit-crescent">
         {#each TOOL_REGISTRY.filter( (tool) => config.visibleToolIds.includes(tool.id) && tool.id !== 'roster', ) as tool}<button
             class="toolkit-tool"
-            class:menu-open={previewMenu}
-            onclick={(e) => tool.id !== 'timer' ? openTool(tool.id).catch(() => error = '도구를 열지 못했어요.') : menu(e.currentTarget)}
+            class:menu-open={tool.id === 'timer' && previewMenu === 'timer'}
+            onclick={(e) => tool.id !== 'timer' ? openTool(tool.id).catch(() => error = '도구를 열지 못했어요.') : menu(e.currentTarget, 'timer')}
             aria-haspopup={tool.id === 'timer' ? 'menu' : undefined}
-            aria-expanded={tool.id === 'timer' ? previewMenu : undefined}
-            ><span class="toolkit-tool-icon">{#if tool.id === 'picker'}<Dices size={18} strokeWidth={2} />{:else if tool.id === 'noticeboard'}<BookOpenText size={18} strokeWidth={2} />{:else}<Timer size={18} strokeWidth={2} />{/if}</span
+            aria-expanded={tool.id === 'timer' ? previewMenu === 'timer' : undefined}
+            ><span class="toolkit-tool-icon"><ToolIcon kind={tool.id} /></span
             ><span class="toolkit-tool-copy"><strong>{tool.label}</strong></span></button
           >{/each}
-        {#each PLATFORM_TOOLS.filter((tool) => !config.hiddenPlatformIds.includes(tool.id)) as tool}
-          <button class="toolkit-tool" title={`${tool.label} 웹사이트 열기`}
-            onclick={() => { previewMenu = false; void openPlatform(tool.id).catch(() => (error = '웹사이트를 열지 못했어요. 다시 눌러 주세요.')); }}>
-            <span class="toolkit-platform-icon"><img src={tool.icon} alt="" draggable="false" /></span>
-            <span class="toolkit-tool-copy"><strong>{tool.label}</strong></span>
-          </button>
-        {/each}
-        {#if config.visibleToolIds.includes('roster')}<button class="toolkit-tool" onclick={() => { previewMenu = false; void openTool('roster').catch(() => error = '학급 명단을 열지 못했어요.'); }}><span class="toolkit-tool-icon"><UsersRound size={18} strokeWidth={2} /></span><span class="toolkit-tool-copy"><strong>학급 명단</strong></span></button>{/if}
+        {#if visiblePlatforms.length}<button
+            class="toolkit-tool"
+            class:menu-open={previewMenu === 'external'}
+            onclick={(e) => menu(e.currentTarget, 'external')}
+            aria-haspopup="menu"
+            aria-expanded={previewMenu === 'external'}
+            ><span class="toolkit-tool-icon"><ToolIcon kind="external" /></span
+            ><span class="toolkit-tool-copy"><strong>외부 툴</strong></span></button
+          >{/if}
+        {#if config.visibleToolIds.includes('roster')}<button class="toolkit-tool" onclick={() => { previewMenu = ''; void openTool('roster').catch(() => error = '학급 명단을 열지 못했어요.'); }}><span class="toolkit-tool-icon"><ToolIcon kind="roster" /></span><span class="toolkit-tool-copy"><strong>학급 명단</strong></span></button>{/if}
         <button
           class="toolkit-settings"
           aria-label="툴킷 설정"
           title="툴킷 설정"
           onclick={() =>
             openTool('toolkit-settings').catch(() => (error = '설정을 열지 못했어요.'))}
-          ><Settings2 size={18} strokeWidth={1.9} /></button
+          ><ToolIcon kind="settings" size={26} /><span class="toolkit-settings-label">설정</span></button
         ></div>{/if}
     </div>
     {#if error}<p role="alert" class="tk-error">{error}</p>{/if}{#if previewMenu}<div
         class="toolkit-preview-menu"
       >
-        <ToolkitMenu />
+        {#key previewMenu}<ToolkitMenu kind={previewMenu} ondone={() => (previewMenu = '')} />{/key}
       </div>{/if}
   </div>{/if}

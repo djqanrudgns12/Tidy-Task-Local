@@ -15,9 +15,11 @@
 
 ### 3.1. 멀티 윈도우 시스템 및 매니저 권한 (Manager System)
 - 단일 앱 내에서 여러 독립적인 창(`main`, `note-1`, `tinynote-1`, `settings`, `reminder` 등)을 생성 및 관리합니다.
-- **Manager Authority:** 다수의 창 중에서 단 하나의 창만이 리마인더 점검·업데이트 확인·트레이 메뉴 요청·커스텀 폰트 등록을 중앙 제어(`isManager = true`)합니다.
+- **Manager Authority:** 다수의 창 중에서 단 하나의 창만이 리마인더 점검·업데이트 확인·커스텀 폰트 등록을 중앙 제어(`isManager = true`)합니다.
   - 선출 규칙(`src/lib/windows/managerElection.js`): **지금 열려 있는** 데이터 창 중 `main` → `note-1..10` → `tinynote-1..10` 순서로 1위가 매니저입니다.
-  - 권한은 `appState.becomeManager()` / `resignManager()` 두 함수로만 맡고 내려놓습니다(리스너·1시간 주기 점검·업데이트 일정이 함께 켜지고 꺼짐). `main`이 다시 뜨면 `manager-reclaim`으로 권한을 되찾습니다.
+  - 권한은 `appState.becomeManager()` / `resignManager()` 두 함수로만 맡고 내려놓습니다(리스너·1시간 주기 점검·업데이트 일정이 함께 켜지고 꺼짐).
+  - 승계는 **매번 다시 계산**합니다(`appState._reconcileManager`). 창이 뜨거나 닫힐 때마다 `window-roster-changed`가 방송되고(JS 닫기 처리기 + Rust `Destroyed`), 모든 데이터 창이 같은 규칙으로 "내가 1위인가"를 계산해 스스로 맡거나 내려놓습니다. 5분 주기 점검이 마지막 안전망입니다. 신호 하나에만 기대면 그것을 놓친 순간 매니저가 영영 비었습니다.
+- **트레이 메뉴(`src-tauri/src/tray.rs`)는 매니저에 기대지 않습니다.** "새 Tidy Task / 새 Tiny Note"는 Rust가 열려 있는 데이터 창 하나를 지명(`tray-request` payload의 `target`)해 보내고, `ACK_TIMEOUT` 안에 `tray_request_done` 응답이 없으면 다음 창으로 넘깁니다. 받을 창이 없으면 `main`을 띄우고 `tray_take_pending_request`로 이어받습니다. "좌표 초기화"는 Rust가 직접 모든 창(임시 메뉴 제외)을 주 모니터 작업영역에 계단식으로 모읍니다 — 새 위치 저장은 각 창의 "창 이동" 처리기가 합니다.
 - **보조 창**(`settings`, `ctx-menu`, `reminder`, `welcome`, `update-notice`, `help`, `archive`)은 저장소에 자기 데이터를 쓰지 않습니다. 판별은 `src/lib/windows/windowLabels.js`의 `isDataWindowLabel()` 하나를 씁니다.
 - 창 간 통신은 Tauri의 IPC API(`emit`, `listen`)를 통해 이벤트 기반으로 이루어집니다 (예: 테마 변경 동기화, 데이터 동기화).
 

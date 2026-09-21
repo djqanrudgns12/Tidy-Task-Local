@@ -1,8 +1,0 @@
-{
-  "environment": "Headless Chromium, 1100x760, local Vite development server",
-  "runs": 8,
-  "shellMedianMs": 223.9,
-  "editorMedianMs": 228.1,
-  "toolkitBundleRequested": false,
-  "legacyLoadingCopyFound": false
-}

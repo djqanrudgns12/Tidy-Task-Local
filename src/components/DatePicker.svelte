@@ -1,4 +1,5 @@
 <script>
+  // @ts-nocheck — 타입 주석이 아직 없는 기존 코드라 타입 검사에서 뺍니다. 고칠 때 JSDoc 타입을 붙이고 이 줄을 지워 주세요.
   import { appState } from '../lib/appState.svelte.js';
   import { ChevronLeft, ChevronRight, X } from 'lucide-svelte';
   import { onMount, onDestroy, tick } from 'svelte';
@@ -10,7 +11,10 @@
   const WEEKDAYS = ['일', '월', '화', '수', '목', '금', '토'];
   const today = new Date();
 
+  // 달력을 처음 펼칠 때 보여 줄 달입니다. 이후에는 사용자가 넘기는 대로 따라가야 하므로 value를 계속 추적하지 않습니다.
+  // svelte-ignore state_referenced_locally
   let viewYear  = $state(value ? parseInt(value.split('-')[0]) : today.getFullYear());
+  // svelte-ignore state_referenced_locally
   let viewMonth = $state(value ? parseInt(value.split('-')[1]) - 1 : today.getMonth());
 
   // 드래그

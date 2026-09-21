@@ -2,9 +2,9 @@
   height: 100dvh;
   display: flex;
   flex-direction: column;
-  background: #f7f8f2;
-  color: #253b40;
-  border: 1px solid #e1e7df;
+  background: var(--tk-panel);
+  color: var(--tk-ink);
+  border: 1px solid var(--tk-line);
   border-radius: 20px;
   overflow: hidden;
   font-family: var(--tk-font);
@@ -27,7 +27,7 @@
 }
 .noticeboard-app button:hover,
 .nb-dialog button:hover {
-  background: #e9f3ed;
+  background: var(--tk-bg);
 }
 .noticeboard-app button:disabled,
 .nb-dialog button:disabled {
@@ -38,7 +38,7 @@
 .noticeboard-app input:focus-visible,
 .noticeboard-app select:focus-visible,
 .nb-dialog button:focus-visible {
-  outline: 2px solid #398877;
+  outline: 2px solid var(--tk-accent);
   outline-offset: 2px;
 }
 .nb-titlebar {
@@ -49,7 +49,7 @@
   align-items: center;
   justify-content: space-between;
   font-size: 12px;
-  color: #64776e;
+  color: var(--tk-muted);
   user-select: none;
 }
 .nb-titlebar > span,
@@ -60,7 +60,7 @@
 }
 .nb-titlebar i {
   font-style: normal;
-  color: #a6b5aa;
+  color: var(--tk-muted);
 }
 .nb-titlebar button {
   padding: 5px;
@@ -76,8 +76,8 @@
 }
 .nb-paper,
 .nb-archive {
-  background: #fff;
-  border: 1px solid #e1e7df;
+  background: var(--tk-panel);
+  border: 1px solid var(--tk-line);
   border-radius: 19px;
   min-height: 0;
   min-width: 0;
@@ -100,7 +100,7 @@
   align-items: center;
   gap: 6px;
   margin: 0 0 12px;
-  color: #7a7f7c;
+  color: var(--tk-muted);
   font-size: 14px;
   line-height: 1.4;
 }
@@ -108,7 +108,7 @@
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  color: #2f8355;
+  color: var(--tk-accent);
   font-size: 14px;
   font-weight: 750;
   line-height: 1.4;
@@ -122,16 +122,16 @@
   object-fit: cover;
 }
 .nb-attribution a:hover {
-  color: #1f6841;
+  color: var(--tk-accent);
   text-decoration: underline;
 }
 .nb-attribution a:focus-visible {
-  outline: 2px solid #63977a;
+  outline: 2px solid var(--tk-accent);
   outline-offset: 3px;
 }
 .nb-eyebrow {
   font-size: 11px;
-  color: #758578;
+  color: var(--tk-muted);
   letter-spacing: 0.06em;
 }
 .nb-heading h1 {
@@ -155,11 +155,11 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  background: #f1f5ef;
+  background: var(--tk-bg);
   border-radius: 9px;
   min-height: 36px;
   padding: 6px 11px;
-  color: #436a5d;
+  color: var(--tk-muted);
   cursor: pointer;
   font-size: 13px;
   font-weight: 650;
@@ -167,10 +167,10 @@
   letter-spacing: -0.01em;
 }
 .nb-date:hover {
-  background: #e8f1e9;
+  background: var(--tk-bg);
 }
 .nb-date:focus-within {
-  outline: 2px solid #398877;
+  outline: 2px solid var(--tk-accent);
   outline-offset: 2px;
 }
 .nb-date input {
@@ -198,18 +198,18 @@
   margin-left: auto;
   min-height: 42px !important;
   padding: 6px 13px 6px 8px !important;
-  border: 1px solid #c7ded1 !important;
+  border: 1px solid var(--tk-line) !important;
   border-radius: 12px !important;
-  background: linear-gradient(135deg, #eef8f2 0%, #e1f1e9 100%) !important;
-  color: #285f50 !important;
+  background: linear-gradient(135deg, var(--tk-panel) 0%, var(--tk-soft) 100%) !important;
+  color: var(--tk-accent) !important;
   box-shadow: 0 5px 14px rgba(45, 104, 84, 0.1);
   font-size: 12px !important;
   font-weight: 750 !important;
   white-space: nowrap;
 }
 .nb-board-entry:hover {
-  border-color: #a9ceba !important;
-  background: linear-gradient(135deg, #e5f5ec 0%, #d4ebdf 100%) !important;
+  border-color: var(--tk-line) !important;
+  background: linear-gradient(135deg, var(--tk-bg) 0%, var(--tk-soft) 100%) !important;
   box-shadow: 0 7px 17px rgba(45, 104, 84, 0.14);
 }
 .nb-board-entry > span:last-child {
@@ -218,7 +218,7 @@
   gap: 3px;
 }
 .nb-board-entry small {
-  color: #608075;
+  color: var(--tk-muted);
   font-size: 10px;
   font-weight: 650;
 }
@@ -229,13 +229,13 @@
   width: 28px;
   height: 28px;
   border-radius: 8px;
-  background: #fff;
-  color: #327461;
+  background: var(--tk-panel);
+  color: var(--tk-accent);
   box-shadow: inset 0 0 0 1px rgba(89, 145, 119, 0.14);
 }
 .nb-today {
   font-size: 12px !important;
-  color: #61736f !important;
+  color: var(--tk-muted) !important;
 }
 .nb-archive-toggle,
 .nb-archive-close {
@@ -248,8 +248,8 @@
   flex-wrap: wrap;
   min-height: 48px;
   padding: 7px 17px;
-  background: #fafbf8;
-  border-block: 1px solid #edf0e9;
+  background: var(--tk-panel);
+  border-block: 1px solid var(--tk-line);
   z-index: 3;
 }
 .nb-format select {
@@ -257,29 +257,29 @@
   width: 130px;
   height: 32px;
   border: 0;
-  background: #eef3ec;
+  background: var(--tk-bg);
   border-radius: 7px;
   padding: 0 6px;
   font: inherit;
   font-size: 12px;
-  color: #344c43;
+  color: var(--tk-ink);
 }
 .nb-format button {
   min-height: 31px;
   padding: 6px;
 }
 .nb-format button[aria-pressed="true"] {
-  background: #deeee4;
-  color: #20614f;
+  background: var(--tk-soft);
+  color: var(--tk-accent);
 }
 .nb-format button[aria-pressed="mixed"] {
-  background: #f1f1df;
+  background: var(--tk-bg);
   box-shadow: inset 0 -2px #abb593;
 }
 .nb-size {
   display: flex;
   align-items: center;
-  background: #eef3ec;
+  background: var(--tk-bg);
   border-radius: 7px;
   margin-left: 5px;
 }
@@ -296,7 +296,7 @@
 .nb-divider {
   height: 18px;
   width: 1px;
-  background: #dfe5dc;
+  background: var(--tk-soft);
   margin: 0 5px;
 }
 .nb-color-wrap {
@@ -321,8 +321,8 @@
   display: flex;
   gap: 7px;
   padding: 11px;
-  background: white;
-  border: 1px solid #dbe6dd;
+  background: var(--tk-panel);
+  border: 1px solid var(--tk-line);
   border-radius: 12px;
   box-shadow: 0 5px 20px #253b4015;
   z-index: 7;
@@ -332,8 +332,8 @@
   height: 24px;
   min-height: 24px;
   padding: 0;
-  border: 3px solid white;
-  outline: 1px solid #dbe6dd;
+  border: 3px solid var(--tk-line);
+  outline: 1px solid var(--tk-line);
   border-radius: 50%;
 }
 .nb-zoom {
@@ -342,11 +342,11 @@
   gap: 3px;
   margin-left: auto;
   font-size: 11px;
-  color: #6a7c70;
+  color: var(--tk-muted);
 }
 .nb-zoom > span:first-child {
   font-size: 10px;
-  color: #87968b;
+  color: var(--tk-muted);
 }
 .nb-scroll {
   position: relative;
@@ -354,7 +354,7 @@
   min-height: 0;
   overflow: auto;
   scrollbar-width: thin;
-  scrollbar-color: #cbd8cd transparent;
+  scrollbar-color: var(--tk-line) transparent;
   overscroll-behavior: contain;
   padding: 25px 29px 42px;
   line-height: 1.65;
@@ -369,7 +369,7 @@
   outline: none;
   min-height: 240px;
   font-size: inherit;
-  color: #253b40;
+  color: var(--tk-ink);
 }
 .nb-editor .ProseMirror p {
   margin: 0 0 0.55em;
@@ -381,16 +381,16 @@
   content: attr(data-placeholder);
   position: absolute;
   pointer-events: none;
-  color: #a1afa5;
+  color: var(--tk-muted);
   font-size: inherit;
 }
 .nb-editor .ProseMirror-selectednode {
-  outline: 2px solid #78a992;
+  outline: 2px solid var(--tk-accent);
 }
 .nb-loading {
   position: absolute;
   inset: 25px 29px auto;
-  color: #a1afa5;
+  color: var(--tk-muted);
   font-size: inherit;
   pointer-events: none;
 }
@@ -400,14 +400,14 @@
   flex-wrap: wrap;
   gap: 9px;
   padding: 15px 20px;
-  border-top: 1px solid #edf0e9;
-  background: white;
+  border-top: 1px solid var(--tk-line);
+  background: var(--tk-panel);
 }
 .nb-save-state {
   display: flex;
   align-items: center;
   gap: 6px;
-  color: #6e8174;
+  color: var(--tk-muted);
   font-size: 11px;
   flex-wrap: wrap;
 }
@@ -415,16 +415,16 @@
   width: 5px;
   height: 5px;
   border-radius: 50%;
-  background: #70a08b;
+  background: var(--tk-action);
 }
 .nb-save-state > span.pending {
-  background: #d2a347;
+  background: var(--tk-action);
 }
 .nb-save-state small {
   display: block;
   flex-basis: 100%;
   font-size: 10px;
-  color: #9b7840;
+  color: var(--tk-accent);
 }
 .nb-footer-actions {
   margin-left: auto;
@@ -432,20 +432,20 @@
   gap: 8px;
 }
 .nb-soft {
-  background: #edf4ee !important;
-  color: #376b5b !important;
+  background: var(--tk-bg) !important;
+  color: var(--tk-accent) !important;
 }
 .nb-primary {
-  background: #32826c !important;
-  color: white !important;
+  background: var(--tk-action) !important;
+  color: var(--tk-on-action) !important;
   padding: 9px 18px !important;
 }
 .nb-primary:hover {
-  background: #236e5a !important;
+  background: var(--tk-action) !important;
 }
 .nb-text {
   font-size: 12px !important;
-  color: #6f8078 !important;
+  color: var(--tk-muted) !important;
 }
 .nb-error {
   display: flex;
@@ -453,16 +453,16 @@
   justify-content: space-between;
   gap: 10px;
   padding: 9px 17px;
-  background: #fff5e8;
-  color: #925014;
+  background: var(--tk-danger-soft);
+  color: var(--tk-danger);
   font-size: 12px;
 }
 .nb-error button {
-  background: #fff;
+  background: var(--tk-danger-soft);
   white-space: nowrap;
 }
 .nb-delete {
-  color: #987571 !important;
+  color: var(--tk-danger) !important;
   font-size: 11px !important;
 }
 .nb-archive {
@@ -482,14 +482,14 @@
 }
 .nb-archive header span {
   font-size: 10px;
-  color: #87958a;
+  color: var(--tk-muted);
 }
 .nb-archive header button {
-  color: #7d8b81;
+  color: var(--tk-muted);
 }
 .nb-filters {
   display: flex;
-  background: #f1f4ed;
+  background: var(--tk-bg);
   padding: 3px;
   border-radius: 10px;
 }
@@ -500,8 +500,8 @@
   padding: 5px;
 }
 .nb-filters .active {
-  background: white;
-  color: #2b705e;
+  background: var(--tk-panel);
+  color: var(--tk-accent);
   box-shadow: 0 1px 4px #243c2c0a;
 }
 .nb-search {
@@ -510,9 +510,9 @@
   gap: 8px;
   margin: 14px 0;
   padding: 10px;
-  border: 1px solid #e5eae0;
+  border: 1px solid var(--tk-line);
   border-radius: 10px;
-  color: #93a091;
+  color: var(--tk-muted);
 }
 .nb-search input {
   border: 0;
@@ -522,17 +522,17 @@
   width: 100%;
   font: inherit;
   font-size: 12px;
-  color: #40554a;
+  color: var(--tk-muted);
 }
 .nb-search input::placeholder {
-  color: #98a296;
+  color: var(--tk-muted);
 }
 .nb-entries {
   flex: 1;
   min-height: 0;
   overflow: auto;
   scrollbar-width: thin;
-  scrollbar-color: #d4ded1 transparent;
+  scrollbar-color: var(--tk-line) transparent;
   padding-right: 2px;
 }
 .nb-entry {
@@ -542,12 +542,12 @@
   padding: 14px !important;
   border-radius: 12px !important;
   margin-bottom: 9px;
-  background: #f6f8f2 !important;
+  background: var(--tk-panel) !important;
   border: 1px solid transparent !important;
 }
 .nb-entry.selected {
-  background: #eef6ee !important;
-  border-color: #abcbb9 !important;
+  background: var(--tk-bg) !important;
+  border-color: var(--tk-line) !important;
 }
 .nb-entry-heading {
   display: flex;
@@ -557,16 +557,16 @@
 }
 .nb-entry strong {
   font-size: 12px;
-  color: #4b6e5c;
+  color: var(--tk-muted);
 }
 .nb-entry small {
   font-size: 9px;
-  color: #859183;
+  color: var(--tk-muted);
   white-space: nowrap;
 }
 .nb-entry p {
   font-size: 12px;
-  color: #71806f;
+  color: var(--tk-muted);
   line-height: 1.65;
   margin: 9px 0 0;
   display: -webkit-box;
@@ -579,21 +579,21 @@
 .nb-entry em {
   font-size: 9px;
   font-style: normal;
-  color: #977332;
+  color: var(--tk-accent);
 }
 .nb-empty {
   padding: 45px 3px;
   text-align: center;
-  color: #9ba99b;
+  color: var(--tk-muted);
 }
 .nb-empty svg {
   margin: auto;
-  color: #afc3b1;
+  color: var(--tk-muted);
 }
 .nb-empty p {
   font-size: 12px;
   margin: 17px 0 7px;
-  color: #758975;
+  color: var(--tk-muted);
 }
 .nb-empty small {
   font-size: 10px;
@@ -604,7 +604,7 @@
 .noticeboard-app.board {
   border: 0;
   border-radius: 0;
-  background: #fff;
+  background: var(--tk-panel);
 }
 .board .nb-workspace {
   display: block;
@@ -618,7 +618,7 @@
 }
 .board .nb-heading {
   padding: 25px 5vw 19px;
-  border-bottom: 1px solid #ecf0eb;
+  border-bottom: 1px solid var(--tk-line);
 }
 .nb-board-date {
   font-size: clamp(19px, 2.3vw, 31px);
@@ -626,7 +626,7 @@
   margin: 0;
   text-align: center;
   font-weight: 700;
-  color: #465b50;
+  color: var(--tk-muted);
 }
 .board .nb-scroll {
   padding: 30px clamp(32px, 6vw, 130px) 80px;
@@ -637,7 +637,7 @@
 }
 .board .nb-editor .ProseMirror:has(> p:only-child > br:only-child)::before {
   content: "오늘의 알림장을 적어 주세요.";
-  color: #c1cbc1;
+  color: var(--tk-muted);
 }
 .board .nb-format {
   position: absolute;
@@ -645,8 +645,8 @@
   bottom: 78px;
   width: min(640px, calc(100vw - 50px));
   padding: 12px;
-  background: #fafcf9;
-  border: 1px solid #dfe8dd;
+  background: var(--tk-panel);
+  border: 1px solid var(--tk-line);
   border-radius: 14px;
   box-shadow: 0 8px 28px #273a3012;
 }
@@ -656,15 +656,15 @@
 .board .nb-footer {
   padding: 13px 25px;
   min-height: 62px;
-  background: #fff;
-  border-top: 1px solid #eef1ec;
+  background: var(--tk-panel);
+  border-top: 1px solid var(--tk-line);
 }
 .board .nb-footer button {
   font-size: 12px;
 }
 .nb-footer kbd {
   font-family: inherit;
-  color: #9aa99f;
+  color: var(--tk-muted);
   font-size: 10px;
   margin-left: 5px;
 }
@@ -676,20 +676,20 @@
   display: flex;
   align-items: center;
   gap: 5px;
-  background: #f1f6eeed;
+  background: color-mix(in srgb, var(--tk-bg) 92.94%, transparent);
   border-radius: 20px;
   padding: 6px 12px;
   font-size: 11px;
-  color: #6d856d;
+  color: var(--tk-muted);
   pointer-events: none;
 }
 .board .nb-error {
-  border-top: 1px solid #ead9bd;
+  border-top: 1px solid var(--tk-line);
 }
 .nb-dialog {
   font-family: var(--tk-font);
-  color: #253b40;
-  border: 1px solid #dfe8dd;
+  color: var(--tk-ink);
+  border: 1px solid var(--tk-line);
   border-radius: 20px;
   padding: 25px;
   width: min(600px, calc(100vw - 40px));
@@ -697,7 +697,7 @@
   box-shadow: 0 20px 80px #233a3126;
 }
 .nb-dialog::backdrop {
-  background: #253b4055;
+  background: color-mix(in srgb, var(--tk-action) 33.33%, transparent);
   backdrop-filter: blur(3px);
 }
 .nb-dialog h2 {
@@ -707,7 +707,7 @@
 }
 .nb-dialog p {
   font-size: 13px;
-  color: #6c7e71;
+  color: var(--tk-muted);
   line-height: 1.8;
 }
 .nb-dialog footer {
@@ -729,7 +729,7 @@
 .nb-compare section {
   min-width: 0;
   padding: 12px;
-  background: #f5f8f2;
+  background: var(--tk-panel);
   border-radius: 12px;
 }
 .nb-compare h3 {
@@ -751,7 +751,7 @@
 }
 .nb-trash-list article {
   padding: 17px;
-  border: 1px solid #e0e8dc;
+  border: 1px solid var(--tk-line);
   border-radius: 12px;
   margin: 12px 0;
 }
@@ -760,7 +760,7 @@
 }
 .nb-trash-list article > small {
   display: block;
-  color: #81907f;
+  color: var(--tk-muted);
   font-size: 10px;
   margin-top: 5px;
 }

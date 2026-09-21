@@ -45,6 +45,7 @@ export const RELAY_TIMEOUT_MS = 15000;
 // "v5.1.0", "5.1", "5.1.0-beta.2" 를 모두 받아 구조체로 바꿉니다.
 // 왜 관대하게 파싱하는가: 태그 이름 표기가 조금씩 흔들려도(v 접두사 유무 등)
 //   업데이트 안내가 통째로 죽는 일이 없어야 하기 때문입니다.
+/** @param {unknown} raw */
 export function parseVersion(raw) {
   if (typeof raw !== 'string') return null;
   const trimmed = raw.trim().replace(/^[vV]/, '');
@@ -61,6 +62,7 @@ export function parseVersion(raw) {
 }
 
 // a가 b보다 크면 1, 같으면 0, 작으면 -1. 파싱 실패 시 0(=변화 없음)으로 안전하게 처리합니다.
+/** @param {unknown} a @param {unknown} b @returns {-1 | 0 | 1} */
 export function compareVersions(a, b) {
   const left = parseVersion(a);
   const right = parseVersion(b);
@@ -78,6 +80,7 @@ export function compareVersions(a, b) {
 }
 
 // 설치를 권할 만큼 "확실히 더 새로운" 버전인지 판별합니다.
+/** @param {unknown} latest @param {unknown} current */
 export function isNewerVersion(latest, current) {
   if (!parseVersion(latest) || !parseVersion(current)) return false;
   return compareVersions(latest, current) > 0;
@@ -88,6 +91,8 @@ export function isNewerVersion(latest, current) {
 // 여러 첨부 파일 중 "윈도우 설치 파일" 하나를 고릅니다.
 // 왜 점수제인가: 릴리스마다 파일 이름 규칙이 조금씩 달라도(setup 유무, x64 표기 등)
 //   항상 사용자가 실행 가능한 설치 파일이 선택되도록 하기 위해서입니다.
+/** @typedef {{ name: string, browser_download_url?: string, size?: number }} ReleaseAsset */
+/** @param {unknown} assets @returns {ReleaseAsset | null} */
 export function pickWindowsInstaller(assets) {
   if (!Array.isArray(assets)) return null;
 
@@ -99,7 +104,7 @@ export function pickWindowsInstaller(assets) {
   });
   if (candidates.length === 0) return null;
 
-  const scoreOf = (asset) => {
+  const scoreOf = (/** @type {ReleaseAsset} */ asset) => {
     const name = asset.name.toLowerCase();
     let score = 0;
     if (name.endsWith('.exe')) score += 10;                    // NSIS 설치 파일 최우선
@@ -119,6 +124,7 @@ const MAX_NOTE_LENGTH = 120;
 // 마크다운으로 쓰인 릴리스 본문을 "읽기 쉬운 짧은 문장 목록"으로 바꿉니다.
 // 왜 필요한가: 원문에는 #, **, 링크 문법이 섞여 있어 앱 안에 그대로 띄우면
 //   컴퓨터에 익숙하지 않은 사용자에게 오히려 혼란을 줍니다.
+/** @param {unknown} body @returns {string[]} */
 export function normalizeReleaseNotes(body) {
   if (typeof body !== 'string' || !body.trim()) return [];
 
@@ -145,6 +151,7 @@ export function normalizeReleaseNotes(body) {
 
 // ── 표시용 포맷터 ──────────────────────────────────────────────────────
 
+/** @param {unknown} bytes */
 export function formatBytes(bytes) {
   if (typeof bytes !== 'number' || !isFinite(bytes) || bytes <= 0) return '';
   const mb = bytes / (1024 * 1024);
@@ -152,6 +159,7 @@ export function formatBytes(bytes) {
   return `${Math.max(1, Math.round(bytes / 1024))}KB`;
 }
 
+/** @param {string | number | null | undefined} iso */
 export function formatReleaseDate(iso) {
   if (!iso) return '';
   const date = new Date(iso);
@@ -164,6 +172,7 @@ export function formatReleaseDate(iso) {
 // 자동 확인을 지금 해도 되는지 판단합니다.
 // 왜 미래 시각까지 방어하는가: 사용자가 시스템 시계를 앞당겼다 되돌리면
 //   lastCheckedAt이 미래가 되어 영원히 확인하지 않는 상태로 굳어버립니다.
+/** @param {{ lastCheckedAt?: number, now?: number, intervalMs?: number }} [options] */
 export function shouldAutoCheck({ lastCheckedAt, now, intervalMs = AUTO_CHECK_INTERVAL_MS } = {}) {
   const last = Number(lastCheckedAt) || 0;
   const current = Number(now) || 0;
@@ -174,6 +183,7 @@ export function shouldAutoCheck({ lastCheckedAt, now, intervalMs = AUTO_CHECK_IN
 
 // 자동으로 발견한 새 버전을 사용자에게 띄워도 되는지 판단합니다.
 // (사용자가 "건너뛰기" 또는 "나중에"를 선택한 의사를 존중합니다)
+/** @param {{ latestVersion?: string, skippedVersion?: string, snoozeUntil?: number, now?: number }} [options] */
 export function shouldNotifyUser({ latestVersion, skippedVersion, snoozeUntil, now } = {}) {
   if (!latestVersion) return false;
 
@@ -189,6 +199,8 @@ export function shouldNotifyUser({ latestVersion, skippedVersion, snoozeUntil, n
 
 // ── GitHub 응답 → 앱이 쓰는 형태로 정규화 ──────────────────────────────
 
+/** @typedef {{ version: string, tagName: string, title: string, notes: string[], publishedAt: string, downloadUrl: string, hasInstaller: boolean, assetName: string, assetSize: number, pageUrl: string }} UpdateInfo */
+/** @param {any} release GitHub releases/latest 응답 @returns {UpdateInfo | null} */
 export function buildUpdateInfo(release) {
   if (!release || typeof release !== 'object') return null;
 
@@ -220,12 +232,16 @@ export function buildUpdateInfo(release) {
 // 실패 원인을 코드로 구분해 던집니다.
 // 왜: 사용자에게 "인터넷을 확인해 주세요"와 "아직 배포된 버전이 없습니다"는
 //   전혀 다른 안내여야 하는데, 뭉뚱그리면 불필요한 불안을 줍니다.
+/** @typedef {Error & { code?: string }} UpdateError */
+/** @param {string} code @param {string} [message] */
 function updateError(code, message) {
+  /** @type {UpdateError} */
   const error = new Error(message || code);
   error.code = code;
   return error;
 }
 
+/** @param {{ fetchImpl?: typeof fetch, timeoutMs?: number }} [options] */
 export async function fetchLatestRelease({ fetchImpl = globalThis.fetch, timeoutMs = REQUEST_TIMEOUT_MS } = {}) {
   if (typeof fetchImpl !== 'function') throw updateError('UNSUPPORTED');
 
@@ -246,7 +262,7 @@ export async function fetchLatestRelease({ fetchImpl = globalThis.fetch, timeout
     });
   } catch (e) {
     // 네트워크 차단·오프라인·시간 초과는 모두 "연결 실패"로 묶어 안내합니다.
-    throw updateError(e && e.name === 'AbortError' ? 'TIMEOUT' : 'OFFLINE');
+    throw updateError(e && /** @type {Error} */ (e).name === 'AbortError' ? 'TIMEOUT' : 'OFFLINE');
   } finally {
     if (timer) clearTimeout(timer);
   }
@@ -263,6 +279,7 @@ export async function fetchLatestRelease({ fetchImpl = globalThis.fetch, timeout
 }
 
 // 오류 코드를 사용자가 읽을 수 있는 한국어 안내로 바꿉니다.
+/** @param {string | undefined} code */
 export function describeUpdateError(code) {
   switch (code) {
     case 'NO_RELEASE':

@@ -1,0 +1,30 @@
+{
+  "checkedAt": "2026-09-21T01:37:04.623Z",
+  "environment": "Headless Microsoft Edge, decoded audio buffers; no physical listening",
+  "sounds": [
+    {
+      "name": "bell.wav",
+      "decoded": true,
+      "duration": 2.297875,
+      "peakDbFS": -10.085774531444356
+    },
+    {
+      "name": "bomb.flac",
+      "decoded": true,
+      "duration": 1.1836458333333333,
+      "peakDbFS": 0.024897646669157673
+    },
+    {
+      "name": "fart.wav",
+      "decoded": true,
+      "duration": 1.5,
+      "peakDbFS": -7.387135986949157
+    },
+    {
+      "name": "siren.wav",
+      "decoded": true,
+      "duration": 2,
+      "peakDbFS": -14.549610862906503
+    }
+  ]
+}

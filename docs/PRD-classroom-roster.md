@@ -1,6 +1,6 @@
 # 학급 명단·모둠 공통 기반 PRD
 
-작성: 2026-09-20 · 대상: Tidy Task Local 5.1.2 후속 · 구현 기록: 2026-09-21 [QA](QA-classroom-roster.md)
+작성: 2026-09-20 · 대상: Tidy Task Local 5.5.0 · 구현 기록: 2026-09-21 [QA](QA-classroom-roster.md)
 
 ## 1. 목적과 결정의 성격
 

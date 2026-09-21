@@ -1,0 +1,45 @@
+{
+  "fetchedAt": "2026-09-21T01:50:55.204Z",
+  "sources": [
+    {
+      "id": "bell",
+      "number": 2113,
+      "title": "Bell #1",
+      "page": "https://bigsoundbank.com/bell-1-s2113.html",
+      "seconds": 2,
+      "download": "https://bigsoundbank.com/UPLOAD/mp3/2113.mp3",
+      "author": "Joseph SARDIN / BigSoundBank",
+      "license": "CC0-1.0",
+      "licenseUrl": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "originalSha256": "63d85a968b65c2f12c6e1acd0ec7d480de3033302b4fba4aba8c65168567f5ef",
+      "file": "bell.wav",
+      "sha256": "ab0557005cfc70502a04487d3dad23f7e92bc840b9058058b75cbe258df069a0",
+      "durationSeconds": 2,
+      "sourceStartSeconds": 0.11,
+      "originalSeconds": 13.269770833333334,
+      "processing": "48kHz mono PCM16; initial silence trimmed; DC removed; bell only: tanh peak compression drive 4; 5ms attack and 0.35s cosine-squared release AFTER compression; peak normalized to -3dBFS",
+      "measuredPeakDbFS": -3,
+      "measuredRmsDbFS": -13.059248747499655
+    },
+    {
+      "id": "siren",
+      "number": 1464,
+      "title": "2 Ton Siren",
+      "page": "https://bigsoundbank.com/ambulance-siren-2-s1464.html",
+      "seconds": 2,
+      "download": "https://bigsoundbank.com/UPLOAD/mp3/1464.mp3",
+      "author": "Joseph SARDIN / BigSoundBank",
+      "license": "CC0-1.0",
+      "licenseUrl": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "originalSha256": "85517eb8ed50d6c7c4ccf80561e074c4d608748643491818e3dc2f45809fe984",
+      "file": "siren.wav",
+      "sha256": "4a3f1ee8cda4f7521aab6edfb03006faf095fde60270a49b522d56e06cacc1b3",
+      "durationSeconds": 2,
+      "sourceStartSeconds": 0.01,
+      "originalSeconds": 8.104854166666666,
+      "processing": "48kHz mono PCM16; initial silence trimmed; DC removed; bell only: tanh peak compression drive 4; 5ms attack and 0.25s cosine-squared release AFTER compression; peak normalized to -3dBFS",
+      "measuredPeakDbFS": -3,
+      "measuredRmsDbFS": -10.127211448993751
+    }
+  ]
+}

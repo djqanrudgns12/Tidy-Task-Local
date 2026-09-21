@@ -10,7 +10,7 @@
   } = $props<{
     value: string;
     label: string;
-    options: { value: string; label: string }[];
+    options: { value: string; label: string; swatch?: string }[];
     onchange: (value: string) => void;
     disabled?: boolean;
   }>();
@@ -28,7 +28,7 @@
             value={option.value}
             label={option.label}
             class="tk-select-item"
-            >{option.label}{#if option.value === value}<Check size={14} />{/if}</Select.Item
+            >{#if option.swatch}<span class="tk-option-swatch" style:background={option.swatch} aria-hidden="true"></span>{/if}<span class="tk-option-label">{option.label}</span>{#if option.value === value}<Check size={14} />{/if}</Select.Item
           >{/each}
       </Select.Viewport></Select.Content
     ></Select.Portal

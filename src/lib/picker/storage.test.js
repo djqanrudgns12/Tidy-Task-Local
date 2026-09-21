@@ -15,7 +15,7 @@ test('future and malformed libraries are rejected rather than overwritten',()=>{
 });
 test('schema 4 adds picker once without changing previous hiding or timer settings',()=>{
   const s=normalizeSettings({schemaVersion:3,toolkit:{visibleToolIds:['roster'],hiddenPlatformIds:['clanner']},preferences:{digital:{tickEnabled:false}}});
-  assert.deepEqual(s.toolkit.visibleToolIds,['roster','picker']);assert.equal(s.preferences.digital.tickEnabled,false);
+  assert.deepEqual(s.toolkit.visibleToolIds,['roster','picker','tournament','focus-bell']);assert.equal(s.preferences.digital.tickEnabled,false);
   const hidden=applySettingsPatch(s,'toolkit',{visibleToolIds:['roster']});assert.deepEqual(normalizeSettings(hidden).toolkit.visibleToolIds,['roster']);
   assert.deepEqual(hidden.toolkit.hiddenPlatformIds,['clanner']);
 });

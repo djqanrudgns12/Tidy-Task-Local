@@ -11,7 +11,7 @@
     isDarkMode?: boolean;
     accent?: string;
   }>();
-  let enabled = $state(true),
+  let enabled = $state(false),
     busy = $state(false),
     error = $state('');
   onMount(() => {

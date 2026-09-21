@@ -12,9 +12,12 @@ dist
 dist-ssr
 *.local
 
-# Re-creatable local QA and asset-selection outputs
-/output/qa/*-dist/
-/output/timer-sound-samples/
+# Re-creatable local QA and asset-selection outputs (실행에 필요 없음)
+# 예외: 집중벨 음원 LICENSE.txt·manifest.json이 음량 보정 근거로 가리키는 보고서 하나만 남깁니다.
+/output/*
+!/output/qa/
+/output/qa/*
+!/output/qa/focus-bell-loudness-normalization.json
 /artwork/toolkit/audio/*backup*.zip
 
 # Editor directories and files
