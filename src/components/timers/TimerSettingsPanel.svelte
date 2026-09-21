@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { AlarmClock, BellRing, Check, Clock3, Volume2 } from 'lucide-svelte';
+  import { AlarmClock, BellRing, Check, Clock3, Eye, Volume2 } from 'lucide-svelte';
   import ToolkitSwitch from '../toolkit/ToolkitSwitch.svelte';
   import ToolkitSelect from '../toolkit/ToolkitSelect.svelte';
   import { PRESETS, WARNING_LEADS, WARNING_DURATIONS } from '../../lib/toolkit/preferences.js';
@@ -148,13 +148,22 @@
           >{/each}
       </div>
     </section>{/if}
+  <!-- 왜 모든 설정 줄이 같은 틀(아이콘 · 이름/설명 · 오른쪽 끝 토글)인가:
+       토글·선택 상자의 오른쪽 끝이 한 줄로 맞아야 위아래로 훑기만 해도 켜짐/꺼짐을 읽을 수 있습니다. -->
   {#if kind === 'hourglass'}<section class="settings-section">
-      <div class="settings-row standalone-setting">
-        <div class="sound-label"><strong>남은 시간 표시</strong><small>모래시계 아래에 숫자도 함께 보여요.</small></div><ToolkitSwitch
-          label="남은 시간 표시"
-          checked={prefs.showRemainingTime}
-          onchange={(v) => onchange({ showRemainingTime: v })}
-        />
+      <div class="setting-card" class:off={!prefs.showRemainingTime}>
+        <div class="setting-row">
+          <span class="setting-symbol" aria-hidden="true"><Eye size={18} /></span>
+          <span class="setting-copy"
+            ><span class="setting-title"><strong>남은 시간 표시</strong></span><small
+              >모래시계 아래에 숫자도 함께 보여요.</small
+            ></span
+          ><ToolkitSwitch
+            label="남은 시간 표시"
+            checked={prefs.showRemainingTime}
+            onchange={(v) => onchange({ showRemainingTime: v })}
+          />
+        </div>
       </div>
     </section>{/if}
   <section class="settings-section sound-settings">
@@ -162,30 +171,33 @@
       <span class="settings-section-icon" aria-hidden="true"><Volume2 size={18} /></span>
       <div><h2>소리</h2><p>필요한 알림만 골라 사용할 수 있어요.</p></div>
     </header>
-    <div class="sound-setting-list">
-      {#each soundRows as row}<div class="sound-setting-card">
-          <div class="settings-row">
-            <div class="sound-label">
-              <span class="sound-symbol" aria-hidden="true">
-                {#if row.sound === 'tick'}<Clock3 size={17} />{:else if row.sound === 'warning'}<BellRing
-                    size={17}
-                  />{:else}<AlarmClock size={17} />{/if}
-              </span>
-              <span><strong>{row.name}</strong><small>{row.description}</small></span>
-            </div>
-            <div class="sound-actions">
-              <button
-                class="sound-preview"
-                aria-label={`${row.name} 미리 듣기`}
-                title={`${row.name} 미리 듣기`}
-                onclick={() => onpreview(row.sound)}><Volume2 size={15} /><span>듣기</span></button
-              ><ToolkitSwitch
-                label={row.name}
-                checked={prefs[row.key]}
-                onchange={(v) => onchange({ [row.key]: v })}
-              />
-            </div>
+    <div class="setting-card-list">
+      {#each soundRows as row}<div class="setting-card" class:off={!prefs[row.key]}>
+          <div class="setting-row">
+            <span class="setting-symbol" aria-hidden="true">
+              {#if row.sound === 'tick'}<Clock3 size={18} />{:else if row.sound === 'warning'}<BellRing
+                  size={18}
+                />{:else}<AlarmClock size={18} />{/if}
+            </span>
+            <!-- 듣기는 "이 소리"를 들어 보는 버튼이라 소리 이름 바로 옆에 붙입니다.
+                 토글 옆에 두면 설명 글이 좁아져 두 줄로 꺾이고 카드 높이가 제각각이 됩니다. -->
+            <span class="setting-copy"
+              ><span class="setting-title"
+                ><strong>{row.name}</strong><button
+                  class="sound-preview"
+                  aria-label={`${row.name} 미리 듣기`}
+                  title={`${row.name} 미리 듣기`}
+                  onclick={() => onpreview(row.sound)}><Volume2 size={14} /><span>듣기</span></button
+                ></span
+              ><small>{row.description}</small></span
+            ><ToolkitSwitch
+              label={row.name}
+              checked={prefs[row.key]}
+              onchange={(v) => onchange({ [row.key]: v })}
+            />
           </div>
+          <!-- 세부 옵션은 이름 칸에 맞춰 들여 써서 "종료 경고음에 딸린 설정"임을 보여 주고,
+               선택 상자는 위 토글과 같은 오른쪽 끝에 맞춥니다. -->
           {#if row.sound === 'warning' && prefs.warningEnabled}<div class="warning-options">
               <div class="warning-option"><span>알림 시점</span><ToolkitSelect
                   label="종료 경고 시점"

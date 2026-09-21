@@ -52,7 +52,7 @@
       if (preview) { window.open('/help.html#toolkit', '_blank', 'noopener'); return; }
       const existing = await WebviewWindow.getByLabel('help');
       if (existing) { await existing.show(); await existing.setFocus(); return; }
-      const win = new WebviewWindow('help', { url: 'help.html#toolkit', title: 'Tidy Task 스마트 가이드', width: 820, height: 760, resizable: true, center: true });
+      const win = new WebviewWindow('help', { url: 'help.html#toolkit', title: 'Tidy Task 사용 가이드', width: 820, height: 760, resizable: true, center: true });
       await win.once('tauri://error', () => { error = '가이드를 열지 못했어요. 메뉴의 기능 설명을 이용해 주세요.'; });
     } catch { error = '가이드를 열지 못했어요. 메뉴의 기능 설명을 이용해 주세요.'; }
   }

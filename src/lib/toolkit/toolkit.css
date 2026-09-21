@@ -786,6 +786,9 @@
 }
 /* The time is the dominant object; controls are grouped by task. */
 .timer-frame {
+  /* 설명 칸이 커질 수 있는 한도를 정할 때 창 높이에서 빼 둘 몫입니다.
+     제목줄·여백·제목·버튼 줄·조작 버튼 높이에 시계 칸 목표 높이(약 210px)를 더한 값입니다. */
+  --timer-note-reserve: 552px;
   position: relative;
   display: flex;
   flex-direction: column;
@@ -794,6 +797,10 @@
   border: 1px solid var(--tk-line);
   border-radius: 19px;
   overflow: hidden;
+}
+/* 스톱워치에는 분 증감 줄이 없어 그만큼 설명 칸에 더 내줄 수 있습니다. */
+.timer-frame.stopwatch-frame {
+  --timer-note-reserve: 507px;
 }
 .timer-resize-corner {
   position: absolute;
@@ -940,26 +947,18 @@
   padding: 16px 18px 19px;
 }
 .timer-panel-heading {
-  position: relative;
   display: flex;
-  align-items: flex-start;
-  justify-content: center;
-  min-height: 106px;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
   padding: 2px 0 15px;
   border-bottom: 1px solid var(--tk-line);
   flex: none;
 }
-.timer-title-group {
-  display: flex;
-  min-width: 0;
-  width: min(100%, 520px);
-  flex-direction: column;
-  align-items: center;
-  gap: 10px;
-}
 .timer-title-input {
   width: min(100%, 520px);
   min-width: 0;
+  flex: none;
   height: 43px;
   padding: 0 9px;
   border: 0;
@@ -985,65 +984,127 @@
   background: var(--tk-panel);
   border-bottom-color: var(--tk-accent);
 }
-.timer-status-summary {
-  display: inline-flex;
+/* 설명 버튼은 가운데, 설정 버튼은 오른쪽 끝에 둡니다. 오른쪽 칸은 설정 버튼 폭보다
+   작아지지 않으므로, 창이 좁아지면 가운데 버튼이 왼쪽으로 비켜설 뿐 서로 겹치지 않습니다. */
+.timer-heading-tools {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(max-content, 1fr);
   align-items: center;
-  justify-content: center;
-  gap: 12px;
-  min-height: 35px;
-  padding: 6px 14px;
-  border: 1px solid var(--tk-line);
-  border-radius: 12px;
-  background: var(--tk-panel);
-  color: var(--tk-muted);
-  font-size: 14px;
-  line-height: 1;
-  white-space: nowrap;
+  gap: 8px;
+  width: 100%;
+  flex: none;
 }
-.timer-status-summary .status-state {
+.timer-heading-tools > .timer-note-toggle {
+  grid-column: 2;
+}
+.timer-heading-tools > .timer-settings-toggle {
+  grid-column: 3;
+  justify-self: end;
+}
+/* .tk-root button의 font: inherit보다 앞서도록 부모 클래스까지 붙여 글자 크기를 지정합니다. */
+.timer-heading-tools .timer-note-toggle {
   display: inline-flex;
   align-items: center;
   gap: 7px;
-  font-weight: 650;
+  min-height: 38px;
+  padding: 7px 11px 7px 12px;
+  border: 1px solid var(--tk-line);
+  border-radius: 11px;
+  background: var(--tk-panel);
+  color: var(--tk-muted);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.2;
+  white-space: nowrap;
 }
-.timer-status-summary .status-state i {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: currentColor;
-  box-shadow: 0 0 0 4px color-mix(in srgb, currentColor 12%, transparent);
-}
-.timer-status-summary .status-divider {
-  width: 1px;
-  height: 16px;
+.timer-heading-tools .timer-note-toggle:hover {
   background: var(--tk-soft);
 }
-.timer-status-summary strong {
+.timer-heading-tools .timer-note-toggle.has-note {
   color: var(--tk-ink);
-  font-family: var(--tk-font);
-  font-size: 19px;
-  font-variant-numeric: tabular-nums;
-  letter-spacing: -0.025em;
 }
-.timer-status-summary.running {
-  border-color: var(--tk-line);
+.timer-heading-tools .timer-note-toggle.active {
   background: var(--tk-bg);
   color: var(--tk-accent);
 }
-.timer-status-summary.paused {
-  border-color: var(--tk-line);
-  background: var(--tk-panel);
-  color: var(--tk-accent);
+.timer-note-toggle .note-dot {
+  width: 7px;
+  height: 7px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--tk-accent);
 }
-.timer-status-summary.completed {
-  border-color: var(--tk-line);
+.timer-note-toggle .note-chevron {
+  margin-left: -2px;
+  transition: transform 0.16s;
+}
+.timer-note-toggle.active .note-chevron {
+  transform: rotate(180deg);
+}
+.timer-note {
+  width: min(100%, 640px);
+  flex: none;
+  animation: note-in 0.16s ease-out;
+}
+/* 설명 칸은 내용만큼 자라되(최소 2줄), 창 높이에서 시계가 쓸 몫(--timer-note-reserve)을
+   남긴 만큼까지만 커집니다. 그보다 긴 글은 칸 안에서 스크롤되므로 글자가 잘리지 않고,
+   긴 영문·주소도 overflow-wrap으로 줄바꿈되어 옆으로 넘치지 않습니다. */
+.timer-note .timer-note-input {
+  display: block;
+  width: 100%;
+  min-height: calc(3.2em + 22px);
+  max-height: clamp(
+    calc(3.2em + 22px),
+    calc(100dvh - var(--timer-note-reserve)),
+    calc(12.8em + 22px)
+  );
+  field-sizing: content;
+  margin: 0;
+  padding: 10px 14px;
+  border: 1px solid var(--tk-line);
+  border-radius: 12px;
   background: var(--tk-bg);
-  color: var(--tk-accent);
+  color: var(--tk-ink);
+  font-size: clamp(14px, 0.8vw + 7px, 20px);
+  font-weight: 500;
+  line-height: 1.6;
+  resize: none;
+  overflow-x: hidden;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  scrollbar-width: thin;
+  scrollbar-color: var(--tk-line) transparent;
 }
-.timer-panel-heading > .timer-settings-toggle {
-  position: absolute;
-  top: 53px;
-  right: 0;
+.timer-note .timer-note-input::placeholder {
+  color: var(--tk-muted);
+  opacity: 1;
+}
+.timer-note .timer-note-input:focus {
+  outline: none;
+  border-color: var(--tk-accent);
+}
+/* field-sizing을 모르는 오래된 WebView에서는 3줄 높이로 고정하고 안에서 스크롤합니다. */
+@supports not (field-sizing: content) {
+  .timer-note .timer-note-input {
+    height: calc(4.8em + 22px);
+  }
+}
+@keyframes note-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+}
+/* 설명을 펼치면 시계 칸이 줄어듭니다. 아주 낮은 창에서도 시계가 알아볼 수 없을 만큼
+   납작해지지 않도록 바닥 높이를 두고, 그래도 모자라면 잘라 내지 않고 패널 안에서 스크롤합니다. */
+.timer-main.note-open {
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--tk-line) transparent;
+}
+.timer-main.note-open .timer-stage {
+  min-height: 150px;
 }
 .timer-stage {
   position: relative;
@@ -1061,7 +1122,9 @@
   display: flex;
   width: min(92%, 760px);
   min-height: min(66%, 330px);
-  padding: 24px 40px 30px;
+  /* 위아래 여백은 시계 칸 높이(cqh)를 따라 줄어듭니다. 설명을 펼쳐 칸이 낮아져도
+     숫자·진행 막대가 판 밖으로 밀려나지 않게 하려는 것이며, 기본 창 크기에서는 예전 값 그대로입니다. */
+  padding: clamp(14px, 7cqh, 24px) 40px clamp(16px, 8.7cqh, 30px);
   flex-direction: column;
   align-items: center;
   justify-content: center;
@@ -1131,7 +1194,7 @@
   width: 78%;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 8px;
+  margin-bottom: clamp(4px, 2.4cqh, 8px);
   color: #c8d9cf;
   font-size: 13px;
   font-weight: 650;
@@ -1183,7 +1246,8 @@
   z-index: 1;
   width: 78%;
   height: 8px;
-  margin-top: 22px;
+  flex: none;
+  margin-top: clamp(10px, 6.4cqh, 22px);
   border-radius: 10px;
   background: #082723a3;
   box-shadow: inset 0 1px 3px #001713a3;
@@ -1399,12 +1463,16 @@
   text-align: center;
   color: var(--tk-muted);
 }
+/* 타이머 설정 패널
+   - 글자는 12px 이상: 교실 화면·배율이 낮은 모니터에서도 읽히게 합니다.
+   - 토글·선택 상자는 카드 오른쪽 끝 한 줄에 맞춥니다: 위아래로 훑기만 해도 상태를 비교할 수 있습니다.
+   - 좁은 패널(스톱워치 겹침 패널 등)은 @container로 스스로 줄바꿈합니다. 창 너비(@media)가 아니라
+     패널 너비를 기준으로 삼아야 창 모양이 달라도 같은 규칙이 통합니다. */
 .timer-settings-panel {
   container-name: timer-settings;
   container-type: inline-size;
-  padding: 16px 16px 14px;
-  background:
-    linear-gradient(145deg, var(--tk-panel) 0%, var(--tk-panel) 48%, var(--tk-panel) 100%);
+  padding: 18px 18px 16px;
+  background: var(--tk-panel);
   border: 1px solid var(--tk-line);
   border-radius: 24px;
   box-shadow:
@@ -1418,8 +1486,8 @@
 .settings-section-heading {
   display: flex;
   align-items: center;
-  gap: 11px;
-  margin-bottom: 11px;
+  gap: 12px;
+  margin-bottom: 12px;
 }
 .settings-section-heading.compact {
   margin-bottom: 12px;
@@ -1427,8 +1495,8 @@
 .settings-section-icon {
   display: grid;
   place-items: center;
-  width: 34px;
-  height: 34px;
+  width: 36px;
+  height: 36px;
   flex: none;
   border: 1px solid var(--tk-line);
   border-radius: 11px;
@@ -1439,28 +1507,29 @@
 .settings-section-heading h2 {
   margin: 0 !important;
   color: var(--tk-ink);
-  font-size: 15px !important;
+  font-size: 16px !important;
   font-weight: 750 !important;
+  line-height: 1.3;
   letter-spacing: -0.025em;
 }
 .settings-section-heading p {
   margin: 2px 0 0;
   color: var(--tk-muted);
-  font-size: 11px;
-  line-height: 1.35;
+  font-size: 12px;
+  line-height: 1.4;
 }
 .time-inputs {
   display: grid;
-  grid-template-columns: minmax(65px, 1fr) 8px minmax(65px, 1fr) minmax(92px, 1.2fr);
+  grid-template-columns: minmax(64px, 1fr) 10px minmax(64px, 1fr) minmax(92px, 1.2fr);
   align-items: center;
   gap: 6px;
-  margin-bottom: 16px;
+  margin-bottom: 18px;
 }
 .time-field {
   position: relative;
   display: block;
   min-width: 0;
-  min-height: 58px;
+  min-height: 60px;
   background: var(--tk-panel);
   border: 1px solid var(--tk-line);
   border-radius: 14px;
@@ -1476,15 +1545,15 @@
 }
 .time-inputs input {
   width: 100%;
-  height: 56px;
+  height: 58px;
   min-width: 0;
-  padding: 10px 29px 8px 12px;
+  padding: 10px 30px 8px 14px;
   border: 0;
   background: transparent;
   text-align: left;
   appearance: textfield;
   font-family: var(--tk-font);
-  font-size: 27px;
+  font-size: 28px;
   font-weight: 700;
   line-height: 1;
   color: var(--tk-ink);
@@ -1498,31 +1567,31 @@
   position: absolute;
   z-index: 1;
   top: 50%;
-  right: 10px;
+  right: 12px;
   transform: translateY(-50%);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 700;
   color: var(--tk-muted);
   pointer-events: none;
 }
 .time-inputs > b {
   color: var(--tk-muted);
-  font: 700 18px var(--tk-font);
+  font: 700 20px var(--tk-font);
   text-align: center;
 }
 .time-apply {
   display: flex;
   min-width: 0;
-  min-height: 58px;
+  min-height: 60px;
   align-items: center;
   justify-content: center;
-  gap: 6px;
-  padding: 9px 10px;
+  gap: 7px;
+  padding: 9px 12px;
   border: 0;
   border-radius: 14px;
-  background: linear-gradient(145deg, var(--tk-action), var(--tk-action));
+  background: var(--tk-action);
   color: var(--tk-on-action);
-  font-size: 12px;
+  font-size: 14px;
   font-weight: 700;
   line-height: 1.25;
   white-space: nowrap;
@@ -1530,58 +1599,59 @@
     0 6px 14px #2e796426,
     0 1px 0 #ffffff2b inset;
 }
-.time-apply:hover {
-  background: linear-gradient(145deg, var(--tk-action), var(--tk-action));
+.time-apply:hover:not(:disabled) {
+  filter: brightness(1.08);
 }
 .preset-heading {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
   gap: 8px;
-  margin: 0 1px 8px;
+  margin: 0 2px 9px;
 }
 .preset-heading strong {
-  color: var(--tk-muted);
-  font-size: 11px;
+  color: var(--tk-ink);
+  font-size: 13px;
   font-weight: 700;
 }
 .preset-heading span {
   color: var(--tk-muted);
-  font-size: 10px;
+  font-size: 12px;
 }
 .time-presets {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: 7px;
+  gap: 8px;
 }
 .time-presets button {
   position: relative;
-  min-height: 40px;
+  min-height: 44px;
   padding: 6px;
   border: 1px solid var(--tk-line);
   border-radius: 12px;
   background: var(--tk-panel);
-  color: var(--tk-muted);
+  color: var(--tk-ink);
   font-family: var(--tk-font);
-  font-size: 16px;
-  font-weight: 650;
+  font-size: 17px;
+  font-weight: 700;
   font-variant-numeric: tabular-nums;
   box-shadow: 0 1px 0 var(--tk-panel) inset;
 }
 .time-presets button > span {
-  margin-left: 3px;
+  margin-left: 2px;
   font-family: var(--tk-font);
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 600;
   color: var(--tk-muted);
 }
-.time-presets button:hover {
-  border-color: var(--tk-line);
-  background: var(--tk-panel);
+.time-presets button:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--tk-accent) 35%, var(--tk-line));
+  background: var(--tk-bg);
 }
-.time-presets .selected {
+.time-presets .selected,
+.time-presets .selected:hover:not(:disabled) {
   background: linear-gradient(145deg, var(--tk-panel), var(--tk-soft));
-  border-color: var(--tk-line);
+  border-color: color-mix(in srgb, var(--tk-accent) 55%, var(--tk-line));
   color: var(--tk-accent);
   box-shadow:
     0 0 0 1px #f7dc9940 inset,
@@ -1590,9 +1660,20 @@
 .time-presets .selected > span {
   color: var(--tk-accent);
 }
+/* 한 바퀴 기준도 다른 설정처럼 "왼쪽 이름 · 오른쪽 조작" 한 줄로 둡니다.
+   오른쪽 끝선이 토글·선택 상자와 맞고, 아날로그 패널이 기본 창에서 스크롤 없이 들어갑니다. */
+.dial-settings-section {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 132px;
+  align-items: center;
+  gap: 12px;
+}
+.dial-settings-section .settings-section-heading {
+  margin: 0;
+}
 .dial-bases {
   display: flex;
-  gap: 7px;
+  gap: 4px;
   background: var(--tk-bg);
   border: 1px solid var(--tk-line);
   border-radius: 13px;
@@ -1604,116 +1685,149 @@
   border-radius: 10px;
   background: transparent;
   color: var(--tk-muted);
-  min-height: 36px;
-  font-size: 13px;
+  min-height: 38px;
+  font-size: 14px;
+  font-weight: 650;
+}
+.dial-bases button:hover:not(:disabled, .selected) {
+  color: var(--tk-ink);
 }
 .dial-bases .selected {
   background: var(--tk-panel);
   color: var(--tk-accent);
-  font-weight: 700;
+  font-weight: 750;
   box-shadow: 0 2px 7px #30452412;
 }
-.standalone-setting {
-  min-height: 58px !important;
-  padding: 10px 12px;
-  border: 1px solid var(--tk-line);
-  border-radius: 14px;
-  background: var(--tk-panel);
-}
-.sound-setting-list {
+/* 설정 카드: [아이콘] [이름 + 듣기 / 설명] ······ [토글] */
+.setting-card-list {
   display: grid;
-  gap: 6px;
+  gap: 8px;
 }
-.sound-setting-card {
-  padding: 7px 9px;
+.setting-card {
+  padding: 12px 14px;
   border: 1px solid var(--tk-line);
-  border-radius: 15px;
-  background: var(--tk-panel);
-  transition: box-shadow 0.16s;
-}
-.sound-setting-card:has(.tk-switch[data-state='checked']) {
-  border-color: var(--tk-line);
+  border-radius: 16px;
   background: var(--tk-panel);
 }
-.sound-label {
+.setting-row {
   display: flex;
-  min-width: 0;
   align-items: center;
-  gap: 9px;
+  gap: 12px;
+  min-height: 40px;
 }
-.sound-label > span:not(.sound-symbol) {
-  display: flex;
-  min-width: 0;
-  flex-direction: column;
-}
-.sound-label strong {
-  color: var(--tk-ink);
-  font-size: 13px;
-  font-weight: 700;
-  line-height: 1.35;
-}
-.sound-label small {
-  margin-top: 2px;
-  overflow: hidden;
-  color: var(--tk-muted);
-  font-size: 10px;
-  line-height: 1.35;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.sound-symbol {
+.setting-symbol {
   display: grid;
   place-items: center;
-  width: 30px;
-  height: 30px;
+  width: 36px;
+  height: 36px;
   flex: none;
-  border-radius: 10px;
-  background: var(--tk-bg);
-  color: var(--tk-muted);
+  border-radius: 11px;
+  background: var(--tk-soft);
+  color: var(--tk-accent);
+  transition:
+    background-color 0.16s,
+    color 0.16s;
 }
-.sound-actions {
+/* 꺼진 항목은 아이콘만 흐리게 바꿔, 글자는 그대로 읽히면서 켜짐/꺼짐이 한눈에 갈리게 합니다.
+   (다크 테마는 muted와 accent가 같은 색이라 배경색 쪽으로 섞어 흐리게 만듭니다.) */
+.setting-card.off .setting-symbol {
+  background: var(--tk-bg);
+  color: color-mix(in srgb, var(--tk-muted) 60%, var(--tk-bg));
+}
+.setting-copy {
   display: flex;
+  flex: 1;
+  min-width: 0;
+  flex-direction: column;
+  gap: 3px;
+}
+.setting-title {
+  display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 8px;
-  flex: none;
+  gap: 4px 8px;
+  min-width: 0;
+}
+.setting-title strong {
+  color: var(--tk-ink);
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.35;
+  letter-spacing: -0.02em;
+}
+.setting-copy small {
+  color: var(--tk-muted);
+  font-size: 12px;
+  line-height: 1.4;
+  letter-spacing: -0.01em;
 }
 .sound-preview {
-  display: flex;
-  min-width: 30px;
-  height: 30px;
+  display: inline-flex;
+  height: 26px;
   align-items: center;
   justify-content: center;
   gap: 4px;
-  padding: 0 7px;
+  padding: 0 9px 0 7px;
   border: 1px solid var(--tk-line);
-  border-radius: 9px;
+  border-radius: 8px;
   background: var(--tk-panel);
-  color: var(--tk-muted);
-  font-size: 10px;
-  font-weight: 700;
+  color: var(--tk-ink);
+  font-size: 12px;
+  font-weight: 650;
+  line-height: 1;
+  white-space: nowrap;
+}
+.sound-preview svg {
+  color: var(--tk-accent);
 }
 .sound-preview:hover {
-  border-color: var(--tk-line);
+  border-color: color-mix(in srgb, var(--tk-accent) 40%, var(--tk-line));
   background: var(--tk-bg);
   color: var(--tk-accent);
 }
+/* 토글: 44×26 — 14px 이름·12px 설명 두 줄과 높이 비율이 맞고, 전자칠판에서 눌러도 넉넉한 크기입니다.
+   켜짐은 강조색(accent), 손잡이는 패널색입니다. 밝은 테마에서는 강조색이 곧 action 색이라 모양이 같고,
+   다크 테마의 action(어두운 회청색)은 꺼짐 트랙보다 어두워 켜짐/꺼짐이 뒤바뀌어 보이기 때문입니다.
+   다른 창(툴킷 설정·뽑기)의 토글은 그대로 두려고 패널 안으로 범위를 한정합니다. */
+.timer-settings-panel .tk-switch {
+  width: 44px;
+  height: 26px;
+  padding: 3px;
+  background: color-mix(in srgb, var(--tk-muted) 35%, var(--tk-line));
+  transition: background-color 0.16s;
+}
+.timer-settings-panel .tk-switch[data-state='checked'] {
+  background: var(--tk-accent);
+}
+.timer-settings-panel .tk-switch-thumb {
+  width: 20px;
+  height: 20px;
+  background: var(--tk-panel);
+  box-shadow: 0 1px 3px #1c372d38;
+}
+.timer-settings-panel .tk-switch[data-state='checked'] .tk-switch-thumb {
+  transform: translateX(18px);
+}
+/* 종료 경고음의 세부 옵션: 이름 칸(아이콘 36 + 간격 12)에 맞춰 들여 쓰고, 선택 상자는 토글과 같은 오른쪽 끝에 둡니다. */
 .warning-options {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px;
-  margin-top: 7px;
-  padding-top: 7px;
-  border-top: 1px dashed var(--tk-line);
+  margin: 12px 0 0 48px;
+  padding-top: 12px;
+  border-top: 1px solid color-mix(in srgb, var(--tk-line) 70%, transparent);
 }
 .warning-option {
+  display: flex;
   min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
 }
 .warning-option > span {
-  display: block;
-  margin: 0 2px 5px;
-  color: var(--tk-muted);
-  font-size: 10px;
+  color: color-mix(in srgb, var(--tk-ink) 80%, var(--tk-muted));
+  font-size: 13px;
   font-weight: 650;
+  white-space: nowrap;
 }
 .tk-select {
   display: flex;
@@ -1732,9 +1846,39 @@
   flex: 1;
   cursor: pointer;
 }
+/* 두 선택 상자의 너비를 같게 맞춰야 오른쪽 끝과 글자 시작점이 함께 정렬됩니다. */
+.timer-settings-panel .tk-select {
+  flex: 0 1 128px;
+  min-width: 104px;
+  min-height: 34px;
+  padding: 0 9px 0 12px;
+  color: var(--tk-ink);
+  font-size: 13px !important;
+  font-weight: 600;
+}
+.timer-settings-panel .tk-select svg {
+  color: var(--tk-muted);
+}
+.timer-settings-panel .tk-select:hover {
+  border-color: color-mix(in srgb, var(--tk-accent) 40%, var(--tk-line));
+  background: var(--tk-bg);
+}
 @container timer-settings (min-width: 300px) {
   .time-presets {
     grid-template-columns: repeat(5, 1fr);
+  }
+}
+/* 아주 좁은 패널: 들여쓰기를 풀어 선택 상자 자리를 확보하고, 적용 버튼은 글자만 남기며,
+   한 바퀴 기준은 이름 아래로 내립니다. */
+@container timer-settings (max-width: 299px) {
+  .time-apply svg {
+    display: none;
+  }
+  .warning-options {
+    margin-left: 0;
+  }
+  .dial-settings-section {
+    grid-template-columns: minmax(0, 1fr);
   }
 }
 .tk-select-content {
@@ -1987,6 +2131,10 @@
     min-height: 500px;
     flex: none;
   }
+  /* 이 배치는 창 전체가 스크롤되므로, 설명을 펼치면 시계를 줄이지 않고 패널을 늘립니다. */
+  .timer-layout.with-settings:not(.with-laps) .timer-main.note-open .timer-stage {
+    min-height: 240px;
+  }
   .timer-layout.with-settings:not(.with-laps) .timer-settings-panel {
     width: 100%;
     overflow: visible;
@@ -2030,30 +2178,23 @@
     border-radius: 19px;
   }
   .timer-panel-heading {
-    min-height: 145px;
     padding: 0 4px 12px;
-    flex-direction: column;
-    align-items: center;
-    gap: 10px;
+    gap: 8px;
   }
   .timer-title-input {
     height: 39px;
     font-size: 23px !important;
   }
-  .timer-title-group {
-    width: 100%;
-    gap: 8px;
+  .timer-heading-tools {
+    gap: 6px;
   }
-  .timer-status-summary {
-    min-height: 33px;
-    padding: 6px 12px;
-    font-size: 13px;
+  .timer-heading-tools .timer-note-toggle {
+    min-height: 34px;
+    padding: 5px 9px 5px 10px;
+    gap: 6px;
+    font-size: 12px;
   }
-  .timer-status-summary strong {
-    font-size: 17px;
-  }
-  .timer-panel-heading > .timer-settings-toggle {
-    position: static;
+  .timer-heading-tools > .timer-settings-toggle {
     min-height: 34px;
     padding: 6px 10px;
     font-size: 12px !important;
@@ -2066,9 +2207,11 @@
   .timer-stage.hourglass {
     height: 255px;
   }
+  /* 좁은 창의 시계 칸은 높이가 고정입니다. '시간 끝' 안내가 아래 공간을 차지하면
+     시계·남은 시간 글자가 칸 밖으로 밀려나므로, 칸 높이(cqh)에 맞춰 조금 줄어들게 합니다. */
   .analog-clock {
-    height: 190px;
-    width: 190px;
+    height: min(190px, calc(100cqh - 46px));
+    width: min(190px, calc(100cqh - 46px));
   }
   .analog-clock text {
     font-size: 20px;
@@ -2080,8 +2223,8 @@
     font-size: 11px;
   }
   .hourglass-visual {
-    height: 213px;
-    width: 190px;
+    height: min(213px, calc(100cqh - 43px));
+    width: calc(min(213px, calc(100cqh - 43px)) * 0.889);
   }
   .timer-control-area {
     padding-top: 12px;
@@ -2145,13 +2288,6 @@
   .time-inputs > button {
     padding: 10px 12px;
   }
-  .time-presets button {
-    min-height: 44px;
-    font-size: 15px;
-  }
-  .settings-row {
-    min-height: 43px;
-  }
   .lap-panel {
     min-height: 210px;
     max-height: 350px;
@@ -2190,27 +2326,26 @@
   .timer-main {
     padding: 10px 12px 12px;
   }
+  /* 낮은 창: 제목·버튼 줄을 줄여 시계 칸을 지키고, 설명 칸이 빼 둘 몫도 그만큼 줄입니다. */
+  .timer-frame {
+    --timer-note-reserve: 452px;
+  }
+  .timer-frame.stopwatch-frame {
+    --timer-note-reserve: 412px;
+  }
   .timer-panel-heading {
-    min-height: 86px;
+    gap: 6px;
     padding-bottom: 9px;
   }
   .timer-title-input {
     height: 34px;
     font-size: 21px !important;
   }
-  .timer-title-group {
-    gap: 5px;
-  }
-  .timer-status-summary {
-    min-height: 29px;
-    padding: 4px 11px;
-    font-size: 12px;
-  }
-  .timer-status-summary strong {
-    font-size: 16px;
-  }
-  .timer-panel-heading > .timer-settings-toggle {
-    top: 39px;
+  .timer-heading-tools .timer-note-toggle,
+  .timer-heading-tools > .timer-settings-toggle {
+    min-height: 32px;
+    padding-top: 4px;
+    padding-bottom: 4px;
   }
   .timer-control-area {
     padding-top: 9px;
@@ -2239,11 +2374,11 @@
   }
   .digital-board {
     min-height: min(65%, 225px);
-    padding-top: 18px;
-    padding-bottom: 20px;
+    padding-top: clamp(12px, 7cqh, 18px);
+    padding-bottom: clamp(12px, 8cqh, 20px);
   }
   .digital-progress {
-    margin-top: 12px;
+    margin-top: clamp(8px, 5cqh, 12px);
   }
   .hourglass-visual {
     height: calc(100cqh - 37px);
@@ -2264,65 +2399,33 @@
   }
 }
 
+/* 시간 설정·소리처럼 하는 일이 다른 묶음은 가는 선으로 나눠 한눈에 구분되게 합니다. */
 .timer-settings-panel .settings-section + .settings-section {
-  margin-top: 13px;
-  padding-top: 12px;
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid color-mix(in srgb, var(--tk-line) 70%, transparent);
 }
 .timer-settings-panel .settings-section h2 {
   margin-bottom: 0;
 }
-.timer-settings-panel .settings-row {
-  min-height: 40px;
-}
 
-/* The stopwatch has one audio option; keep its settings as a small anchored panel. */
-.stopwatch-settings {
+/* 스톱워치는 소리 하나만 있어 기록 목록 위에 작게 겹쳐 뜹니다.
+   카드 틀은 다른 타이머와 같게 두고, 여백만 줄여 좁은 폭에서도 이름·듣기가 한 줄에 들어가게 합니다. */
+.timer-settings-panel.stopwatch-settings {
   min-width: 0;
+  padding: 14px;
 }
 .stopwatch-settings .settings-section-heading > div {
   min-width: 0;
 }
-.stopwatch-settings .sound-setting-card {
+.stopwatch-settings .setting-card {
   padding: 12px;
 }
-.stopwatch-settings .settings-row {
-  display: flex;
-  flex-direction: column;
-  align-items: stretch;
-  gap: 14px;
-}
-.stopwatch-settings .sound-label small {
-  white-space: normal;
-  overflow: visible;
-  line-height: 1.5;
-}
-.stopwatch-settings .sound-actions {
-  justify-content: flex-end;
-  gap: 12px;
-}
-.stopwatch-settings .sound-preview {
-  height: 26px;
-  min-height: 26px;
-  padding: 0 7px;
-  font-size: 10px;
-  border-radius: 8px;
-}
-.stopwatch-settings .sound-preview svg {
-  width: 13px;
-  height: 13px;
-}
-.stopwatch-settings .tk-switch {
-  width: 34px;
-  height: 22px;
-  min-height: 22px;
-  padding: 3px;
-}
-.stopwatch-settings .tk-switch-thumb {
-  width: 16px;
-  height: 16px;
-}
-.stopwatch-settings .tk-switch[data-state='checked'] .tk-switch-thumb {
-  transform: translateX(12px);
+/* 겹침 패널처럼 아주 좁을 때는 아이콘을 빼서 글자 칸을 확보합니다(켜짐/꺼짐은 토글이 보여 줍니다). */
+@container timer-settings (max-width: 239px) {
+  .setting-symbol {
+    display: none;
+  }
 }
 @media (min-width: 600px) {
   .timer-layout.with-laps.with-settings {
@@ -2348,19 +2451,21 @@
     width: 232px;
   }
 }
+/* 낮은 화면(예: 1366×768 노트북)에서 아날로그는 "한 바퀴 기준" 묶음이 하나 더 있어 가장 깁니다.
+   글자 크기는 그대로 두고 여백만 줄여, 스크롤 없이 소리 설정까지 보이게 합니다. */
 @media (min-width: 900px) and (max-height: 720px) {
   .timer-settings-panel.analog-settings {
-    padding: 12px 14px 10px;
+    padding: 14px 16px 12px;
   }
   .analog-settings .settings-section + .settings-section {
-    margin-top: 8px;
-    padding-top: 8px;
+    margin-top: 10px;
+    padding-top: 10px;
   }
   .analog-settings .settings-section-heading {
-    margin-bottom: 8px;
+    margin-bottom: 10px;
   }
   .analog-settings .time-inputs {
-    margin-bottom: 10px;
+    margin-bottom: 12px;
   }
   .analog-settings .time-field,
   .analog-settings .time-apply {
@@ -2371,35 +2476,24 @@
     font-size: 25px;
   }
   .analog-settings .preset-heading {
-    margin-bottom: 5px;
+    margin-bottom: 6px;
   }
   .analog-settings .time-presets button {
-    min-height: 34px;
-  }
-  .analog-settings .dial-settings-section {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) 116px;
-    align-items: center;
-    gap: 12px;
-  }
-  .analog-settings .dial-settings-section .settings-section-heading {
-    margin: 0;
+    min-height: 36px;
   }
   .analog-settings .dial-settings-section .settings-section-heading p {
     display: none;
   }
-  .analog-settings .sound-setting-list {
-    gap: 5px;
+  .analog-settings .setting-card-list {
+    gap: 6px;
   }
-  .analog-settings .sound-setting-card {
-    padding: 5px 8px;
-  }
-  .analog-settings .sound-settings .settings-row {
-    min-height: 34px;
+  .analog-settings .setting-card {
+    padding: 8px 12px;
   }
   .analog-settings .warning-options {
-    margin-top: 5px;
-    padding-top: 5px;
+    gap: 6px;
+    margin-top: 8px;
+    padding-top: 8px;
   }
   .analog-settings .tk-select {
     min-height: 32px;

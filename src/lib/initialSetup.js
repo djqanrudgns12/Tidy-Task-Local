@@ -31,7 +31,7 @@ export function makeInitialSetupCompletion(previous, choices, completedAt = Date
     completed: true,
     completionCount: 1,
     completedAt,
-    appVersion: typeof choices.appVersion === 'string' ? choices.appVersion : '5.5.0',
+    appVersion: typeof choices.appVersion === 'string' ? choices.appVersion : '5.5.2',
     skipped: choices.skipped === true,
     choices: {
       mealStartup: typeof choices.mealStartup === 'boolean' ? choices.mealStartup : null,

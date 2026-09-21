@@ -17,7 +17,7 @@ test('completion is permanent across later app versions and stays counted once',
   const first = /** @type {any} */ (makeInitialSetupCompletion(null, {
     mealStartup: true,
     toolkitEnabled: false,
-    appVersion: '5.5.0',
+    appVersion: '5.5.2',
   }, 100));
   const afterUpdate = /** @type {any} */ (makeInitialSetupCompletion(first, {
     mealStartup: false,
@@ -26,7 +26,7 @@ test('completion is permanent across later app versions and stays counted once',
   }, 200));
   assert.strictEqual(afterUpdate, first);
   assert.equal(afterUpdate.completionCount, 1);
-  assert.equal(afterUpdate.appVersion, '5.5.0');
+  assert.equal(afterUpdate.appVersion, '5.5.2');
   assert.deepEqual(afterUpdate.choices, { mealStartup: true, toolkitEnabled: false });
 });
 

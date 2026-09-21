@@ -1,264 +1,529 @@
 <!DOCTYPE html>
-<html lang="ko">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Tidy Task — 스마트 가이드</title>
-  <style>
-    @font-face {
-      font-family: 'MaplestoryOTFLight';
-      src: url('https://fastly.jsdelivr.net/gh/projectnoonnu/noonfonts_20-04@2.1/MaplestoryOTFLight.woff') format('woff');
-      font-weight: 300;
-    }
+<html lang="ko"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="color-scheme" content="light"><title>Tidy Task 사용 가이드</title><link rel="preload" href="fonts/MaplestoryL.woff2" as="font" type="font/woff2" crossorigin><link rel="stylesheet" href="help.css"><script src="help.js" defer></script></head>
+<body><a class="skip" href="#main">본문으로 건너뛰기</a><header class="masthead"><a class="brand" href="#start" aria-label="Tidy Task 사용 가이드 처음으로"><span class="brand-mark" aria-hidden="true">✓</span><div><small>Tidy Task</small><h1>사용 가이드</h1>
+</div>
+</a><span class="version">v5.5.2</span></header>
 
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    body { font-family: 'MaplestoryOTFLight', 'Malgun Gothic', sans-serif; font-size: 13px; background: #fdfaf3; color: #374151; overflow-x: hidden; letter-spacing: 0.02em; }
-    
-    .header { position: sticky; top: 0; background: linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%); color: white; padding: 18px 20px; z-index: 10; box-shadow: 0 4px 15px rgba(245,158,11,0.25); }
-    .header h1 { font-size: 18px; font-weight: bold; letter-spacing: 0.03em; display: flex; align-items: center; gap: 8px;}
-    .header p { font-size: 11.5px; opacity: 0.9; margin-top: 6px; line-height: 1.4; }
-    .version-badge { display: inline-block; background: rgba(255,255,255,0.25); border-radius: 20px; padding: 2px 8px; font-size: 10px; font-weight: bold; vertical-align: middle; }
+<div class="reading-tools js-only"><div class="search-field"><label for="guide-search">궁금한 기능 찾기</label><div class="search-box"><input id="guide-search" type="search" placeholder="예: 뽑기, 글꼴, 백업" autocomplete="off" aria-controls="search-results"><button id="clear-search" type="button" hidden>지우기</button></div>
+</div>
+<div class="size-setting"><span class="size-label" id="size-label">글자 크기</span><div class="size-controls" role="group" aria-labelledby="size-label"><button type="button" data-size="18" aria-pressed="true">기본</button><button type="button" data-size="20" aria-pressed="false">크게</button><button type="button" data-size="22" aria-pressed="false">더 크게</button></div>
+</div>
+</div>
 
-    .content { padding: 18px 16px 24px; display: flex; flex-direction: column; gap: 20px; }
-    .section { background: #fff; border: 1px solid rgba(0,0,0,0.07); border-radius: 12px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.03); }
-    .section-head { background: #fffbeb; border-bottom: 1px solid rgba(245,158,11,0.15); padding: 12px 16px; font-size: 14px; font-weight: bold; color: #d97706; display: flex; align-items: center; gap: 8px; }
-    
-    .new-tag { display: inline-block; background: linear-gradient(135deg, #f59e0b, #ef4444); color: #fff; border-radius: 4px; padding: 2px 6px; font-size: 9px; font-weight: bold; margin-left: auto; }
-    table { width: 100%; border-collapse: collapse; }
-    tr:not(:last-child) td { border-bottom: 1px solid rgba(0,0,0,0.04); }
-    tr:hover td { background: rgba(245,158,11,0.03); }
-    td { padding: 12px 16px; vertical-align: top; line-height: 1.6; }
-    td:first-child { font-weight: bold; color: #1f2937; width: 33%; white-space: nowrap; border-right: 1px dashed rgba(0,0,0,0.05); }
-    td:last-child { color: #4b5563; font-size: 12.5px; }
+<div class="layout"><details class="contents" id="contents" open><summary>목차 <span id="current-chapter"></span></summary><nav aria-label="사용 가이드 목차"><p class="nav-group">처음 사용한다면</p>
+<a href="#start"><span aria-hidden="true">01</span>처음 시작하기</a>
+<p class="nav-group">메모와 할 일</p>
+<a href="#notes"><span aria-hidden="true">02</span>할 일과 메모 적기</a>
+<a href="#editing"><span aria-hidden="true">03</span>글자 꾸미기 · 여러 항목 선택</a>
+<a href="#archive"><span aria-hidden="true">04</span>마감된 일과 아카이브</a>
+<a href="#reminders"><span aria-hidden="true">05</span>마감일과 알림</a>
+<p class="nav-group">수업 도구</p>
+<a href="#toolkit"><span aria-hidden="true">06</span>Tidy 툴킷 켜기</a>
+<a href="#timers"><span aria-hidden="true">07</span>타이머 · 스톱워치</a>
+<a href="#classroom"><span aria-hidden="true">08</span>학급 명단 · 모둠 만들기</a>
+<a href="#picker"><span aria-hidden="true">09</span>간단 뽑기</a>
+<a href="#tournament"><span aria-hidden="true">10</span>토너먼트 진행하기</a>
+<a href="#noticeboard"><span aria-hidden="true">11</span>날짜별 알림장 쓰기</a>
+<a href="#focus-bell"><span aria-hidden="true">12</span>집중벨 울리기</a>
+<a href="#meals"><span aria-hidden="true">13</span>오늘의 급식 보기</a>
+<p class="nav-group">설정과 도움말</p>
+<a href="#toolkit-settings"><span aria-hidden="true">14</span>툴킷 모양과 도구 바꾸기</a>
+<a href="#settings"><span aria-hidden="true">15</span>앱 설정 · 자료 내보내기</a>
+<a href="#shortcuts"><span aria-hidden="true">16</span>자주 쓰는 단축키</a>
+<a href="#troubleshooting"><span aria-hidden="true">17</span>잘 안될 때 확인하기</a>
+<a href="#privacy"><span aria-hidden="true">18</span>사용 통계 안내</a></nav>
+</details>
+<main class="main" id="main" tabindex="-1"><noscript><p>목차에서 주제를 누르면 해당 설명으로 이동합니다.</p>
+</noscript><div id="search-results" class="search-results" hidden><h2>검색 결과</h2>
+<p id="result-count" role="status"></p>
+<div id="result-list"></div>
+</div>
 
-    .kbd { display: inline-block; background: #f3f4f6; border: 1px solid #d1d5db; border-radius: 4px; padding: 2px 6px; font-size: 11px; font-family: 'Consolas', monospace; color: #1f2937; box-shadow: 0 1px 0 #c5c7ca; margin: 0 2px; font-weight: bold; }
-    .badge { color: #d97706; font-weight: bold; background: rgba(245,158,11,0.15); padding: 2px 6px; border-radius: 4px; font-size: 11px;}
-    .badge-red { color: #ef4444; font-weight: bold; background: rgba(239,68,68,0.1); padding: 2px 6px; border-radius: 4px; font-size: 11px;}
-    .badge-green { color: #059669; font-weight: bold; background: rgba(16,185,129,0.1); padding: 2px 6px; border-radius: 4px; font-size: 11px;}
-    
-    .footer { text-align: center; padding: 20px 12px; display: flex; flex-direction: column; gap: 6px; border-top: 1px dashed rgba(0,0,0,0.1); margin-top: 10px; background: rgba(0,0,0,0.01); }
-    .footer-title { font-size: 13px; font-weight: bold; color: #d97706; }
-    .footer-credit { font-size: 11px; color: #a1a1aa; }
-  </style>
-  <link rel="stylesheet" href="help.css">
-</head>
-<body>
+<section class="chapter home" id="start" aria-label="처음 시작하기"><header class="chapter-heading home-top" tabindex="-1"><div><span class="eyebrow">처음 사용한다면</span><h2>어떤 일을 해 볼까요?</h2>
+<p>아래에서 필요한 설명을 골라 보세요.<br>누를 버튼을 순서대로 안내해 드릴게요.</p>
+</div>
+<div class="paper-art" aria-hidden="true"><i></i><i></i><i></i></div>
+</header>
+<div class="start-links"><a href="#notes"><strong>할 일과 메모 적기</strong><small>오늘 할 일을 적고, 끝낸 일은 따로 모아 두세요.</small><span>첫 메모 따라 하기 →</span></a><a href="#toolkit"><strong>수업 도구 열기</strong><small>타이머, 뽑기, 알림장을 필요한 때 꺼내 쓰세요.</small><span>Tidy 툴킷 켜기 →</span></a></div>
+<h3>가이드는 이렇게 읽으세요</h3>
+<dl class="facts"><div><dt>필요한 설명 찾기</dt>
+<dd>목차에서 주제를 고르거나 위 검색창에 <b>뽑기, 글꼴, 백업</b>처럼 궁금한 말을 입력하세요.</dd>
+</div>
+<div><dt>글씨가 작게 느껴진다면</dt>
+<dd>위의 <b>글자 크기</b>에서 <b>크게</b> 또는 <b>더 크게</b>를 누르세요. 이 가이드의 글자 크기만 바뀝니다.</dd>
+</div>
+<div><dt>버튼 이름을 모르겠다면</dt>
+<dd>앱의 아이콘 위에 마우스를 잠시 올려 보세요. 설명에 나온 이름과 같은 버튼을 찾으면 됩니다.</dd>
+</div>
+</dl>
+<aside class="note"><strong>‘누르세요’는 마우스 왼쪽 버튼으로 한 번 클릭하는 뜻이에요.</strong><p>‘우클릭’은 마우스 오른쪽 버튼을 한 번 누르는 동작입니다. ‘끌기’는 왼쪽 버튼을 누른 채 마우스를 움직이는 동작입니다.</p>
+</aside>
+<nav class="related" aria-label="함께 읽기"><a href="#troubleshooting">잘 안될 때 확인하기 →</a><a href="#settings">앱 글꼴과 크기 바꾸기 →</a></nav>
+</section>
 
-  <div class="header">
-    <h1>📖 Tidy Task 스마트 가이드 <span class="version-badge">v5.5.0</span></h1>
-    <p>메모와 할 일부터 Tidy 툴킷까지. 필요한 기능을 찾아 바로 시작하세요.</p>
-  </div>
+<section class="chapter " id="notes" aria-label="할 일과 메모 적기"><header class="chapter-heading" tabindex="-1"><span class="eyebrow">메모와 할 일</span><h2>할 일과 메모 적기</h2>
+<p>할 일은 한 줄씩 적고, 긴 내용은 아래 메모 공간에 적습니다.</p>
+</header>
+<p class="route"><strong>여는 곳</strong>Tidy Task 메모 창</p>
+<ol class="steps"><li><h3>첫 할 일을 적으세요</h3>
+<p><b>내용을 입력해주세요.</b>라고 적힌 입력칸을 누르세요. 예를 들어 ‘내일 안내장 인쇄하기’를 적고 <kbd>Enter</kbd>를 누르면 목록에 추가됩니다.</p>
+</li>
+<li><h3>고치거나 완료하세요</h3>
+<p>내용을 고치려면 할 일의 글자를 누르세요. 끝낸 일은 왼쪽 완료 버튼을 누르면 <b>마감된 일</b>로 이동합니다.</p>
+</li>
+<li><h3>긴 내용은 아래에 적으세요</h3>
+<p>창 아래의 메모 공간에 회의 내용이나 자주 보는 안내를 적으세요. 목록과 메모 사이의 경계선을 끌면 공간을 넓히거나 줄일 수 있습니다.</p>
+</li>
+</ol>
+<aside class="note"><strong>입력한 내용은 자동으로 저장됩니다.</strong><p>바로 저장하고 싶을 때는 Ctrl + S를 누르세요. 잘못 고친 내용은 창 위의 실행 취소 버튼이나 Ctrl + Z로 되돌릴 수 있습니다.</p>
+</aside>
+<details class="more"><summary>다른 메모 창과 작은 메모(Tiny Note) 열기</summary><div><dl class="facts"><div><dt>일반 메모 창</dt>
+<dd>상단을 우클릭하고 <b>새 창 띄우기</b>를 선택하세요. 모던 디자인에서는 <b>새 노트 → Tidy Task 노트</b>로 엽니다. 창마다 다른 내용을 적을 수 있습니다.</dd>
+</div>
+<div><dt>Tiny Note</dt>
+<dd>상단의 <b>새 Tiny Note 띄우기</b> 아이콘을 누르세요. 모던 디자인에서는 <b>새 노트 → Tiny Note</b>로 엽니다. 작은 메모 창은 최대 10개까지 열 수 있습니다.</dd>
+</div>
+<div><dt>창을 옮기거나 접기</dt>
+<dd>제목 표시줄을 끌면 창이 이동합니다. 제목 표시줄을 두 번 누르면 화면을 크게 쓰고, 다시 두 번 누르면 원래 크기로 돌아옵니다. Tiny Note의 화살표 버튼은 본문을 접거나 펼칩니다.</dd>
+</div>
+<div><dt>다른 창보다 앞에 두기</dt>
+<dd>상단의 핀 모양 <b>항상 위</b> 버튼을 누르세요. 다시 누르면 고정이 풀립니다.</dd>
+</div>
+</dl>
+</div>
+</details>
+<nav class="related" aria-label="함께 읽기"><a href="#editing">글자 꾸미기 →</a><a href="#archive">기록 보관하기 →</a><a href="#reminders">마감일 알림 받기 →</a></nav>
+</section>
 
-  <div class="guide-layout"><nav class="guide-nav" aria-label="가이드 목차"><span>QUICK GUIDE</span><a href="#toolkit">Tidy 툴킷 시작하기</a><a href="#timers">시간과 집중</a><a href="#classroom">명단 · 뽑기 · 토너먼트</a><a href="#noticeboard">알림장</a><a href="#toolkit-settings">툴킷 맞춤 설정</a><hr><a href="#shortcuts">단축키</a><a href="#notes">노트와 창 관리</a><a href="#archive">아카이브</a><a href="#reminders">리마인더</a><a href="#editing">편집과 서식</a><a href="#meals">오늘의 급식</a><a href="#settings">환경 설정과 백업</a><a href="#privacy">사용 통계</a></nav><main class="content">
-    <section class="section feature-panel" id="toolkit">
-      <div class="guide-intro"><span class="guide-kicker">NEW IN 5.5.0</span><h2>수업에 필요한 순간,<br>가볍게 꺼내는 Tidy 툴킷.</h2><p>각 도구를 독립된 창으로 열어 수업 화면 옆에 두세요. 필요한 도구만 표시하고 원하는 크기와 방향으로 정리할 수 있어요.</p></div>
-      <figure class="guide-dock"><img src="images/update-5.5/toolbar.png" alt="타이머, 간단 뽑기, 알림장, 토너먼트, 집중벨, 학급 명단이 모인 실제 툴킷 툴바"><figcaption>실제 Tidy 툴킷 화면</figcaption></figure>
-      <div class="guide-steps"><article><span>01</span><h3>툴킷 켜기</h3><p>Tidy Task 설정에서 <b>Tidy 툴킷</b>을 켜세요. 작업 표시줄의 Tidy Task 아이콘을 우클릭한 뒤 <b>Tidy 툴킷 열기</b>로도 열 수 있어요.</p></article><article><span>02</span><h3>도구 선택하기</h3><p>툴바의 도구 이름을 누르세요. 타이머는 버튼을 누른 다음 전광판·아날로그·모래시계·스톱워치 중에서 선택합니다.</p></article><article><span>03</span><h3>내 자리 만들기</h3><p>툴바를 원하는 자리로 옮기고 설정에서 방향·크기를 맞추세요. 창이 화면 밖으로 나갔다면 트레이 메뉴의 <b>좌표 초기화</b>를 이용하세요.</p></article></div>
-    </section>
-    <section class="section" id="timers">
-      <h2 class="section-head">시간과 집중 <span class="new-tag">TOOLKIT</span></h2>
-      <div class="guide-visual"><img src="images/update-5.5/analog.png" alt="실제 아날로그 타이머 화면" loading="lazy"><div><h3>남은 시간은 보여 주고,<br>활동의 끝은 소리로 알려요.</h3><p>활동에 맞게 시간을 정한 뒤 시작하세요. 진행 중에는 일시정지하고 다시 이어갈 수 있어요.</p></div></div>
-      <table><tbody>
-        <tr><td>전광판 타이머</td><td>큼직한 숫자로 남은 시간을 확인합니다. 시간 설정을 마친 뒤 시작하고, 필요하면 일시정지하거나 다시 설정하세요.</td></tr>
-        <tr><td>아날로그 타이머</td><td>시계판의 색으로 남은 시간을 표현합니다. 설정에서 한 바퀴 기준을 <b>30분 또는 60분</b>으로 선택할 수 있어요.</td></tr>
-        <tr><td>모래시계</td><td>모래가 줄어드는 모습으로 시간을 보여 줍니다. 설정에서 <b>남은 시간 표시</b>를 켜거나 끌 수 있어요.</td></tr>
-        <tr><td>스톱워치</td><td>시작한 뒤 경과한 시간을 측정합니다. 일시정지·재개와 초기화를 사용하고, 설정에서 진행음을 바꿀 수 있어요.</td></tr>
-        <tr><td>소리와 단축키</td><td>카운트다운 도구에서는 진행음, 종료 전 알림, 종료음을 각각 설정합니다. 종료 전 알림의 시점과 길이도 조절할 수 있어요. 입력란에 커서가 없을 때 <kbd class="kbd">Space</kbd>로 시작·일시정지합니다.</td></tr>
-        <tr><td>집중벨</td><td>벨·사이렌·폭탄·방구 네 가지 소리를 골라 재생합니다. 음량과 음소거를 확인하고, 멈추려면 <b>정지</b>를 누르세요. 다른 소리를 선택하면 재생할 소리가 전환됩니다.</td></tr>
-      </tbody></table>
-    </section>
-    <section class="section" id="classroom">
-      <h2 class="section-head">학급 명단 · 뽑기 · 토너먼트 <span class="new-tag">TOOLKIT</span></h2>
-      <div class="guide-visual"><img src="images/update-5.5/picker.png" alt="예시 명단을 사용하는 실제 인형 뽑기 화면" loading="lazy"><div><h3>우리 반의 이름으로<br>더 즐거운 참여를.</h3><p>학급 명단을 먼저 등록하면 뽑기와 토너먼트에서 학생 명단을 불러올 수 있어요.</p></div></div>
-      <table><tbody>
-        <tr><td>학급 만들기</td><td>학급 명단에서 학급을 만들고 번호·이름·성별을 관리하세요. 여러 학급과 기본 학급을 관리하고, 검색·정렬로 학생을 찾아 편집합니다.</td></tr>
-        <tr><td>명단 가져오기</td><td><b>PDF · XLSX · CSV · HWPX</b> 파일 또는 이름·표 붙여넣기로 가져옵니다. 파일은 최대 20MB이며, 미리보기에서 번호·이름·성별 열과 가져올 내용을 확인한 뒤 적용하세요.</td></tr>
-        <tr><td>모둠 관리</td><td>모둠을 만들고 학생을 배정하세요. 모둠 이름과 순서를 정리할 수 있습니다. 토너먼트에서 참가 단위를 <b>모둠</b>으로 선택해 불러올 수 있어요.</td></tr>
-        <tr><td>간단 뽑기 시작</td><td><b>학급 명단 / 모둠 뽑기 / 직접 입력</b> 중 대상을 정합니다. 모둠 뽑기와 직접 입력은 목록에 이름을 한 줄씩 넣어 준비하세요. <b>클래식·인형 뽑기·풍선 다트</b> 중 디자인을 고르고 <b>뽑기 시작</b> 또는 <kbd class="kbd">Space</kbd>를 누르세요.</td></tr>
-        <tr><td>뽑기 세부 설정</td><td><b>한 번씩 골고루</b>를 켜면 뽑힌 대상을 제외합니다. 대상 관리에서 제외할 대상을 확인하고, 직전 뽑기 취소·다시 시작을 사용할 수 있어요. 소리와 동작 감소 모드도 조절할 수 있습니다.</td></tr>
-        <tr><td>토너먼트 만들기</td><td><b>4·8·16·32·64강</b> 중 규모를 고르고 대진표를 만드세요. 이름을 직접 입력·붙여넣기하거나 학급 명단에서 불러옵니다. 빈 자리는 부전승으로 처리됩니다.</td></tr>
-        <tr><td>대진 준비와 진행</td><td>준비 화면에서 대진을 섞거나 자리 번호 두 개를 선택해 맞바꾸세요. 경기를 시작한 뒤 승자를 눌러 진출시키고, 같은 승자를 다시 눌러 취소할 수 있어요. 전체·왼쪽·오른쪽·결승 보기와 확대·축소로 대진표를 살펴보세요. 저장된 대회는 목록에서 이어서 진행합니다.</td></tr>
-      </tbody></table>
-    </section>
-    <section class="section" id="noticeboard">
-      <h2 class="section-head">우리 반 알림장 <span class="new-tag">TOOLKIT</span></h2>
-      <div class="guide-visual"><img src="images/update-5.5/noticeboard.png" alt="예시 안내문이 담긴 실제 알림장 화면" loading="lazy"><div><h3>오늘의 안내를 기록하고,<br>큰 화면으로 함께 읽어요.</h3><p>날짜별 안내와 준비물을 적어 두고 화이트 보드로 펼쳐 보세요.</p></div></div>
-      <table><tbody>
-        <tr><td>날짜별 기록</td><td>날짜 선택 또는 좌우 화살표로 날짜를 이동해 내용을 작성하세요. <b>기록 열기</b>에서 이전 기록을 찾고 <b>오늘</b>로 돌아올 수 있어요.</td></tr>
-        <tr><td>본문 서식</td><td>글꼴과 글자 크기, 굵게·색상 등 서식 도구로 중요한 안내를 강조합니다. 실행 취소·다시 실행으로 편집 내용을 되돌릴 수 있어요.</td></tr>
-        <tr><td>화이트 보드</td><td><b>화이트 보드(전체화면)</b>를 누르면 교실 화면에 크게 띄울 수 있어요. 화면을 넓게 활용하고 필요한 순간에 서식 도구를 펼쳐 사용하세요.</td></tr>
-        <tr><td>자료 보관</td><td>작성 중인 내용은 초안으로 자동 보관됩니다. <b>저장</b>을 누르면 저장본으로 확정하고, 수정 중에는 <b>저장본으로</b> 되돌릴 수 있어요. 최근 알림장에서 날짜·내용을 검색하고 휴지통에서 삭제한 기록을 확인하세요. Tidy Task의 메모 TXT 내보내기에는 알림장이 포함되지 않습니다.</td></tr>
-      </tbody></table>
-    </section>
-    <section class="section" id="toolkit-settings">
-      <h2 class="section-head">나만의 툴킷 설정</h2>
-      <table><tbody>
-        <tr><td>방향과 크기</td><td>툴바의 설정 버튼에서 <b>가로·세로</b> 방향과 <b>매우 작게부터 매우 크게까지 5단계</b> 크기를 선택하세요. 툴바의 접기 기능으로 공간을 줄일 수도 있어요.</td></tr>
-        <tr><td>테마와 다크 모드</td><td><b>세이지·앰버·오션·로즈·라벤더·슬레이트</b> 6가지 테마를 제공합니다. 다크 모드에서는 어두운 공통 화면을 사용하고, 다크 모드를 끄면 선택한 색상이 적용됩니다. Tidy Task 메모의 15가지 테마와는 별도 설정입니다.</td></tr>
-        <tr><td>보이는 도구</td><td>자주 쓰는 도구만 툴바에 표시하세요. 표시를 끄는 것은 도구 버튼을 숨기는 설정이며 기록 삭제 기능이 아닙니다.</td></tr>
-        <tr><td>외부 툴</td><td>롤린썬더와 클래너를 브라우저에서 열 수 있습니다. 외부 툴 사용 여부와 표시할 서비스를 설정할 수 있으며, 웹 서비스 이용에는 인터넷 연결이 필요합니다.</td></tr>
-        <tr><td>공지 표시 설정</td><td><b>오늘 그만보기</b>는 오늘 자정까지, <b>더 이상 보지 않기</b>는 해당 공지에만 적용됩니다. <b>닫기</b>는 숨김 설정을 바꾸지 않습니다. 환영 안내·툴킷 출시·기존 업데이트 공지는 앞 창을 닫은 뒤 순서대로 표시됩니다.</td></tr>
-      </tbody></table>
-    </section>
+<section class="chapter " id="editing" aria-label="글자 꾸미기 · 여러 항목 선택"><header class="chapter-heading" tabindex="-1"><span class="eyebrow">메모와 할 일</span><h2>글자 꾸미기 · 여러 항목 선택</h2>
+<p>중요한 글자는 굵게 표시하고, 여러 할 일은 한꺼번에 정리할 수 있습니다.</p>
+</header>
+<p class="route"><strong>여는 곳</strong>메모 창 상단의 서식 도구 · 모던 디자인은 ‘서식’</p>
+<ol class="steps"><li><h3>바꿀 글자를 선택하세요</h3>
+<p>마우스를 누른 채 글자 위를 끌어 선택하세요. 글꼴, 글자 크기, 굵게, 기울임, 밑줄, 글자 색상, 형광펜을 고를 수 있습니다.</p>
+</li>
+<li><h3>여러 할 일을 고르세요</h3>
+<p>상단의 <b>다중 선택 편집 모드</b> 버튼을 누르세요. 모던 디자인에서는 <b>메뉴 → 여러 항목 선택</b>을 누릅니다. 바꿀 항목을 선택한 뒤 서식을 적용하거나 마감·삭제하세요.</p>
+</li>
+<li><h3>편집을 마치세요</h3>
+<p>편집 모드 버튼을 다시 누르거나 모던 디자인의 <b>완료</b>를 누르세요. 이후에는 글자를 눌러 평소처럼 내용을 고칠 수 있습니다.</p>
+</li>
+</ol>
+<details class="more"><summary>자간 · 기호 · 링크도 넣을 수 있어요</summary><div><p>서식 도구의 <b>더보기</b>에서 글자 사이 간격인 자간을 조절하거나, 기호와 링크를 넣으세요. 링크는 주소와 표시할 텍스트를 입력한 뒤 <b>적용</b>을 누릅니다.</p>
+</div>
+</details>
+<nav class="related" aria-label="함께 읽기"><a href="#shortcuts">자주 쓰는 단축키 →</a><a href="#settings">기본 글꼴 바꾸기 →</a></nav>
+</section>
 
+<section class="chapter " id="archive" aria-label="마감된 일과 아카이브"><header class="chapter-heading" tabindex="-1"><span class="eyebrow">메모와 할 일</span><h2>마감된 일과 아카이브</h2>
+<p>완료한 할 일과 보관한 작은 메모는 서로 다른 곳에서 확인합니다.</p>
+</header>
+<p class="route"><strong>여는 곳</strong>메모 창의 ‘마감된 일’ · 상단 ‘아카이브 열기’ 또는 메뉴의 ‘보관함’</p>
+<dl class="facts"><div><dt>마감된 일: 완료한 할 일 목록</dt>
+<dd>할 일의 완료 버튼을 누르면 같은 창의 <b>마감된 일</b>로 옮겨집니다. 다시 해야 하는 일은 이 목록에서 되돌릴 수 있습니다. 목록이 안 보이면 설정의 <b>마감된 일 표시</b>를 켜세요.</dd>
+</div>
+<div><dt>아카이브: 작은 메모를 모아 두는 별도 창</dt>
+<dd>Tiny Note 상단의 보관함 버튼을 누르면 <b>제목과 메모 내용</b>이 아카이브에 저장되고, 해당 Tiny Note는 비워집니다. 아카이브 창에서 보관한 메모를 찾으세요.</dd>
+</div>
+</dl>
+<details class="more"><summary>아카이브에서 찾고 다시 꺼내기</summary><div><ol class="steps"><li><h3>검색하세요</h3>
+<p><b>노트 검색...</b> 입력칸에서 기록을 찾으세요. 포스트잇 보기와 목록 보기 중 읽기 편한 방식을 고를 수 있습니다.</p>
+</li>
+<li><h3>필요한 기록을 다시 쓰세요</h3>
+<p><b>북마크</b>로 자주 쓰는 메모를 표시하고, <b>복사</b>로 내용을 복사하세요. <b>꺼내기</b>를 누르면 보관한 기록을 다시 메모 창으로 꺼낼 수 있습니다.</p>
+</li>
+<li><h3>보관함에서도 새 기록을 만드세요</h3>
+<p><b>새 노트 추가</b>로 기록을 만들 수 있습니다. 제목과 본문을 수정하거나 테마 색상을 바꿀 수도 있습니다.</p>
+</li>
+</ol>
+</div>
+</details>
+<aside class="note"><strong>보관과 파일 백업은 달라요.</strong><p>아카이브도 이 컴퓨터에 있는 자료입니다. 컴퓨터를 바꾸기 전에는 필요한 기록을 별도 파일로 남겨 두세요.</p>
+</aside>
+<nav class="related" aria-label="함께 읽기"><a href="#settings">내보내기 범위 확인하기 →</a></nav>
+</section>
 
-    <!-- 1. 단축키 사전 -->
-    <section class="section" id="shortcuts">
-      <h2 class="section-head">⌨️ Tidy Task 전체 단축키 사전</h2>
-      <table>
-        <tr>
-          <td><kbd class="kbd">Enter</kbd></td>
-          <td>하단 입력창에서 타이핑 후 즉시 할 일을 생성합니다.</td>
-        </tr>
-        <tr>
-          <td><kbd class="kbd">Ctrl</kbd> + <kbd class="kbd">Z</kbd> / <kbd class="kbd">Y</kbd></td>
-          <td><b>타임머신</b>: 잘못 수정한 텍스트나 실수로 삭제한 항목을 이전/이후 단계로 되돌립니다.</td>
-        </tr>
-        <tr>
-          <td><kbd class="kbd">Ctrl</kbd> + <kbd class="kbd">S</kbd></td>
-          <td><b>수동 동기화</b>: 입력 중인 데이터를 즉시 안전하게 저장합니다.</td>
-        </tr>
-        <tr>
-          <td><kbd class="kbd">Ctrl</kbd> + <kbd class="kbd">C</kbd> / <kbd class="kbd">V</kbd></td>
-          <td><b>스마트 다중 생성</b>: 편집 모드에서 여러 줄의 텍스트를 복사한 뒤 앱에 붙여넣으면, 각 줄이 독립된 할 일 항목으로 한 번에 쪼개져 생성됩니다. (편집 모드 시 다중 항목 복사도 가능)</td>
-        </tr>
-        <tr>
-          <td><kbd class="kbd">Alt</kbd> + <kbd class="kbd">Shift</kbd> + <kbd class="kbd">N</kbd> / <kbd class="kbd">W</kbd></td>
-          <td><b>자간 조절</b>: N(좁게), W(넓게) 키를 통해 텍스트 자간을 미세 조정합니다.</td>
-        </tr>
-        <tr>
-          <td><kbd class="kbd">Ctrl</kbd> + <kbd class="kbd">B</kbd> / <kbd class="kbd">I</kbd> / <kbd class="kbd">U</kbd></td>
-          <td><b>스타일 편집</b>: 편집 모드에서 여러 항목을 선택한 후 누르면 각각 굵게(Bold), 기울임(Italic), 밑줄(Underline)이 일괄 적용됩니다.</td>
-        </tr>
-      </table>
-    </section>
+<section class="chapter " id="reminders" aria-label="마감일과 알림"><header class="chapter-heading" tabindex="-1"><span class="eyebrow">메모와 할 일</span><h2>마감일과 알림</h2>
+<p>할 일에 날짜를 정해 두면 마감일을 확인하고 알림을 받을 수 있습니다.</p>
+</header>
+<p class="route"><strong>여는 곳</strong>할 일 왼쪽의 날짜 표시 · 상단 리마인더(알림) 버튼</p>
+<ol class="steps"><li><h3>날짜를 정하세요</h3>
+<p>할 일 왼쪽의 <b>마감일 설정</b> 버튼을 누르고 달력에서 날짜를 선택하세요. 새 할 일을 적을 때도 입력칸 옆 날짜 버튼으로 미리 지정할 수 있습니다.</p>
+</li>
+<li><h3>알림이 켜져 있는지 확인하세요</h3>
+<p>상단의 <b>리마인더</b> 버튼을 확인하세요. 모던 디자인에서는 <b>알림</b>, 시스템 설정에서는 <b>통합 리마인더</b>로 표시됩니다.</p>
+</li>
+<li><h3>알림창에서 처리하세요</h3>
+<p>끝낸 일은 알림창의 <b>마감 (항목 완료)</b> 버튼을 누르세요. 나중에 보려면 <b>1시간 후</b> 또는 <b>시간 지정</b>을 선택하세요. 시간 지정은 지금부터 몇 시간·몇 분 뒤에 다시 알릴지 정하는 기능입니다.</p>
+</li>
+</ol>
+<details class="more"><summary>오늘만 알림을 쉬거나, 창을 더 선명하게 보기</summary><div><p>알림창의 <b>오늘 끄기</b>로 오늘의 알림을 끌 수 있습니다. 알림창 상단의 <b>투명도 조절</b> 막대를 움직이면 창의 진하기가 바뀝니다.</p>
+</div>
+</details>
+<nav class="related" aria-label="함께 읽기"><a href="#troubleshooting">알림이 보이지 않을 때 →</a></nav>
+</section>
 
-    <!-- 2. 다중 윈도우 (Tiny Note) 단독 세션 -->
-    <section class="section" id="notes">
-      <h2 class="section-head">🪟 다중 윈도우 & Tiny Note <span class="new-tag">NEW</span></h2>
-      <table>
-        <tr>
-          <td>독립된 서브 노트</td>
-          <td>상단 바의 <b>포스트잇 아이콘</b>이나 시스템 트레이의 <b>'새 Tiny Note'</b>를 누르면, 조그마한 포스트잇 형태의 <b>Tiny Note</b>를 최대 10개까지 띄울 수 있습니다. (우클릭 메뉴의 <b>'새 창 띄우기'</b>는 일반 메모 창을 엽니다) 각 노트는 별도의 데이터를 가집니다.</td>
-        </tr>
-        <tr>
-          <td>Tiny Note 아카이빙</td>
-          <td>Tiny Note 화면 좌측 상단의 <b>아카이빙 버튼(보관함 아이콘)</b>을 누르면, 해당 서브 노트의 완료된 내용 전체가 메인 아카이브(중앙 보관함)로 일괄 전송됩니다.</td>
-        </tr>
-        <tr>
-          <td>전체화면 · 롤업</td>
-          <td>메인 및 Tiny Note의 <b>타이틀바를 더블클릭</b>하면 전체화면으로 전환되고, 다시 더블클릭하면 원래 크기와 위치로 돌아옵니다. Tiny Note는 상단의 화살표 버튼으로 롤업/펼치기를 사용할 수 있으며 상태가 그대로 보존됩니다.</td>
-        </tr>
-        <tr>
-          <td>영역 분할 스플리터</td>
-          <td>메인 화면 내 할 일 목록과 하단 텍스트 메모장 사이의 경계선을 드래그하여, 작업 공간의 높이 비율을 내 마음대로 분할할 수 있습니다.</td>
-        </tr>
-      </table>
-    </section>
+<section class="chapter " id="toolkit" aria-label="Tidy 툴킷 켜기"><header class="chapter-heading" tabindex="-1"><span class="eyebrow">수업 도구</span><h2>Tidy 툴킷 켜기</h2>
+<p>툴킷은 타이머와 뽑기 같은 수업 도구를 모아 둔 도구 모음입니다.</p>
+</header>
+<p class="route"><strong>여는 곳</strong>메모 창의 설정 → Tidy 툴킷</p>
+<ol class="steps"><li><h3>툴킷을 켜세요</h3>
+<p>메모 창의 <b>설정</b>에서 <b>Tidy 툴킷</b>을 켜세요. 모던 디자인에서는 <b>메뉴</b>에서도 켤 수 있습니다. 화면에 도구 이름이 나란히 있는 툴바가 나타납니다.</p>
+</li>
+<li><h3>필요한 도구를 누르세요</h3>
+<p>예를 들어 <b>타이머</b>를 누른 뒤 <b>아날로그 타이머</b>를 고르세요. 선택한 도구가 별도의 창으로 열립니다.</p>
+</li>
+<li><h3>쓰기 편한 자리로 옮기세요</h3>
+<p>도구 창의 제목 표시줄을 끌어 원하는 곳에 두세요. 툴바의 <b>설정</b>에서는 가로·세로 방향과 크기를 바꿀 수 있습니다.</p>
+</li>
+</ol>
+<details class="more"><summary>실제 화면 보기</summary><div><figure><img src="images/update-5.5/toolbar.png" alt="타이머, 간단 뽑기, 알림장 등이 있는 Tidy 툴킷 툴바" loading="lazy"><figcaption>타이머, 간단 뽑기, 알림장 등이 있는 Tidy 툴킷 툴바 · 화면 속 내용은 예시입니다.</figcaption></figure>
+</div>
+</details>
+<aside class="note"><strong>툴킷이 보이지 않나요?</strong><p>화면 오른쪽 아래 시계 근처의 Tidy Task 아이콘을 우클릭하고 Tidy 툴킷 열기를 선택하세요. 아이콘이 숨겨져 있으면 먼저 위쪽 화살표(숨겨진 아이콘 표시)를 누르세요.</p>
+</aside>
+<nav class="related" aria-label="함께 읽기"><a href="#timers">타이머 사용하기 →</a><a href="#classroom">학급 명단 만들기 →</a><a href="#toolkit-settings">툴킷 모양 바꾸기 →</a></nav>
+</section>
 
-    <!-- 3. 아카이브 보관함 -->
-    <section class="section" id="archive">
-      <h2 class="section-head">🗄️ 아카이브 보관함 <span class="new-tag">NEW</span></h2>
-      <table>
-        <tr>
-          <td>중앙 보관함 저장</td>
-          <td>메인 툴바의 아카이빙 아이콘이나 서브 노트의 전송 버튼을 통해 삭제하기 아까운 기록들을 중앙 보관함으로 영구 저장할 수 있습니다.</td>
-        </tr>
-        <tr>
-          <td>스마트 검색 & 복원</td>
-          <td>보관함 상단의 검색창을 통해 수개월 전의 기록도 즉시 찾을 수 있으며, 클릭 한 번에 다시 메인 노트로 꺼내올 수 있습니다.</td>
-        </tr>
-      </table>
-    </section>
+<section class="chapter " id="timers" aria-label="타이머 · 스톱워치"><header class="chapter-heading" tabindex="-1"><span class="eyebrow">수업 도구</span><h2>타이머 · 스톱워치</h2>
+<p>활동이 끝날 시간을 정하거나, 시작한 뒤 얼마나 지났는지 잽니다.</p>
+</header>
+<p class="route"><strong>여는 곳</strong>Tidy 툴킷 → 타이머 → 도구 선택</p>
+<ol class="steps"><li><h3>시간을 보여 줄 모양을 고르세요</h3>
+<p><b>전광판 타이머</b>는 큰 숫자, <b>아날로그 타이머</b>는 시계판의 색, <b>모래시계</b>는 줄어드는 모래로 남은 시간을 보여 줍니다. 경과 시간을 재려면 <b>스톱워치</b>를 선택하세요.</p>
+</li>
+<li><h3>시간을 정하세요</h3>
+<p>타이머의 <b>설정 보기</b>를 누르고 빠른 설정에서 5분 같은 시간을 누르세요. 직접 정하려면 분·초를 입력하고 <b>시간 적용</b>을 누릅니다. 스톱워치는 시간을 정하지 않아도 됩니다.</p>
+</li>
+<li><h3>시작하고 잠시 멈추세요</h3>
+<p><b>시작</b>을 누르세요. 진행 중에는 <b>일시정지</b>, 멈춘 뒤에는 <b>계속하기</b>를 누릅니다. 타이머 아래의 +·− 버튼으로 1·5·10분씩 조절할 수도 있습니다.</p>
+</li>
+<li><h3>다시 쓰거나 기록하세요</h3>
+<p>타이머는 <b>다시 설정</b>으로 시간을 다시 준비합니다. 스톱워치는 진행 중 <b>기록</b>으로 중간 기록을 남기고, <b>초기화</b>로 경과 시간과 기록을 지웁니다.</p>
+</li>
+</ol>
+<details class="more"><summary>소리와 화면 표시 바꾸기</summary><div><dl class="facts"><div><dt>활동 제목과 설명</dt>
+<dd>타이머 위쪽의 <b>활동 제목</b>을 눌러 이름을 적으세요. <b>설명 추가</b>에는 활동 방법이나 준비물을 적을 수 있습니다. 설명은 접어 둘 수 있습니다.</dd>
+</div>
+<div><dt>진행음 · 종료 경고음 · 종료음</dt>
+<dd>설정에서 필요한 소리를 각각 켜거나 끄세요. <b>듣기</b>로 미리 들어 볼 수 있습니다. 종료 전 알림은 몇 초 전에 울릴지와 알림 길이도 정합니다. 스톱워치는 진행음을 설정합니다.</dd>
+</div>
+<div><dt>아날로그 한 바퀴 기준</dt>
+<dd>30분 또는 60분으로 바꿀 수 있습니다. 남은 시간이 30분보다 많으면 30분 기준은 선택할 수 없습니다.</dd>
+</div>
+<div><dt>모래시계의 숫자</dt>
+<dd>설정의 <b>남은 시간 표시</b>를 켜면 모래시계 아래에 숫자도 나타납니다.</dd>
+</div>
+<div><dt>시간 입력이 안 될 때</dt>
+<dd>타이머가 진행 중이면 분·초 입력과 빠른 설정을 바꿀 수 없습니다. 먼저 일시정지하세요.</dd>
+</div>
+</dl>
+</div>
+</details>
+<details class="more"><summary>실제 화면 보기</summary><div><figure><img src="images/update-5.5/analog.png" alt="남은 시간을 색으로 표시하는 아날로그 타이머" loading="lazy"><figcaption>남은 시간을 색으로 표시하는 아날로그 타이머 · 화면 속 내용은 예시입니다.</figcaption></figure>
+</div>
+</details>
+<nav class="related" aria-label="함께 읽기"><a href="#focus-bell">집중벨로 소리 내기 →</a><a href="#shortcuts">타이머 단축키 →</a></nav>
+</section>
 
-    <!-- 4. 데드라인 및 리마인더 -->
-    <section class="section" id="reminders">
-      <h2 class="section-head">🔔 스마트 리마인더 시스템 <span class="new-tag">NEW</span></h2>
-      <table>
-        <tr>
-          <td>마감일 뱃지</td>
-          <td>할 일 좌측의 날짜 뱃지를 눌러 마감일을 지정하세요. 잔여 일수에 따라 뱃지가 <span class="badge-red">D-3 (빨강)</span>, <span class="badge-green">D-7 (초록)</span> 등으로 자동 변환됩니다.</td>
-        </tr>
-        <tr>
-          <td>투명도 조절 기능</td>
-          <td>리마인더 팝업창 상단의 눈알 아이콘을 드래그하여 알림창의 투명도를 내가 원하는 대로 세밀하게 조절할 수 있습니다.</td>
-        </tr>
-        <tr>
-          <td>알림 지연 타이머</td>
-          <td>리마인더 팝업 하단의 <b>'시간 지정'</b> 🕒 버튼을 누르면, 내가 원하는 정확한 <b>시간과 분 단위</b>로 알람을 조용히 연기(Snooze)시킬 수 있습니다.</td>
-        </tr>
-      </table>
-    </section>
+<section class="chapter " id="classroom" aria-label="학급 명단 · 모둠 만들기"><header class="chapter-heading" tabindex="-1"><span class="eyebrow">수업 도구</span><h2>학급 명단 · 모둠 만들기</h2>
+<p>학급을 만든 뒤 학생을 등록하세요. 등록한 명단은 뽑기와 토너먼트에서 불러올 수 있습니다.</p>
+</header>
+<p class="route"><strong>여는 곳</strong>Tidy 툴킷 → 학급 명단</p>
+<ol class="steps"><li><h3>학급을 만드세요</h3>
+<p><b>첫 학급 만들기</b> 또는 <b>학급 추가</b>를 누르고 학급 이름을 입력하세요. 여러 학급을 따로 관리할 수 있습니다.</p>
+</li>
+<li><h3>학생을 등록하세요</h3>
+<p>학생 명단 아래에 <b>번호와 이름</b>을 입력하고 <b>추가</b>를 누르세요. 성별은 필요한 경우에만 선택하면 됩니다. 기존 학생은 목록의 번호·이름·성별 칸에서 수정합니다.</p>
+</li>
+<li><h3>명렬표가 있다면 가져오세요</h3>
+<p><b>파일 가져오기 → 파일 선택</b>으로 PDF·XLSX·CSV·HWPX 파일을 고르세요. 또는 <b>이름·표 붙여넣기</b>에 내용을 붙이고 <b>명단 확인</b>을 누르세요. 파일 크기는 최대 20MB입니다.</p>
+</li>
+<li><h3>미리보기를 확인한 뒤 반영하세요</h3>
+<p>가져올 번호·이름·성별과 학생 수를 확인하세요. 잘못 읽힌 칸은 고치고, 필요 없는 행의 등록 체크는 해제합니다. 기존 학생 연결도 확인한 뒤 <b>○명 반영</b>을 누르세요.</p>
+</li>
+</ol>
+<aside class="note"><strong>학생 번호가 중간에 비어 있어도 그대로 두세요.</strong><p>번호를 연속으로 다시 매길 필요는 없습니다. 성별 자료가 없으면 ‘자료에 없음’으로 두세요. 원본 파일 사본은 저장하지 않고 번호·이름·성별만 가져옵니다.</p>
+</aside>
+<details class="more"><summary>모둠 만들고 학생 배정하기</summary><div><ol class="steps"><li><h3>모둠을 만드세요</h3>
+<p><b>모둠 구성 → 모둠 만들기</b>를 누르고 이름을 입력하세요.</p>
+</li>
+<li><h3>학생을 고르고 이동하세요</h3>
+<p>학생을 선택한 뒤 이동할 모둠을 고르고 <b>이동</b>을 누르세요. 모둠 카드의 <b>선택한 ○명 여기로</b> 버튼으로도 옮길 수 있습니다.</p>
+</li>
+<li><h3>배정을 정리하세요</h3>
+<p>학생은 한 모둠에 속합니다. 모둠에서 빼려면 <b>미배정</b>으로 옮기세요. 모둠을 삭제해도 학생 명단은 남습니다. 잘못 바꿨다면 <b>실행 취소</b>를 누르세요.</p>
+</li>
+</ol>
+</div>
+</details>
+<details class="more"><summary>학생 찾기 · 기본 학급 정하기</summary><div><p>학생 명단 위의 검색칸에 번호나 이름을 입력하세요. 번호순·이름순 정렬과 학생 필터로 범위를 좁힐 수 있습니다.</p>
+<p>자주 쓰는 학급은 <b>기본 학급으로</b>를 누르세요. 이미 열린 도구가 사용 중인 학급은 그대로이므로, 도구 안에서도 선택한 학급을 확인하세요. 등록한 학생과 모둠은 이 기기에 자동 저장됩니다.</p>
+</div>
+</details>
+<details class="more"><summary>파일이 잘 읽히지 않거나, 기존 명단이 있을 때</summary><div><p><b>열을 자동으로 찾지 못할 때 → 직접 열 지정</b>에서 번호·이름·성별 열과 학생 시작 행을 정한 뒤 파일을 다시 선택하세요. 열 번호는 왼쪽부터 1입니다.</p>
+<p>기존 학생은 기본적으로 유지됩니다. 미리보기의 <b>기존 학생 삭제 선택</b>에서 직접 선택한 학생만 삭제 대상이 됩니다.</p>
+</div>
+</details>
+<nav class="related" aria-label="함께 읽기"><a href="#picker">학생 뽑기 →</a><a href="#tournament">모둠 토너먼트 →</a><a href="#settings">학급 명단 백업하기 →</a></nav>
+</section>
 
-    <!-- 5. 편집 모드 및 서식 -->
-    <section class="section" id="editing">
-      <h2 class="section-head">✏️ 다중 편집 모드 & 일괄 디자인</h2>
-      <table>
-        <tr>
-          <td>편집 모드 전환</td>
-          <td>하단의 펜 아이콘(편집 모드) 버튼을 누르거나 우클릭 메뉴를 통해 항목 다중 선택 상태로 전환합니다.</td>
-        </tr>
-        <tr>
-          <td>일괄 스타일 & 삭제</td>
-          <td>항목을 여러 개 선택한 뒤 팝업되는 전용 툴바를 이용해 형광펜 색상을 칠하거나, 수십 개의 항목을 동시에 휴지통으로 지울 수 있습니다.</td>
-        </tr>
-        <tr>
-          <td>인라인 직접 편집</td>
-          <td>각 할 일의 글자를 마우스로 누르면 즉석에서 타이핑하여 내용을 수정할 수 있습니다.</td>
-        </tr>
-      </table>
-    </section>
+<section class="chapter " id="picker" aria-label="간단 뽑기"><header class="chapter-heading" tabindex="-1"><span class="eyebrow">수업 도구</span><h2>간단 뽑기</h2>
+<p>발표할 학생, 활동 순서, 모둠 이름 등을 뽑습니다.</p>
+</header>
+<p class="route"><strong>여는 곳</strong>Tidy 툴킷 → 간단 뽑기</p>
+<ol class="steps"><li><h3>뽑을 대상을 정하세요</h3>
+<p>등록된 학생을 뽑으려면 <b>학급 명단</b>에서 학급을 선택하세요. 이름이나 활동을 직접 넣으려면 <b>직접 입력 → 목록 입력</b>에서 한 줄에 하나씩 입력하세요.</p>
+</li>
+<li><h3>모둠을 뽑으려면 이름을 입력하세요</h3>
+<p><b>모둠 뽑기 → 목록 입력</b>에서 모둠 이름을 한 줄씩 적으세요. 이 기능은 학급 명단의 모둠을 자동으로 불러오는 방식이 아닙니다.</p>
+</li>
+<li><h3>뽑기 모양과 중복 여부를 고르세요</h3>
+<p><b>클래식·인형 뽑기·풍선 다트</b> 중 디자인을 고르세요. <b>한 번씩 골고루</b>를 켜면 이미 뽑힌 대상은 다음 뽑기에서 빠집니다.</p>
+</li>
+<li><h3>뽑기를 시작하세요</h3>
+<p><b>뽑기 시작</b>을 누르세요. <b>대상 관리</b>에서 제외할 대상을 확인할 수 있습니다. <b>직전 뽑기 취소</b>는 바로 전 결과를 되돌리고, <b>다시 시작</b>은 뽑기 기록을 초기화합니다.</p>
+</li>
+</ol>
+<details class="more"><summary>같은 목록을 다시 쓰거나 연출 줄이기</summary><div><p>직접 입력한 목록은 <b>목록 저장</b>으로 보관하고 <b>불러오기</b>로 다시 사용할 수 있습니다. 뽑기 <b>설정</b>에서 소리와 동작 감소 모드도 조절할 수 있습니다.</p>
+</div>
+</details>
+<details class="more"><summary>실제 화면 보기</summary><div><figure><img src="images/update-5.5/picker.png" alt="인형 뽑기 디자인으로 진행하는 간단 뽑기" loading="lazy"><figcaption>인형 뽑기 디자인으로 진행하는 간단 뽑기 · 화면 속 내용은 예시입니다.</figcaption></figure>
+</div>
+</details>
+<nav class="related" aria-label="함께 읽기"><a href="#classroom">학생 명단 먼저 등록하기 →</a></nav>
+</section>
 
-    <section class="section" id="meals">
-      <h2 class="section-head">🍲 오늘의 급식</h2>
-      <table>
-        <tr><td>학교 연결</td><td>상단 도구 모음의 급식 아이콘을 누르고 학교 이름을 두 글자 이상 입력하세요. 주소를 확인한 뒤 학교를 등록하면 식단이 열립니다.</td></tr>
-        <tr><td>창 크기와 날짜</td><td>크기에 따라 미니·컴팩트·기본·와이드·주간 보기로 바뀝니다. 좌우 화살표로 날짜를 바꾸고 T로 오늘로 돌아옵니다. 주간 보기에서는 한 주씩 이동합니다.</td></tr>
-        <tr><td>내게 맞게 보기</td><td>급식 설정에서 표시할 끼니, 알레르기, 영양·원산지 정보, 테마, 글꼴과 글자 크기를 바꿀 수 있습니다. 선택한 알레르기는 메뉴 옆에 별도로 표시합니다.</td></tr>
-        <tr><td>복사와 오프라인</td><td>메뉴 복사 버튼 또는 Ctrl+C로 현재 날짜의 메뉴를 복사합니다. 인터넷이 끊겨도 저장된 식단은 계속 볼 수 있습니다. 트레이 메뉴에서도 급식창을 다시 열 수 있습니다.</td></tr>
-      </table>
-    </section>
+<section class="chapter " id="tournament" aria-label="토너먼트 진행하기"><header class="chapter-heading" tabindex="-1"><span class="eyebrow">수업 도구</span><h2>토너먼트 진행하기</h2>
+<p>참가자를 넣고 경기마다 승자를 선택하면 다음 대진으로 올라갑니다.</p>
+</header>
+<p class="route"><strong>여는 곳</strong>Tidy 툴킷 → 토너먼트</p>
+<ol class="steps"><li><h3>대진표를 만드세요</h3>
+<p>대회 이름을 적고 <b>4·8·16·32·64강</b> 중 규모를 고른 뒤 <b>대진표 만들기</b>를 누르세요. 참가자가 적으면 빈자리는 부전승으로 처리됩니다.</p>
+</li>
+<li><h3>참가자를 넣으세요</h3>
+<p>이름을 한 줄에 한 명씩 적고 <b>명단 적용</b>을 누르세요. <b>학급 명단 불러오기</b>에서는 학급과 참가 단위(<b>학생·모둠</b>)를 고른 뒤 <b>선택한 명단 적용</b>을 누릅니다.</p>
+</li>
+<li><h3>대진을 확인하고 시작하세요</h3>
+<p><b>대진 섞기</b>로 순서를 바꿀 수 있습니다. 특정 자리끼리 바꾸려면 자리 번호 두 개를 차례로 선택하세요. 준비가 끝나면 <b>경기 시작</b>을 누르세요.</p>
+</li>
+<li><h3>경기마다 승자를 누르세요</h3>
+<p>이긴 참가자를 누르면 다음 라운드로 진출합니다. 같은 승자를 다시 누르면 진출이 취소됩니다. 마지막에는 <b>우승자 보기</b>로 결과를 확인하세요.</p>
+</li>
+</ol>
+<details class="more"><summary>대진표를 크게 보거나 나중에 이어서 하기</summary><div><p>전체·왼쪽·오른쪽·결승 보기와 확대·축소를 이용하세요. 글씨가 작으면 <b>큰 글씨</b>를 누르세요.</p>
+<p>대회는 자동 저장됩니다. <b>대회 목록</b>으로 돌아가 저장된 대회를 선택하면 이어서 진행할 수 있습니다. <b>결과 초기화</b>는 진행한 경기 결과를 지우므로 새로 시작할 때 사용하세요.</p>
+</div>
+</details>
+<nav class="related" aria-label="함께 읽기"><a href="#classroom">학급과 모둠 준비하기 →</a></nav>
+</section>
 
-    <!-- 6. 시스템 환경 설정 -->
-    <section class="section" id="settings">
-      <h2 class="section-head">⚙️ 환경 설정 및 백업</h2>
-      <table>
-        <tr><td>상단 디자인과 테마</td><td>설정에서 <b>클래식·모던</b> 상단 디자인을 고릅니다. 모던에서는 서식 도구를 필요할 때 펼칠 수 있어요. 메모의 15가지 색상 테마와 다크 모드, 글꼴·크기도 조절할 수 있습니다.</td></tr><tr><td>앱 업데이트</td><td>설정에서 설치된 버전과 새 버전을 확인합니다. 업데이트 안내에서 내려받기를 진행하거나 내일 다시 알림·이 버전 건너뛰기를 선택할 수 있어요.</td></tr><tr><td>화면 밖의 창 찾기</td><td>모니터를 바꾼 뒤 창이 보이지 않으면 작업 표시줄의 Tidy Task 아이콘을 우클릭해 <b>좌표 초기화</b>를 선택하세요.</td></tr>
-        <tr>
-          <td>사용자 커스텀 폰트</td>
-          <td>시스템 설정 창에서 PC 내의 .ttf 파일 등을 등록해 나만의 글꼴을 사용하세요. UI 전용 글꼴과 본문용 글꼴을 분리해 적용할 수 있습니다.</td>
-        </tr>
-        <tr>
-          <td>리마인더 마스터 토글</td>
-          <td>방해받고 싶지 않은 회의 시간이라면, 환경 설정에서 '리마인더 알림'을 완전히 꺼버릴 수 있습니다.</td>
-        </tr>
-        <tr>
-          <td>데이터 안전 내보내기</td>
-          <td>상단 바 우클릭 메뉴의 '메모장으로 내보내기'를 통해 현재 창의 할 일·보관 목록·메모를 TXT 파일로 내보냅니다. 다른 노트와 툴킷 자료는 포함되지 않으므로 필요한 창과 도구에서 각각 내보내세요.</td>
-        </tr>
-      </table>
-    </section>
+<section class="chapter " id="noticeboard" aria-label="날짜별 알림장 쓰기"><header class="chapter-heading" tabindex="-1"><span class="eyebrow">수업 도구</span><h2>날짜별 알림장 쓰기</h2>
+<p>준비물과 안내를 날짜별로 적고, 전체화면으로 보여 줄 수 있습니다.</p>
+</header>
+<p class="route"><strong>여는 곳</strong>Tidy 툴킷 → 알림장</p>
+<ol class="steps"><li><h3>날짜를 고르세요</h3>
+<p>위쪽 날짜를 누르거나 좌우 화살표로 이동하세요. <b>오늘</b>을 누르면 오늘 날짜로 돌아옵니다.</p>
+</li>
+<li><h3>내용을 적고 저장하세요</h3>
+<p>본문에 안내를 적으세요. 글꼴·글자 크기·굵게·글자색으로 중요한 내용을 표시하고 <b>저장</b>을 누르세요.</p>
+</li>
+<li><h3>큰 화면으로 보여 주세요</h3>
+<p><b>화이트 보드(전체화면)</b>를 누르세요. 화면에서 서식을 바꾸려면 <b>도구</b>를 펼치세요. <b>일반 화면</b> 또는 <kbd>Esc</kbd>로 돌아옵니다.</p>
+</li>
+<li><h3>지난 기록을 찾아보세요</h3>
+<p><b>기록 열기</b>에서 날짜나 내용으로 검색하세요. 삭제한 기록은 <b>휴지통</b>에서 확인하고 <b>복원</b>할 수 있습니다.</p>
+</li>
+</ol>
+<aside class="note"><strong>자동으로 보관되는 초안과 ‘저장’은 달라요.</strong><p>작성 중인 내용은 초안으로 자동 보관됩니다. 저장 버튼을 누르면 저장본으로 확정됩니다. 수정한 내용을 취소하려면 ‘저장본으로’를 누르세요.</p>
+</aside>
+<details class="more"><summary>실제 화면 보기</summary><div><figure><img src="images/update-5.5/noticeboard.png" alt="날짜를 선택해 쓰는 알림장" loading="lazy"><figcaption>날짜를 선택해 쓰는 알림장 · 화면 속 내용은 예시입니다.</figcaption></figure>
+</div>
+</details>
+<nav class="related" aria-label="함께 읽기"><a href="#settings">자료별 보관 범위 확인하기 →</a></nav>
+</section>
 
-    <section class="section" id="privacy">
-      <h2 class="section-head">📊 앱 개선을 위한 사용 통계</h2>
-      <table>
-        <tr>
-          <td>자동 익명 집계</td>
-          <td>더 나은 프로그램과 안정적인 업데이트를 위해 설치별 무작위 ID, 기능 사용 횟수, 앱 버전, 운영체제와 오류 종류를 PostHog로 자동 전송합니다.</td>
-        </tr>
-        <tr>
-          <td>내용은 수집하지 않음</td>
-          <td>메모·할 일 내용, 학교명과 학교 코드, 파일 경로, 키보드 입력 내용은 수집하지 않습니다. 화면 녹화나 자동 클릭 수집도 사용하지 않습니다.</td>
-        </tr>
-      </table>
-    </section>
+<section class="chapter " id="focus-bell" aria-label="집중벨 울리기"><header class="chapter-heading" tabindex="-1"><span class="eyebrow">수업 도구</span><h2>집중벨 울리기</h2>
+<p>활동을 바꾸거나 안내를 시작할 때 짧은 소리를 재생할 수 있습니다.</p>
+</header>
+<p class="route"><strong>여는 곳</strong>Tidy 툴킷 → 집중벨</p>
+<ol class="steps"><li><h3>음량을 먼저 확인하세요</h3>
+<p>아래의 <b>음량</b> 막대로 크기를 조절하세요. 음소거가 켜져 있으면 소리가 나지 않습니다.</p>
+</li>
+<li><h3>원하는 소리를 누르세요</h3>
+<p><b>벨·사이렌·폭탄·방구</b> 중 하나를 누르면 한 번 재생됩니다. 같은 소리를 다시 누르면 처음부터, 다른 소리를 누르면 선택한 소리로 바뀝니다.</p>
+</li>
+<li><h3>멈추려면 정지를 누르세요</h3>
+<p>아래의 <b>정지</b> 또는 <kbd>Esc</kbd>를 누르세요. 전체화면에서 Esc를 누르면 소리가 멈추고 전체화면도 해제됩니다.</p>
+</li>
+</ol>
+<nav class="related" aria-label="함께 읽기"><a href="#timers">활동 시간을 정하려면 타이머 →</a></nav>
+</section>
 
-  </main></div>
+<section class="chapter " id="meals" aria-label="오늘의 급식 보기"><header class="chapter-heading" tabindex="-1"><span class="eyebrow">수업 도구</span><h2>오늘의 급식 보기</h2>
+<p>학교를 등록하면 날짜별 식단을 확인할 수 있습니다.</p>
+</header>
+<p class="route"><strong>여는 곳</strong>메모 창 상단의 급식 아이콘 · 모던 디자인은 ‘급식’</p>
+<ol class="steps"><li><h3>학교를 찾으세요</h3>
+<p>학교 이름을 두 글자 이상 입력하세요. 검색 결과의 학교 이름과 주소를 확인한 뒤 등록하세요.</p>
+</li>
+<li><h3>날짜를 바꿔 보세요</h3>
+<p>좌우 화살표로 다른 날짜를 확인하세요. 창을 넓히면 주간 보기로 바뀌고, 이때 화살표는 한 주씩 이동합니다. <kbd>T</kbd>를 누르면 오늘로 돌아옵니다.</p>
+</li>
+<li><h3>보기 편하게 맞추세요</h3>
+<p>급식 설정에서 끼니, 알레르기 표시, 영양·원산지 정보와 글꼴·글자 크기를 바꿀 수 있습니다. 선택한 알레르기는 메뉴 옆에 표시됩니다.</p>
+</li>
+<li><h3>메뉴를 복사하세요</h3>
+<p><b>메뉴 복사</b> 버튼 또는 <kbd>Ctrl</kbd> + <kbd>C</kbd>로 현재 날짜의 메뉴를 복사해 안내문 등에 붙여 넣으세요.</p>
+</li>
+</ol>
+<aside class="note"><strong>인터넷이 끊겼다면</strong><p>이미 저장된 식단은 볼 수 있습니다. 새 식단을 불러오거나 학교를 검색하려면 인터넷에 연결하세요.</p>
+</aside>
+<nav class="related" aria-label="함께 읽기"><a href="#noticeboard">알림장 작성하기 →</a></nav>
+</section>
 
-  <div class="footer">
-    <span class="footer-title">당신의 일상을 정돈하는 가장 스마트한 방법</span>
-    <span class="footer-credit">Tidy Task v5.5.0 &nbsp;·&nbsp; © 2026 <img src="chaltteok.webp" alt="" width="28" height="28" style="object-fit:contain;vertical-align:middle"> 찰떡쌤. All rights reserved.</span>
-  </div>
+<section class="chapter " id="toolkit-settings" aria-label="툴킷 모양과 도구 바꾸기"><header class="chapter-heading" tabindex="-1"><span class="eyebrow">설정과 도움말</span><h2>툴킷 모양과 도구 바꾸기</h2>
+<p>툴바의 크기와 방향을 바꾸고, 자주 쓰는 도구만 남겨 보세요.</p>
+</header>
+<p class="route"><strong>여는 곳</strong>Tidy 툴킷 툴바 → 설정</p>
+<dl class="facts"><div><dt>방향 · 크기 · 접기</dt>
+<dd>가로 또는 세로 방향을 선택하세요. 크기는 <b>매우 작게·작게·보통·크게·매우 크게</b> 중에서 고릅니다. 툴바의 접기 버튼으로 차지하는 공간을 줄일 수도 있습니다.</dd>
+</div>
+<div><dt>색상과 다크 모드</dt>
+<dd><b>세이지·앰버·오션·로즈·라벤더·슬레이트</b> 테마가 있습니다. 다크 모드를 끄면 선택한 색상으로 돌아옵니다. 메모 창의 테마와는 별도로 설정합니다.</dd>
+</div>
+<div><dt>표시할 도구</dt>
+<dd>자주 쓰는 도구만 켜 두세요. 표시를 끄면 툴바에서 버튼이 숨겨집니다. 해당 도구에 작성한 기록을 삭제하는 기능은 아닙니다.</dd>
+</div>
+<div><dt>외부 툴</dt>
+<dd><b>롤린썬더</b>와 <b>클래너</b>를 브라우저로 열 수 있습니다. 외부 툴 사용 여부와 표시할 서비스를 설정하세요. 웹 서비스에는 인터넷 연결이 필요합니다.</dd>
+</div>
+</dl>
+<nav class="related" aria-label="함께 읽기"><a href="#troubleshooting">툴바가 화면 밖에 있을 때 →</a></nav>
+</section>
 
-</body>
-</html>
+<section class="chapter " id="settings" aria-label="앱 설정 · 자료 내보내기"><header class="chapter-heading" tabindex="-1"><span class="eyebrow">설정과 도움말</span><h2>앱 설정 · 자료 내보내기</h2>
+<p>메모 창의 글꼴과 디자인을 바꾸고, 필요한 자료를 파일로 남깁니다.</p>
+</header>
+<p class="route"><strong>여는 곳</strong>메모 창 상단을 우클릭 → 설정 · 모던 디자인은 메뉴 → 설정</p>
+<dl class="facts"><div><dt>글꼴과 글자 크기</dt>
+<dd>설정에서 본문과 화면 도구에 쓰는 글꼴·크기를 조절하세요. 메모의 기본 글꼴은 메이플스토리체입니다. PC의 글꼴 파일을 등록해 사용할 수도 있습니다.</dd>
+</div>
+<div><dt>상단 디자인</dt>
+<dd><b>모던</b>은 서식·알림·급식처럼 이름이 보이는 버튼을 사용합니다. 아이콘이 익숙하지 않다면 모던을 선택해 보세요. <b>클래식</b>은 아이콘 중심의 배치입니다.</dd>
+</div>
+<div><dt>테마 · 알림 · 소리</dt>
+<dd>메모의 15가지 색상 테마와 다크 모드, 마감된 일·중요한 메모 표시, 통합 리마인더와 전체 무음 모드를 설정할 수 있습니다.</dd>
+</div>
+<div><dt>업데이트</dt>
+<dd>설정에서 현재 버전과 새 버전을 확인하세요. 업데이트 안내에서는 내려받기, 내일 다시 알림, 이 버전 건너뛰기를 선택할 수 있습니다.</dd>
+</div>
+</dl>
+<details class="more"><summary>메모를 TXT 파일로 내보내고 가져오기</summary><div><ol class="steps"><li><h3>내보낼 메모 창을 여세요</h3>
+<p>그 창의 상단을 우클릭하고 <b>메모장으로 내보내기</b>를 선택하세요. 현재 창의 할 일·마감된 일·아래 메모가 TXT 파일로 저장됩니다.</p>
+</li>
+<li><h3>가져오기 전에 현재 내용을 남기세요</h3>
+<p><b>메모장 가져오기</b>는 현재 창의 할 일·마감된 일·메모를 가져온 내용으로 바꿉니다. 기존 내용이 필요하면 먼저 내보내세요. TXT는 글자 내용 중심이므로 원래의 꾸밈 서식을 보관하는 용도가 아닙니다.</p>
+</li>
+</ol>
+</div>
+</details>
+<details class="more"><summary>학급 명단 백업하고 복원하기</summary><div><p><b>학급 명단 → 데이터 내보내기</b>로 학급 자료를 별도 파일에 보관하세요. 복원할 때는 같은 창의 <b>백업 복원</b>에서 파일을 선택합니다.</p>
+<p>백업 복원은 현재 학급 자료를 백업 파일의 학급 자료로 <b>대체</b>합니다. 안내에 나온 학급 수와 내용을 확인한 뒤 진행하세요.</p>
+</div>
+</details>
+<aside class="note"><strong>메모 TXT 한 개에 모든 자료가 들어가지는 않아요.</strong><p>다른 메모 창, 아카이브의 전체 기록, 학급 명단, 알림장, 토너먼트 자료는 현재 창의 TXT에 포함되지 않습니다. 학급 명단은 자체 내보내기를 사용하고, 나머지 도구의 필요한 기록은 각각 확인해 보관하세요.</p>
+</aside>
+<details class="more"><summary>공지의 숨기기 버튼은 어떻게 다른가요?</summary><div><p><b>오늘 그만보기</b>는 오늘 자정까지 숨깁니다. <b>더 이상 보지 않기</b>는 해당 공지에 적용됩니다. <b>닫기</b>는 현재 창만 닫고 숨김 설정은 바꾸지 않습니다.</p>
+</div>
+</details>
+<nav class="related" aria-label="함께 읽기"><a href="#privacy">사용 통계 안내 →</a></nav>
+</section>
+
+<section class="chapter " id="shortcuts" aria-label="자주 쓰는 단축키"><header class="chapter-heading" tabindex="-1"><span class="eyebrow">설정과 도움말</span><h2>자주 쓰는 단축키</h2>
+<p>단축키를 외우지 않아도 버튼으로 사용할 수 있습니다. 익숙해지면 필요한 것부터 써 보세요.</p>
+</header>
+<p class="route"><strong>여는 곳</strong>각 기능을 사용 중인 창</p>
+<dl class="facts"><div><dt>메모 입력칸에서 Enter</dt>
+<dd>입력한 내용을 새 할 일로 추가합니다.</dd>
+</div>
+<div><dt>메모 창에서 Ctrl + S</dt>
+<dd>현재 입력한 내용을 바로 저장합니다.</dd>
+</div>
+<div><dt>Ctrl + Z / Ctrl + Y</dt>
+<dd>실행 취소 / 다시 실행입니다. 글을 편집 중일 때는 그 편집 내용에 적용됩니다.</dd>
+</div>
+<div><dt>Ctrl + C / Ctrl + V</dt>
+<dd>선택한 내용을 복사 / 붙여넣기합니다. 메모 창의 <b>여러 항목 선택</b> 모드에서 글자를 편집하지 않는 상태로 여러 줄을 붙여넣으면, 한 줄씩 할 일로 추가됩니다. 한 번에 최대 10줄입니다.</dd>
+</div>
+<div><dt>여러 항목 선택 중 Ctrl + B / I / U</dt>
+<dd>선택한 할 일을 굵게 / 기울임 / 밑줄로 바꿉니다.</dd>
+</div>
+<div><dt>메모 창에서 Alt + Shift + N / W</dt>
+<dd>글자 사이 간격을 좁게 / 넓게 조절합니다.</dd>
+</div>
+<div><dt>타이머 · 뽑기에서 Space</dt>
+<dd>타이머를 시작·일시정지하거나 뽑기를 시작합니다. 입력칸이나 다른 조작 버튼을 사용 중일 때는 화면의 시작 버튼을 누르세요.</dd>
+</div>
+<div><dt>전체화면에서 Esc</dt>
+<dd>타이머·알림장 등의 전체화면을 나옵니다. 집중벨에서는 재생 중인 소리도 멈춥니다.</dd>
+</div>
+<div><dt>급식창에서 T / Ctrl + C</dt>
+<dd>오늘로 이동 / 현재 날짜의 메뉴 복사입니다. 글을 입력 중일 때는 해당 입력 동작이 우선할 수 있습니다.</dd>
+</div>
+</dl>
+<aside class="note"><strong>단축키의 +는 함께 누른다는 뜻이에요.</strong><p>Ctrl + S는 Ctrl 키를 누른 채 S를 한 번 누르는 동작입니다. + 키를 따로 누르지 않습니다.</p>
+</aside>
+</section>
+
+<section class="chapter " id="troubleshooting" aria-label="잘 안될 때 확인하기"><header class="chapter-heading" tabindex="-1"><span class="eyebrow">설정과 도움말</span><h2>잘 안될 때 확인하기</h2>
+<p>어려운 부분부터 골라 확인해 보세요.</p>
+</header>
+<p class="route"><strong>여는 곳</strong>아래에서 해당하는 상황을 누르세요.</p>
+<details class="more"><summary>글씨가 작거나 흐리게 보여요</summary><div><p>가이드 글씨는 위의 <b>크게·더 크게</b>로 조절하세요. 메모 창은 <b>설정</b>에서 글자 크기를 바꾸세요. 메모 창이 흐리면 <b>창 불투명도</b>를 높이세요.</p>
+</div>
+</details>
+<details class="more"><summary>툴킷이나 메모 창이 보이지 않아요</summary><div><p>화면 오른쪽 아래 시계 근처의 Tidy Task 아이콘을 우클릭하세요. 모니터를 바꾼 뒤 창이 보이지 않으면 <b>좌표 초기화</b>를 선택하세요. 툴킷은 같은 메뉴의 <b>Tidy 툴킷 열기</b>로 다시 엽니다.</p>
+<p>아이콘이 없다면 시계 근처의 위쪽 화살표를 눌러 숨겨진 아이콘도 확인하세요.</p>
+</div>
+</details>
+<details class="more"><summary>뽑기에 학생이 없거나 명단이 달라요</summary><div><p>학급 명단에 학생을 등록했는지, 뽑기에서 원하는 학급을 골랐는지 확인하세요. 남학생·여학생 필터, <b>대상 관리</b>의 제외 대상, <b>한 번씩 골고루</b>로 이미 뽑힌 대상도 확인하세요.</p>
+<p>모둠 뽑기는 <b>목록 입력</b>에 모둠 이름을 넣어야 합니다. 토너먼트에서 모둠을 불러오는 기능과 사용 방법이 다릅니다.</p>
+</div>
+</details>
+<details class="more"><summary>타이머 소리나 집중벨 소리가 안 나요</summary><div><p>타이머 설정에서 원하는 소리가 켜져 있는지 확인하고 <b>듣기</b>를 눌러 보세요. 집중벨은 창 아래의 음량과 음소거를 확인하세요. 컴퓨터의 스피커 음량과 출력 장치도 확인하세요.</p>
+</div>
+</details>
+<details class="more"><summary>마감일 알림이 보이지 않아요</summary><div><p>해당 할 일의 마감일과 시스템 설정의 <b>통합 리마인더</b>를 확인하세요. 알림창에서 <b>오늘 끄기</b>나 <b>1시간 후·시간 지정</b>을 선택했는지도 확인하세요.</p>
+</div>
+</details>
+<details class="more"><summary>명렬표 파일을 가져오지 못했어요</summary><div><p>PDF·XLSX·CSV·HWPX 형식인지, 20MB 이하인지 확인하세요. HWP 파일은 지원 형식으로 저장한 뒤 가져오세요. 내용을 읽지 못하면 이름이나 표를 복사해 붙여넣는 방법도 있습니다.</p>
+<p>열을 잘못 읽었다면 <b>직접 열 지정</b>을 사용하고 파일을 다시 선택하세요. 등록 전 미리보기에서 번호와 이름을 확인하세요.</p>
+</div>
+</details>
+<details class="more"><summary>알림장 내용을 되돌리고 싶어요</summary><div><p>저장 후 수정한 내용은 <b>저장본으로</b>를 눌러 되돌릴 수 있습니다. 삭제한 날짜는 <b>기록 열기 → 휴지통 → 복원</b>에서 되찾으세요. 영구 삭제한 기록은 휴지통에서 복원할 수 없습니다.</p>
+</div>
+</details>
+<nav class="related" aria-label="함께 읽기"><a href="#start">처음으로 돌아가기 →</a></nav>
+</section>
+
+<section class="chapter " id="privacy" aria-label="사용 통계 안내"><header class="chapter-heading" tabindex="-1"><span class="eyebrow">설정과 도움말</span><h2>사용 통계 안내</h2>
+<p>앱의 기능 사용과 오류를 파악하기 위한 통계가 전송됩니다.</p>
+</header>
+<p class="route"><strong>여는 곳</strong>별도의 사용 절차 없이 자동 집계</p>
+<dl class="facts"><div><dt>전송하는 항목</dt>
+<dd>설치별 무작위 ID, 기능 사용 횟수, 앱 버전, 운영체제, 오류 종류를 PostHog로 전송합니다.</dd>
+</div>
+<div><dt>전송하지 않는 내용</dt>
+<dd>메모·할 일 본문, 학교명·학교 코드, 파일 경로, 키보드로 입력한 내용은 수집하지 않습니다. 화면 녹화나 자동 클릭 수집도 사용하지 않습니다.</dd>
+</div>
+</dl>
+<nav class="related" aria-label="함께 읽기"><a href="#settings">설정과 자료 내보내기 →</a></nav>
+</section>
+
+<nav class="page-turn js-only" aria-label="가이드 앞뒤로 읽기"><a id="previous" href="#start"><small>이전 설명</small><span></span></a><a id="next" href="#notes"><small>다음 설명</small><span></span></a></nav>
+<footer class="footer"><a href="#start">가이드 처음으로</a><p>Tidy Task v5.5.2 · 찰떡쌤</p>
+</footer>
+</main>
+</div>
+</body></html>

@@ -216,6 +216,59 @@ pub fn is_work_window(label: &str) -> bool {
     label == "toolkit" || label == "roster" || label == "noticeboard" || label == "picker" || label == "tournament" || label == "focus-bell" || is_timer(label)
 }
 
+/// 교실 도구 창의 첫 크기 규칙(모두 논리 px).
+/// - `ratio`: 작업 영역(작업 표시줄을 뺀 화면) 대비 비율. 학생이 멀리서 보는 화면이라 처음부터 크게 엽니다.
+/// - `base`: 예전 고정 크기. 비율만 쓰면 작은 노트북에서 예전보다 작아지므로 하한으로 씁니다.
+/// - `max`: 큰 모니터에서 한 화면을 다 덮어 다른 창을 가리지 않게 하는 상한입니다.
+struct WorkWindowSize {
+    base: (f64, f64),
+    min: (f64, f64),
+    ratio: (f64, f64),
+    max: (f64, f64),
+}
+// 창 가장자리에 남길 최소 여백. 여러 타이머가 계단식(±48px)으로 떠도 제목줄을 잡을 수 있게 합니다.
+const WORK_MARGIN_X: f64 = 24.0;
+const WORK_MARGIN_Y: f64 = 16.0;
+
+fn work_window_size(role: &str) -> Option<WorkWindowSize> {
+    // 타이머·집중벨은 화면 한쪽에 띄워 두고 수업을 병행하므로 조금 작게,
+    // 뽑기·토너먼트·알림장·명단은 내용이 넓어 더 크게 엽니다.
+    const FOCUS: (f64, f64) = (0.75, 0.86);
+    const WIDE: (f64, f64) = (0.82, 0.88);
+    let (base, min, ratio, max) = match role {
+        kind if KINDS.contains(&kind) => ((960.0, 680.0), (380.0, 520.0), FOCUS, (1480.0, 960.0)),
+        "focus-bell" => ((960.0, 720.0), (640.0, 480.0), FOCUS, (1480.0, 960.0)),
+        "tournament" => ((1180.0, 800.0), (640.0, 520.0), WIDE, (1680.0, 1040.0)),
+        "picker" => ((1440.0, 920.0), (640.0, 520.0), WIDE, (1680.0, 1040.0)),
+        "roster" | "noticeboard" => ((1040.0, 720.0), (640.0, 480.0), WIDE, (1680.0, 1040.0)),
+        _ => return None,
+    };
+    Some(WorkWindowSize { base, min, ratio, max })
+}
+
+/// 작업 영역(논리 px) 안에서 도구 창의 첫 크기를 정합니다.
+/// 순서: 비율 → 예전 크기 이상 → 상한 이하 → 작업 영역(여백 제외) 이하. 마지막 단계가 항상 이깁니다.
+fn initial_work_size(rule: &WorkWindowSize, area_w: f64, area_h: f64) -> (f64, f64) {
+    let fit = |base: f64, ratio: f64, max: f64, area: f64, margin: f64| {
+        (area * ratio)
+            .max(base)
+            .min(max)
+            .min((area - margin * 2.0).max(0.0))
+            .round()
+    };
+    (
+        fit(rule.base.0, rule.ratio.0, rule.max.0, area_w, WORK_MARGIN_X),
+        fit(rule.base.1, rule.ratio.1, rule.max.1, area_h, WORK_MARGIN_Y),
+    )
+}
+
+/// 작업 영역 한 축에서 창의 시작 좌표(작업 영역 기준 물리 px).
+/// 가운데에 두고 계단식 `offset`을 더하되, 창이 커져도 작업 영역 밖으로 밀려나지 않게 가둡니다.
+fn placed_offset(area: f64, size: f64, offset: f64) -> f64 {
+    let room = (area - size).max(0.0);
+    (room / 2.0 + offset).clamp(0.0, room)
+}
+
 fn create_window(app: &tauri::AppHandle, role: &str) -> Result<String, String> {
     if QUITTING.load(Ordering::SeqCst) || crate::noticeboard_quit::pending() {
         return Err("앱을 종료하고 있어요.".into());
@@ -239,16 +292,10 @@ fn create_window(app: &tauri::AppHandle, role: &str) -> Result<String, String> {
         }
         return Ok(label);
     }
-    let (width, height, min_w, min_h) = if timer {
-        (960.0, 680.0, 380.0, 520.0)
-    } else if role == "focus-bell" {
-        (960.0, 720.0, 640.0, 480.0)
-    } else if role == "tournament" {
-        (1180.0, 800.0, 640.0, 520.0)
-    } else if role == "picker" {
-        (1440.0, 920.0, 640.0, 520.0)
-    } else if role == "roster" || role == "noticeboard" {
-        (1040.0, 720.0, 640.0, 480.0)
+    let work_size = work_window_size(role);
+    let (width, height, min_w, min_h) = if let Some(rule) = &work_size {
+        // 모니터를 알기 전의 임시 크기입니다. 아래에서 작업 영역에 맞춰 다시 정합니다.
+        (rule.base.0, rule.base.1, rule.min.0, rule.min.1)
     } else if role == "toolkit-settings" {
         (380.0, 480.0, 340.0, 400.0)
     } else if role == "toolkit-menu" {
@@ -295,19 +342,25 @@ fn create_window(app: &tauri::AppHandle, role: &str) -> Result<String, String> {
     if let Some(m) = monitor {
         let area = m.work_area();
         let scale = m.scale_factor();
-        let w = width.min(area.size.width as f64 / scale);
-        let h = height.min(area.size.height as f64 / scale);
-        let _ = win.set_size(tauri::LogicalSize::new(w, h));
+        let (area_w, area_h) = (area.size.width as f64, area.size.height as f64);
+        let (w, h) = match &work_size {
+            Some(rule) => initial_work_size(rule, area_w / scale, area_h / scale),
+            None => (width.min(area_w / scale), height.min(area_h / scale)),
+        };
         let offset = if timer {
             ((id % 5) as f64 - 2.0) * 24.0 * scale
         } else {
             0.0
         };
-        let x =
-            area.position.x as f64 + ((area.size.width as f64 - w * scale) / 2.0 + offset).max(0.0);
-        let y = area.position.y as f64
-            + ((area.size.height as f64 - h * scale) / 2.0 + offset).max(0.0);
-        let _ = win.set_position(tauri::PhysicalPosition::new(x as i32, y as i32));
+        let x = area.position.x as f64 + placed_offset(area_w, w * scale, offset);
+        let y = area.position.y as f64 + placed_offset(area_h, h * scale, offset);
+        // 왜 두 번 적용하는가: 창은 만들어진 모니터의 배율로 먼저 크기가 정해집니다.
+        // 배율이 다른 모니터(4K 200% ↔ FHD 100%)로 옮기면 Windows가 배율 변경에 맞춰 크기·위치를
+        // 다시 잡으므로, 옮긴 뒤 목표 모니터 기준으로 한 번 더 맞춥니다. 같은 배율이면 아무 변화가 없습니다.
+        for _ in 0..2 {
+            let _ = win.set_size(tauri::LogicalSize::new(w, h));
+            let _ = win.set_position(tauri::PhysicalPosition::new(x as i32, y as i32));
+        }
     }
     Ok(label)
 }
@@ -428,6 +481,47 @@ mod tests {
         assert_eq!(migrated["toolkit"]["visibleToolIds"], json!(["roster","focus-bell"]));
         let hidden = merge(migrated, "toolkit", json!({"visibleToolIds":["roster"]})).unwrap();
         assert_eq!(normalized(Some(hidden)).unwrap()["toolkit"]["visibleToolIds"], json!(["roster"]));
+    }
+
+    #[test]
+    fn work_windows_open_large_on_classroom_screens() {
+        let timer = work_window_size("digital").unwrap();
+        let picker = work_window_size("picker").unwrap();
+        // 1920×1080(작업 표시줄 48 제외) — 4K 200%와 FHD 100% 모두 이 논리 크기입니다.
+        assert_eq!(initial_work_size(&timer, 1920.0, 1032.0), (1440.0, 888.0));
+        // 뽑기는 예전부터 높이가 넉넉해(920) 높이는 그대로, 너비만 넓어집니다.
+        assert_eq!(initial_work_size(&picker, 1920.0, 1032.0), (1574.0, 920.0));
+        // 모든 도구가 예전 고정 크기보다 작아지지 않고, 너비는 모두 커집니다.
+        for role in ["digital", "analog", "hourglass", "stopwatch", "focus-bell", "tournament", "picker", "roster", "noticeboard"] {
+            let rule = work_window_size(role).unwrap();
+            let (w, h) = initial_work_size(&rule, 1920.0, 1032.0);
+            assert!(w > rule.base.0 && h >= rule.base.1, "{role}: {w}×{h}");
+        }
+    }
+    #[test]
+    fn work_window_size_respects_small_and_huge_screens() {
+        let timer = work_window_size("analog").unwrap();
+        let picker = work_window_size("picker").unwrap();
+        // 1366×768 노트북: 비율로는 예전보다 작아지지만 예전 크기를 지킵니다.
+        assert_eq!(initial_work_size(&timer, 1366.0, 728.0), (1025.0, 680.0));
+        // 예전 크기도 들어가지 않으면 작업 영역(여백 제외)에 맞춥니다.
+        assert_eq!(initial_work_size(&picker, 1366.0, 728.0), (1318.0, 696.0));
+        // 큰 모니터에서는 상한에서 멈춥니다.
+        assert_eq!(initial_work_size(&timer, 2560.0, 1392.0), (1480.0, 960.0));
+        assert_eq!(initial_work_size(&picker, 3840.0, 2112.0), (1680.0, 1040.0));
+        // 메뉴·설정 같은 작은 창은 이 규칙을 쓰지 않습니다.
+        assert!(work_window_size("toolkit-menu").is_none());
+        assert!(work_window_size("toolkit-settings").is_none());
+    }
+    #[test]
+    fn staggered_timers_stay_inside_work_area() {
+        // 가운데 + 계단식 이동
+        assert_eq!(placed_offset(1920.0, 1440.0, 48.0), 288.0);
+        // 창이 작업 영역을 거의 채우면 이동해도 밖으로 나가지 않습니다.
+        assert_eq!(placed_offset(1366.0, 1318.0, 48.0), 48.0);
+        assert_eq!(placed_offset(1366.0, 1318.0, -48.0), 0.0);
+        // 창이 작업 영역보다 커도 음수 좌표로 가지 않습니다.
+        assert_eq!(placed_offset(800.0, 900.0, 24.0), 0.0);
     }
 
     #[test]

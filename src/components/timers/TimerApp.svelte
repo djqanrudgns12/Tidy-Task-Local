@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount, untrack } from 'svelte';
+  import { onMount, tick, untrack } from 'svelte';
   import { AlertDialog } from 'bits-ui';
   import {
     Play,
@@ -13,6 +13,8 @@
     SlidersHorizontal,
     Check,
     Plus,
+    NotebookPen,
+    ChevronDown,
   } from 'lucide-svelte';
   import { getCurrentWindow } from '@tauri-apps/api/window';
   import { PhysicalPosition, PhysicalSize } from '@tauri-apps/api/dpi';
@@ -44,7 +46,12 @@
   let prefs = $state<import('../../lib/toolkit/preferences.js').Preferences>(
     defaultPreferences(timerKind),
   );
+  // 설명은 제목처럼 이 창에서만 쓰는 활동 내용입니다. 타이머 세션은 저장소에 넣지 않는다는
+  // 툴킷 원칙(toolkit.rs 머리말)을 따라 창을 닫으면 함께 사라집니다.
   let title = $state(''),
+    note = $state(''),
+    noteOpen = $state(false),
+    noteInput = $state<HTMLTextAreaElement | null>(null),
     pinned = $state(false),
     settingsOpen = $state(!stopwatch),
     error = $state(''),
@@ -78,15 +85,8 @@
   }, timerKind);
   const draggable = (node: HTMLElement) => (native ? dragRegion(node) : { destroy() {} });
   const name = TIMER_NAMES[timerKind];
-  const phaseLabel = $derived(
-    { ready: '준비', running: '진행 중', paused: '잠시 멈춤', completed: '시간 끝' }[view.phase],
-  );
   const shownTime = $derived(formatTime(stopwatch ? view.elapsedMs : view.remainingMs, stopwatch));
-  const configuredDuration = $derived(
-    `${Math.floor(model.initialMs / 60000) ? `${Math.floor(model.initialMs / 60000)}분` : ''}${
-      model.initialMs % 60000 ? ` ${Math.round((model.initialMs % 60000) / 1000)}초` : ''
-    }`.trim() || '0초',
-  );
+  const hasNote = $derived(note.trim().length > 0);
   const progress = $derived(Math.max(0, Math.min(1, 1 - sandFraction(view))));
   const closeWarning = $derived(
     stopwatch && model.laps.length > 0
@@ -154,6 +154,14 @@
     } catch {
       error = '항상 위 상태를 바꾸지 못했어요.';
     }
+  }
+  async function toggleNote() {
+    noteOpen = !noteOpen;
+    // 빈 설명을 펼쳤다는 것은 새로 쓰겠다는 뜻이므로 바로 입력할 수 있게 합니다.
+    // 이미 내용이 있으면 학생에게 보여 주려고 펼친 경우가 많아 커서를 두지 않습니다.
+    if (!noteOpen || hasNote) return;
+    await tick();
+    noteInput?.focus();
   }
   async function readExpandedState() {
     const win = getCurrentWindow();
@@ -366,40 +374,53 @@
   </header>
   <div class="timer-workspace">
     <div class="timer-layout" class:with-settings={settingsOpen} class:with-laps={stopwatch}>
-      <section class="timer-main" aria-label={name}>
+      <section class="timer-main" class:note-open={noteOpen} aria-label={name}>
         <header class="timer-panel-heading">
-          <div class="timer-title-group">
-            <input
-              class="timer-title-input"
-              aria-label="활동 제목"
-              placeholder={name}
-              title={title ? '활동 이름 수정' : '활동 이름 입력'}
-              bind:value={title}
-              maxlength="40"
-            />
-            <div
-              class="timer-status-summary"
-              class:running={view.phase === 'running'}
-              class:paused={view.phase === 'paused'}
-              class:completed={view.phase === 'completed'}
-              aria-label={stopwatch ? phaseLabel : `${phaseLabel}, ${configuredDuration}`}
+          <input
+            class="timer-title-input"
+            aria-label="활동 제목"
+            placeholder={name}
+            title={title ? '활동 이름 수정' : '활동 이름 입력'}
+            bind:value={title}
+            maxlength="40"
+          />
+          <!-- 왜 한 줄 격자인가: 설명 버튼은 가운데, 설정 버튼은 오른쪽 끝에 두되
+               창이 좁아져도 두 버튼이 겹치지 않고 가운데 쪽이 비켜서도록 합니다. -->
+          <div class="timer-heading-tools">
+            <button
+              class="timer-note-toggle"
+              class:active={noteOpen}
+              class:has-note={hasNote}
+              aria-expanded={noteOpen}
+              aria-controls={noteOpen ? 'timer-note-panel' : undefined}
+              onclick={toggleNote}
+              ><NotebookPen size={16} /><span
+                >{noteOpen ? '설명 접기' : hasNote ? '설명 보기' : '설명 추가'}</span
+              >{#if hasNote && !noteOpen}<i class="note-dot" aria-hidden="true"></i
+                >{/if}<ChevronDown size={15} class="note-chevron" /></button
+            ><button
+              class="timer-settings-toggle"
+              class:active={settingsOpen}
+              aria-expanded={settingsOpen}
+              aria-controls="timer-settings-panel"
+              onclick={() => (settingsOpen = !settingsOpen)}
+              ><SlidersHorizontal size={17} /><span>{settingsOpen
+                  ? '설정 접기'
+                  : '설정 보기'}</span></button
             >
-              <span class="status-state"><i></i>{phaseLabel}</span>
-              {#if !stopwatch}<span class="status-divider" aria-hidden="true"></span><strong
-                  >{configuredDuration}</strong
-                >{/if}
-            </div>
           </div>
-          <button
-            class="timer-settings-toggle"
-            class:active={settingsOpen}
-            aria-expanded={settingsOpen}
-            aria-controls="timer-settings-panel"
-            onclick={() => (settingsOpen = !settingsOpen)}
-            ><SlidersHorizontal size={17} /><span>{settingsOpen
-                ? '설정 접기'
-                : '설정 보기'}</span></button
-          >
+          {#if noteOpen}<div class="timer-note" id="timer-note-panel">
+              <textarea
+                class="timer-note-input"
+                aria-label="활동 설명"
+                placeholder="활동 방법, 준비물, 주의할 점처럼 자세한 내용을 적어 주세요."
+                rows="2"
+                maxlength="1000"
+                spellcheck="false"
+                bind:value={note}
+                bind:this={noteInput}
+              ></textarea>
+            </div>{/if}
         </header>
         <div
           class="timer-stage"
