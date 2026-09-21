@@ -1,0 +1,16 @@
+{
+  "checks": [
+    "500 candidates retained",
+    "large list renders at most 30 balloons",
+    "repeat key does not duplicate result",
+    "input space never draws",
+    "missing assets block claw draw",
+    "classic recovers from missing assets",
+    "mid-animation rename preserves committed name",
+    "next draw reflects repository rename"
+  ],
+  "idle30BalloonFrameMs": {
+    "median": 16.699999999999818,
+    "p95": 16.799999999999727
+  }
+}

@@ -183,7 +183,7 @@
     </div>
 
     <div class="flex-1 overflow-y-auto p-4 flex flex-col gap-3.5 custom-scrollbar">
-      <ToolkitToggle/>
+      <ToolkitToggle variant="panel" isDarkMode={localIsDarkMode} accent={updateAccent}/>
       <fieldset class="header-design-settings" class:design-dark={localIsDarkMode} style="--design-accent:{updateAccent};">
         <legend>Tidy task 상단 디자인</legend>
         <div class="design-options">

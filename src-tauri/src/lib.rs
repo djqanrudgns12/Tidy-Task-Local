@@ -6,6 +6,10 @@ use tauri_plugin_autostart::MacosLauncher;
 mod neis;
 mod analytics;
 mod toolkit;
+mod picker;
+mod noticeboard;
+mod noticeboard_quit;
+mod classroom;
 
 // 모든 창이 함께 쓰는 저장 파일과 그 백업 파일 이름
 const STORE_FILE: &str = "tidy-task-config.json";
@@ -13,7 +17,7 @@ const BACKUP_FILE: &str = "tidy-task-config.backup.json";
 const BACKUP_PREV_FILE: &str = "tidy-task-config.backup-prev.json";
 
 // 트레이 "종료" 후 창들이 마지막 입력을 저장할 수 있도록 기다리는 시간
-const QUIT_FLUSH_WAIT: Duration = Duration::from_millis(800);
+
 
 // 시작 후 이 시간이 지나도 main 창이 숨어 있거나 화면 밖이면 Rust가 직접 꺼냅니다.
 const STARTUP_REVEAL_DELAY: Duration = Duration::from_secs(8);
@@ -236,6 +240,13 @@ pub fn run() {
     tauri::Builder::default()
         // ✨ 1. notification 플러그인 초기화 줄 삭제됨
         .on_window_event(|window, event| {
+            if window.label() == "roster" {
+                if let tauri::WindowEvent::DragDrop(tauri::DragDropEvent::Drop { paths, .. }) = event {
+                    if paths.len() == 1 {
+                        if let Some(token) = classroom::import::register_drop(&paths[0]) { let _ = window.emit("classroom-file-dropped", token); }
+                    }
+                }
+            }
             if let tauri::WindowEvent::Destroyed = event {
                 let app = window.app_handle();
                 let windows = app.webview_windows();
@@ -270,7 +281,7 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_opener::init())
-        .invoke_handler(tauri::generate_handler![save_custom_font, store_health, neis::neis_search_schools, neis::neis_meals, neis::neis_schedule, neis::meal_take_launch_token, analytics::analytics_track, toolkit::toolkit_read, toolkit::toolkit_patch, toolkit::toolkit_open, toolkit::toolkit_set_enabled])
+        .invoke_handler(tauri::generate_handler![picker::picker_read, picker::picker_write, noticeboard::noticeboard_execute, noticeboard_quit::noticeboard_quit_reply, noticeboard_quit::noticeboard_cancel_quit, save_custom_font, store_health, neis::neis_search_schools, neis::neis_meals, neis::neis_schedule, neis::meal_take_launch_token, analytics::analytics_track, classroom::classroom_quit_reply, classroom::classroom_read, classroom::classroom_execute, classroom::classroom_clear_history, classroom::import::classroom_take_drop, classroom::import::classroom_parse, classroom::import::classroom_cancel_parse, classroom::import::classroom_project, toolkit::toolkit_read, toolkit::toolkit_patch, toolkit::toolkit_open, toolkit::toolkit_set_enabled])
         .setup(|app| {
             toolkit::startup(app.handle().clone());
             // 어떤 창보다 먼저 저장 파일을 점검·백업합니다.
@@ -329,15 +340,7 @@ pub fn run() {
                     .tooltip("Tidy Task")
                     .on_menu_event(|app, event| match event.id.as_ref() {
                         "quit" => {
-                            toolkit::QUITTING.store(true, std::sync::atomic::Ordering::SeqCst);
-                            // 종료 직전 모든 창에 "지금 저장하세요"를 알리고, 기록할 시간을 잠시 준 뒤 종료합니다.
-                            // 왜: 바로 종료하면 입력 후 0.5초 안에 예약돼 있던 저장이 사라질 수 있습니다.
-                            let _ = app.emit("before-quit", ());
-                            let handle = app.clone();
-                            std::thread::spawn(move || {
-                                std::thread::sleep(QUIT_FLUSH_WAIT);
-                                handle.exit(0);
-                            });
+                            if !noticeboard_quit::request(&app) { classroom::request_quit(app); }
                         }
                         // ✨ 3. 트레이 메뉴 '열기' 시에도 방어 로직
                         "open" => show_or_create_main(app),

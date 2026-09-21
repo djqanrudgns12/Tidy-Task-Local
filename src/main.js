@@ -1,5 +1,5 @@
 import { mount } from "svelte";
-import { initAnalytics } from './lib/analytics.js';
+import { initAnalytics } from "./lib/analytics.js";
 import "./app.css";
 import { isTauri } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
@@ -12,22 +12,66 @@ const label = isTauri()
 async function start() {
   const target = document.getElementById("app");
   if (!target) throw new Error("Application root is missing");
-  const toolkitLabel = isTauri() ? label : (import.meta.env.DEV ? new URLSearchParams(location.search).get('toolkit-preview') : null);
-  if (toolkitLabel && (toolkitLabel.startsWith('toolkit') || toolkitLabel.startsWith('timer-') || ['digital','analog','hourglass','stopwatch'].includes(toolkitLabel))) {
-    const { default: ToolkitApp } = await import('./components/toolkit/ToolkitApp.svelte');
+  const toolkitLabel = isTauri()
+    ? label
+    : import.meta.env.DEV
+      ? new URLSearchParams(location.search).get("toolkit-preview")
+      : null;
+  if (toolkitLabel === "noticeboard") {
+    const { default: NoticeboardEntry } = await import(
+      "./components/noticeboard/NoticeboardEntry.svelte"
+    );
+    return mount(NoticeboardEntry, { target });
+  }
+  if (
+    toolkitLabel &&
+    (toolkitLabel.startsWith("toolkit") ||
+      toolkitLabel.startsWith("timer-") ||
+      [
+        "digital",
+        "analog",
+        "hourglass",
+        "stopwatch",
+        "roster",
+        "picker",
+        "noticeboard",
+      ].includes(toolkitLabel))
+  ) {
+    const { default: ToolkitApp } = await import(
+      "./components/toolkit/ToolkitApp.svelte"
+    );
     return mount(ToolkitApp, { target, props: { label: toolkitLabel } });
   }
   if (isMealWindowLabel(label)) {
-    const { default: MealApp } =
-      await import("./components/meal/MealApp.svelte");
+    const { default: MealApp } = await import(
+      "./components/meal/MealApp.svelte"
+    );
     return mount(MealApp, { target, props: { label: label || "meal" } });
   }
-  if (!isTauri() && import.meta.env.DEV && new URLSearchParams(location.search).has("notice-preview")) {
-    const { default: UpdateNotice } = await import("./components/UpdateNotice.svelte");
-    return mount(UpdateNotice, { target, props: { preview: true, previewDark: new URLSearchParams(location.search).has("notice-dark") } });
+  if (
+    !isTauri() &&
+    import.meta.env.DEV &&
+    new URLSearchParams(location.search).has("notice-preview")
+  ) {
+    const { default: UpdateNotice } = await import(
+      "./components/UpdateNotice.svelte"
+    );
+    return mount(UpdateNotice, {
+      target,
+      props: {
+        preview: true,
+        previewDark: new URLSearchParams(location.search).has("notice-dark"),
+      },
+    });
   }
-  if (!isTauri() && import.meta.env.DEV && new URLSearchParams(location.search).has('header-preview')) {
-    const { default: HeaderPreview } = await import('./dev/HeaderPreview.svelte');
+  if (
+    !isTauri() &&
+    import.meta.env.DEV &&
+    new URLSearchParams(location.search).has("header-preview")
+  ) {
+    const { default: HeaderPreview } = await import(
+      "./dev/HeaderPreview.svelte"
+    );
     return mount(HeaderPreview, { target });
   }
   const Component =

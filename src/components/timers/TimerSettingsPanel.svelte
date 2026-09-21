@@ -83,6 +83,7 @@
   {id}
   class="timer-settings-panel"
   class:analog-settings={kind === 'analog'}
+  class:stopwatch-settings={kind === 'stopwatch'}
   aria-label="타이머 설정"
 >
   {#if kind !== 'stopwatch'}<section class="settings-section time-settings-section">

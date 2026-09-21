@@ -20,7 +20,7 @@ fn defaults() -> Value {
     analog["dialRangeMinutes"] = json!(60);
     let mut hourglass = sound.clone();
     hourglass["showRemainingTime"] = json!(true);
-    json!({"schemaVersion":1,"revision":0,"toolkit":{"enabled":true,"orientation":"horizontal","collapsed":false,"visibleToolIds":["timer"],"position":null},
+    json!({"schemaVersion":4,"revision":0,"toolkit":{"enabled":true,"orientation":"horizontal","collapsed":false,"visibleToolIds":["timer","picker","noticeboard","roster"],"hiddenPlatformIds":[],"position":null},
         "preferences":{"digital":sound,"analog":analog,"hourglass":hourglass,"stopwatch":{"tickEnabled":true}}})
 }
 fn field_valid(scope: &str, key: &str, value: &Value) -> bool {
@@ -30,7 +30,9 @@ fn field_valid(scope: &str, key: &str, value: &Value) -> bool {
             "orientation" => matches!(value.as_str(), Some("horizontal" | "vertical")),
             "visibleToolIds" => value
                 .as_array()
-                .is_some_and(|a| a.len() <= 1 && a.iter().all(|v| v == "timer")),
+                .is_some_and(|a| a.len() <= 4 && a.iter().all(|v| v == "timer" || v == "roster" || v == "noticeboard" || v == "picker")),
+            "hiddenPlatformIds" => value.as_array().is_some_and(|a|
+                a.len() <= 2 && a.iter().all(|v| v == "clanner" || v == "rollinthunder")),
             "position" => {
                 value.is_null()
                     || value.as_object().is_some_and(|o| {
@@ -80,7 +82,7 @@ fn field_valid(scope: &str, key: &str, value: &Value) -> bool {
 fn normalized(raw: Option<Value>) -> Result<Value, String> {
     let mut result = defaults();
     let Some(raw) = raw else { return Ok(result) };
-    if raw["schemaVersion"] != 1 {
+    if raw["schemaVersion"] != 1 && raw["schemaVersion"] != 2 && raw["schemaVersion"] != 3 && raw["schemaVersion"] != 4 {
         return Err("지원하지 않는 툴킷 설정 버전입니다. 원본을 보존합니다.".into());
     }
     result["revision"] = json!(raw["revision"].as_u64().unwrap_or(0));
@@ -100,6 +102,21 @@ fn normalized(raw: Option<Value>) -> Result<Value, String> {
                     }
                 }
             }
+        }
+    }
+    if raw["schemaVersion"] == 1 {
+        if let Some(ids) = result["toolkit"]["visibleToolIds"].as_array_mut() {
+            if !ids.iter().any(|id| id == "roster") { ids.push(json!("roster")); }
+        }
+    }
+    if raw["schemaVersion"] == 1 || raw["schemaVersion"] == 2 {
+        if let Some(ids) = result["toolkit"]["visibleToolIds"].as_array_mut() {
+            if !ids.iter().any(|id| id == "noticeboard") { ids.push(json!("noticeboard")); }
+        }
+    }
+    if matches!(raw["schemaVersion"].as_u64(), Some(1 | 2 | 3)) {
+        if let Some(ids) = result["toolkit"]["visibleToolIds"].as_array_mut() {
+            if !ids.iter().any(|id| id == "picker") { ids.push(json!("picker")); }
         }
     }
     Ok(result)
@@ -169,16 +186,16 @@ pub fn is_timer(label: &str) -> bool {
         .any(|kind| label.starts_with(&format!("timer-{kind}-")))
 }
 pub fn is_work_window(label: &str) -> bool {
-    label == "toolkit" || is_timer(label)
+    label == "toolkit" || label == "roster" || label == "noticeboard" || label == "picker" || is_timer(label)
 }
 
 fn create_window(app: &tauri::AppHandle, role: &str) -> Result<String, String> {
-    if QUITTING.load(Ordering::SeqCst) {
+    if QUITTING.load(Ordering::SeqCst) || crate::noticeboard_quit::pending() {
         return Err("앱을 종료하고 있어요.".into());
     }
     let _guard = WINDOW_LOCK.lock().map_err(|_| "창 잠금 오류")?;
     let timer = KINDS.contains(&role);
-    if !timer && !["toolkit", "toolkit-menu", "toolkit-settings"].contains(&role) {
+    if !timer && !["toolkit", "toolkit-menu", "toolkit-settings", "roster", "noticeboard", "picker"].contains(&role) {
         return Err("알 수 없는 도구입니다.".into());
     }
     let id = NEXT_WINDOW.fetch_add(1, Ordering::SeqCst);
@@ -197,14 +214,21 @@ fn create_window(app: &tauri::AppHandle, role: &str) -> Result<String, String> {
     }
     let (width, height, min_w, min_h) = if timer {
         (960.0, 680.0, 380.0, 520.0)
+    } else if role == "picker" {
+        (960.0, 720.0, 640.0, 520.0)
+    } else if role == "roster" || role == "noticeboard" {
+        (1040.0, 720.0, 640.0, 480.0)
     } else if role == "toolkit-settings" {
         (380.0, 480.0, 340.0, 400.0)
     } else if role == "toolkit-menu" {
         (244.0, 250.0, 244.0, 250.0)
     } else {
-        (280.0, 52.0, 90.0, 44.0)
+        (194.0, 66.0, 66.0, 66.0)
     };
     let title = match role {
+        "roster" => "학급 명단",
+        "picker" => "간단 뽑기",
+        "noticeboard" => "알림장",
         "digital" => "전광판 타이머",
         "analog" => "아날로그 타이머",
         "hourglass" => "모래시계",
@@ -220,9 +244,9 @@ fn create_window(app: &tauri::AppHandle, role: &str) -> Result<String, String> {
             .decorations(false)
             .transparent(true)
             .shadow(false)
-            .resizable(timer || role == "toolkit-settings")
-            .always_on_top(!timer)
-            .skip_taskbar(!timer)
+            .resizable(timer || role == "toolkit-settings" || role == "roster" || role == "noticeboard" || role == "picker")
+            .always_on_top(!timer && role != "roster" && role != "noticeboard" && role != "picker")
+            .skip_taskbar(!timer && role != "roster" && role != "noticeboard" && role != "picker")
             .visible(false)
             .build()
             .map_err(|e| e.to_string())?;
@@ -300,11 +324,21 @@ mod tests {
     }
     #[test]
     fn future_version_is_not_overwritten() {
-        assert!(normalized(Some(json!({"schemaVersion":2}))).is_err());
+        assert!(normalized(Some(json!({"schemaVersion":99}))).is_err());
     }
     #[test]
     fn only_work_windows_keep_app_alive() {
         assert!(is_work_window("timer-analog-42"));
+        assert!(is_work_window("noticeboard"));
+        assert!(is_work_window("picker"));
         assert!(!is_work_window("toolkit-menu"));
+    }
+    #[test]
+    fn notice_migration_preserves_hidden_existing_tools() {
+        let value=normalized(Some(json!({"schemaVersion":2,"toolkit":{"visibleToolIds":[],"hiddenPlatformIds":["clanner"]}}))).unwrap();
+        assert_eq!(value["toolkit"]["visibleToolIds"],json!(["noticeboard","picker"]));
+        assert_eq!(value["toolkit"]["hiddenPlatformIds"],json!(["clanner"]));
+        let value=normalized(Some(json!({"schemaVersion":4,"toolkit":{"visibleToolIds":[]}}))).unwrap();
+        assert_eq!(value["toolkit"]["visibleToolIds"],json!([]));
     }
 }

@@ -1,4 +1,6 @@
 import { invoke } from '@tauri-apps/api/core';
+import { openUrl } from '@tauri-apps/plugin-opener';
+import { PLATFORM_TOOLS } from './registry.js';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { WebviewWindow } from '@tauri-apps/api/webviewWindow';
 import { PhysicalPosition, LogicalSize } from '@tauri-apps/api/dpi';
@@ -8,6 +10,13 @@ import { getMonitorGeometries, ensureWindowOnScreen } from '../windows/windowReg
 export async function openTool(role) {
   if (native) return invoke('toolkit_open', { role });
   window.open(`/?toolkit-preview=${role}`, '_blank', 'width=960,height=680');
+}
+/** @param {string} id */
+export async function openPlatform(id) {
+  const platform = PLATFORM_TOOLS.find((tool) => tool.id === id);
+  if (!platform) throw new Error('알 수 없는 플랫폼입니다.');
+  if (native) await openUrl(platform.url);
+  else window.open(platform.url, '_blank', 'noopener,noreferrer');
 }
 export async function closeWindow() {
   if (native) await getCurrentWindow().destroy();
@@ -22,6 +31,11 @@ export async function dismissMenu() {
 /** @param {HTMLElement} trigger */
 export async function showTimerMenu(trigger) {
   if (!native) return false;
+  const visibleMenu = await WebviewWindow.getByLabel('toolkit-menu');
+  if (visibleMenu && (await visibleMenu.isVisible())) {
+    await visibleMenu.hide();
+    return true;
+  }
   await openTool('toolkit-menu');
   const menu = await WebviewWindow.getByLabel('toolkit-menu');
   const host = getCurrentWindow(),

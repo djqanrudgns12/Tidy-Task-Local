@@ -9,6 +9,8 @@
   import { ArrowUpRight } from 'lucide-svelte';
   let list: HTMLDivElement;
   let error = $state('');
+  let suppressInitialFocusRing = $state(true);
+  let focusDismissTimer: ReturnType<typeof setTimeout>;
   async function launch(kind: string) {
     try {
       await openTool(kind);
@@ -20,6 +22,9 @@
   async function keys(e: KeyboardEvent) {
     const buttons = Array.from(list.querySelectorAll('button'));
     const i = buttons.indexOf(document.activeElement as HTMLButtonElement);
+    if (e.key === 'Tab' || ['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(e.key)) {
+      suppressInitialFocusRing = false;
+    }
     if (e.key === 'Escape') {
       await dismissMenu();
       if (native) await (await WebviewWindow.getByLabel('toolkit'))?.setFocus();
@@ -42,8 +47,15 @@
     if (native)
       void getCurrentWindow()
         .onFocusChanged(({ payload }) => {
-          if (!payload) void dismissMenu();
-          else list.querySelector('button')?.focus();
+          clearTimeout(focusDismissTimer);
+          if (!payload) {
+            // 툴바 버튼을 다시 누를 때는 메뉴 창의 blur가 버튼 click보다 먼저 옵니다.
+            // 즉시 숨기면 click 쪽에서 닫힌 메뉴를 다시 열기 때문에, 토글 판단이 끝날 틈을 둡니다.
+            focusDismissTimer = setTimeout(() => void dismissMenu(), 120);
+          } else {
+            suppressInitialFocusRing = true;
+            list.querySelector('button')?.focus();
+          }
         })
         .then((fn) => {
           if (disposed) fn();
@@ -51,13 +63,20 @@
         });
     return () => {
       disposed = true;
+      clearTimeout(focusDismissTimer);
       off();
     };
   });
 </script>
 
 <svelte:window onkeydown={keys} />
-<div class="toolkit-menu" bind:this={list} role="menu" aria-label="타이머 선택">
+<div
+  class="toolkit-menu"
+  class:suppress-initial-focus-ring={suppressInitialFocusRing}
+  bind:this={list}
+  role="menu"
+  aria-label="타이머 선택"
+>
   <p class="toolkit-menu-heading">타이머</p>
   {#each TIMER_TOOLS as tool}{@const kind = tool.id}<button
       role="menuitem"

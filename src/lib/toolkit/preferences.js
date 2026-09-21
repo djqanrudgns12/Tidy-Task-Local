@@ -1,5 +1,5 @@
 /** @typedef {{tickEnabled:boolean,warningEnabled?:boolean,endEnabled?:boolean,warningLeadSeconds?:number,warningDurationSeconds?:number|null,dialRangeMinutes?:number,showRemainingTime?:boolean}} Preferences */
-/** @typedef {{schemaVersion:number,revision:number,toolkit:{enabled:boolean,orientation:string,collapsed:boolean,visibleToolIds:string[],position:Record<string,number>|null},preferences:Record<string,Preferences>}} Settings */
+/** @typedef {{schemaVersion:number,revision:number,toolkit:{enabled:boolean,orientation:string,collapsed:boolean,visibleToolIds:string[],hiddenPlatformIds:string[],position:Record<string,number>|null},preferences:Record<string,Preferences>}} Settings */
 export const TIMER_KINDS = ['digital', 'analog', 'hourglass', 'stopwatch'];
 /** @type {Record<string,string>} */
 export const TIMER_NAMES = {
@@ -28,13 +28,14 @@ export function defaultPreferences(kind) {
 /** @returns {Settings} */
 export function defaults() {
   return {
-    schemaVersion: 1,
+    schemaVersion: 4,
     revision: 0,
     toolkit: {
       enabled: true,
       orientation: 'horizontal',
       collapsed: false,
-      visibleToolIds: ['timer'],
+      visibleToolIds: ['timer', 'picker', 'noticeboard', 'roster'],
+      hiddenPlatformIds: [],
       position: null,
     },
     preferences: Object.fromEntries(TIMER_KINDS.map((kind) => [kind, defaultPreferences(kind)])),
@@ -58,7 +59,7 @@ export function normalizePreferences(kind, input = {}) {
 }
 /** @param {any} input @returns {Settings} */
 export function normalizeSettings(input) {
-  if (input?.schemaVersion != null && input.schemaVersion !== 1)
+  if (input?.schemaVersion != null && ![1, 2, 3, 4].includes(input.schemaVersion))
     throw new Error('더 최신 버전의 툴킷 설정입니다.');
   const out = defaults();
   out.revision = Number.isSafeInteger(input?.revision) ? input.revision : 0;
@@ -68,8 +69,15 @@ export function normalizeSettings(input) {
     out.toolkit.orientation = input.toolkit.orientation;
   if (Array.isArray(input?.toolkit?.visibleToolIds))
     out.toolkit.visibleToolIds = input.toolkit.visibleToolIds.filter(
-      /** @param {unknown} id */ (id) => id === 'timer',
+      /** @param {unknown} id */ (id) => id === 'timer' || id === 'roster' || id === 'noticeboard' || id === 'picker',
     );
+  if (Array.isArray(input?.toolkit?.hiddenPlatformIds))
+    out.toolkit.hiddenPlatformIds = [...new Set(input.toolkit.hiddenPlatformIds.filter(
+      /** @param {unknown} id */ (id) => id === 'clanner' || id === 'rollinthunder',
+    ))];
+  if (input?.schemaVersion === 1 && !out.toolkit.visibleToolIds.includes('roster')) out.toolkit.visibleToolIds.push('roster');
+  if ([1, 2].includes(input?.schemaVersion) && !out.toolkit.visibleToolIds.includes('noticeboard')) out.toolkit.visibleToolIds.push('noticeboard');
+  if ([1, 2, 3].includes(input?.schemaVersion) && !out.toolkit.visibleToolIds.includes('picker')) out.toolkit.visibleToolIds.push('picker');
   if (input?.toolkit?.position) out.toolkit.position = input.toolkit.position;
   for (const kind of TIMER_KINDS)
     out.preferences[kind] = normalizePreferences(kind, input?.preferences?.[kind]);

@@ -171,6 +171,6 @@ test('preference patches merge only changed fields and isolate kinds', () => {
 test('persistent schema excludes all session data and refuses future versions', () => {
   for (const key of ['laps', 'remainingMs', 'title', 'alwaysOnTop'])
     assert.throws(() => applySettingsPatch(defaults(), 'digital', { [key]: 123 }));
-  assert.throws(() => normalizeSettings({ schemaVersion: 2 }));
+  assert.throws(() => normalizeSettings({ schemaVersion: defaults().schemaVersion + 1 }));
   assert.deepEqual(Object.keys(defaults().preferences.stopwatch), ['tickEnabled']);
 });

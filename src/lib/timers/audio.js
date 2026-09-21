@@ -1,11 +1,32 @@
 // Long-lived AudioContext scheduling keeps tick/warning playback independent of UI frames.
-const FILES = {
-  tick: '/audio/toolkit/tick.wav',
-  warning: '/audio/toolkit/warning.wav',
-  end: '/audio/toolkit/end.wav',
+/** @typedef {{url:string, minimumLoopSeconds?:number}} SoundFile */
+const LEGACY_FILES = {
+  tick: { url: '/audio/toolkit/tick.wav', minimumLoopSeconds: 1 },
+  warning: { url: '/audio/toolkit/warning.wav', minimumLoopSeconds: 1 },
+  end: { url: '/audio/toolkit/end.wav' },
 };
-/** @param {(message:string)=>void} [onError] */
-export function createTimerAudio(onError = () => {}) {
+/** @type {Record<string, Record<string, SoundFile>>} */
+const PROFILES = {
+  digital: {
+    tick: { url: '/audio/toolkit/digital/tick-t01.wav' },
+    warning: { url: '/audio/toolkit/digital/warning-w05-1s.wav' },
+    end: { url: '/audio/toolkit/digital/end-e08.wav' },
+  },
+  analog: {
+    tick: LEGACY_FILES.tick,
+    warning: { url: '/audio/toolkit/analog/warning-w09.wav' },
+    end: { url: '/audio/toolkit/analog/end-e09.wav' },
+  },
+  hourglass: {
+    tick: { url: '/audio/toolkit/hourglass/tick-ht04.wav' },
+    warning: { url: '/audio/toolkit/hourglass/warning-hw09.wav' },
+    end: { url: '/audio/toolkit/hourglass/end-he09.wav' },
+  },
+  stopwatch: { tick: { url: '/audio/toolkit/stopwatch/tick-st04.wav' } },
+};
+/** @param {(message:string)=>void} [onError] @param {string} [kind] */
+export function createTimerAudio(onError = () => {}, kind = 'digital') {
+  const files = PROFILES[kind] || LEGACY_FILES;
   /** @type {AudioContext|undefined} */ let context;
   /** @type {Record<string,AudioBuffer>|undefined} */ let buffers;
   /** @type {Promise<void>|null} */ let loading = null;
@@ -17,8 +38,8 @@ export function createTimerAudio(onError = () => {}) {
     const ctx = context;
     const resumed = ctx.resume();
     loading ||= Promise.all(
-      Object.entries(FILES).map(async ([name, url]) => {
-        const response = await fetch(url);
+      Object.entries(files).map(async ([name, file]) => {
+        const response = await fetch(file.url);
         if (!response.ok) throw new Error('효과음 파일을 불러오지 못했어요.');
         return [name, await ctx.decodeAudioData(await response.arrayBuffer())];
       }),
@@ -50,15 +71,19 @@ export function createTimerAudio(onError = () => {}) {
   /** @param {string} name @param {number} when @param {number|null} [duration] @param {boolean} [loop] */
   function play(name, when, duration = null, loop = false) {
     if (!context || !buffers || disposed) return;
+    if (!(name in files) || !buffers[name]) return;
     const source = context.createBufferSource();
-    if (loop) {
-      const clip = buffers[name],
-        frames = context.sampleRate;
-      const padded = context.createBuffer(1, frames, context.sampleRate);
-      padded.copyToChannel(clip.getChannelData(0).subarray(0, frames), 0);
+    const clip = buffers[name];
+    const minimumLoopSeconds = files[name].minimumLoopSeconds;
+    if (loop && minimumLoopSeconds && clip.duration < minimumLoopSeconds) {
+      const frames = Math.ceil(minimumLoopSeconds * context.sampleRate);
+      const padded = context.createBuffer(clip.numberOfChannels, frames, context.sampleRate);
+      for (let channel = 0; channel < clip.numberOfChannels; channel++) {
+        padded.copyToChannel(clip.getChannelData(channel), channel);
+      }
       source.buffer = padded;
-      source.loop = true;
-    } else source.buffer = buffers[name];
+    } else source.buffer = clip;
+    source.loop = loop;
     source.connect(context.destination);
     sources.add(source);
     source.onended = () => {
@@ -79,7 +104,7 @@ export function createTimerAudio(onError = () => {}) {
   }
   /** @param {string} name */
   async function preview(name) {
-    if ((await ready()) && context && name in FILES) {
+    if ((await ready()) && context && name in files) {
       stopAll();
       play(name, context.currentTime);
     }

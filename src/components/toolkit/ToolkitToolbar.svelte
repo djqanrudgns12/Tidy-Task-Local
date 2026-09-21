@@ -2,11 +2,10 @@
   import { onMount, tick } from 'svelte';
   import {
     Settings2,
-    ChevronDown,
-    ChevronLeft,
-    ChevronRight,
-    ChevronUp,
     Timer,
+    UsersRound,
+    BookOpenText,
+    Dices,
   } from 'lucide-svelte';
   import {
     native,
@@ -14,10 +13,10 @@
     subscribeSettings,
     patchSettings,
   } from '../../lib/toolkit/store.js';
-  import { TOOL_REGISTRY } from '../../lib/toolkit/registry.js';
+  import { TOOL_REGISTRY, PLATFORM_TOOLS } from '../../lib/toolkit/registry.js';
   import { defaults } from '../../lib/toolkit/preferences.js';
   import { toolkitDrag } from '../../lib/toolkit/drag.js';
-  import { openTool, showTimerMenu, resizeToolbar } from '../../lib/toolkit/windows.js';
+  import { openTool, openPlatform, showTimerMenu, resizeToolbar } from '../../lib/toolkit/windows.js';
   import { getCurrentWindow } from '@tauri-apps/api/window';
   import { PhysicalPosition } from '@tauri-apps/api/dpi';
   import { resolveSavedPosition } from '../../lib/windows/windowPlacement.js';
@@ -30,10 +29,11 @@
   let bar = $state<HTMLDivElement>();
   async function fit() {
     await tick();
-    if (bar) await resizeToolbar(bar.offsetWidth + 10, bar.offsetHeight + 10);
+    if (bar) await resizeToolbar(bar.offsetWidth + 14, bar.offsetHeight + 14);
   }
   async function patch(patch: Record<string, unknown>) {
     try {
+      previewMenu = false;
       config = (await patchSettings('toolkit', patch)).toolkit;
       await fit();
     } catch {
@@ -120,43 +120,42 @@
       class:vertical={config.orientation === 'vertical'}
       class:collapsed={config.collapsed}
     >
-      <span class="toolkit-grip" aria-hidden="true">
-        {#each Array(6) as _}<i></i>{/each}
-      </span>
       <button
         class="toolkit-home"
+        title={config.collapsed ? 'Tidy 툴킷 펼치기' : 'Tidy 툴킷 접기'}
         aria-expanded={!config.collapsed}
         aria-label={config.collapsed ? '툴킷 펼치기' : '툴킷 접기'}
         onclick={() => patch({ collapsed: !config.collapsed })}
         ><span class="toolkit-brand-mark"
           ><img src="/images/toolkit/toolkit-icon.png" alt="" draggable="false" /></span
-        ><span class="toolkit-home-copy"><strong>Tidy 툴킷</strong></span
-        ><span class="toolkit-collapse-icon" aria-hidden="true"
-          >{#if config.collapsed}{#if config.orientation === 'vertical'}<ChevronDown
-                size={14}
-              />{:else}<ChevronRight size={14} />{/if}{:else if config.orientation === 'vertical'}<ChevronUp
-              size={14}
-            />{:else}<ChevronLeft size={14} />{/if}</span
         ></button
       >
-      {#if !config.collapsed}<span class="toolkit-divider"
-        ></span>{#each TOOL_REGISTRY.filter( (tool) => config.visibleToolIds.includes(tool.id), ) as tool}<button
+      {#if !config.collapsed}<div class="toolkit-crescent">
+        {#each TOOL_REGISTRY.filter( (tool) => config.visibleToolIds.includes(tool.id) && tool.id !== 'roster', ) as tool}<button
             class="toolkit-tool"
             class:menu-open={previewMenu}
-            onclick={(e) => menu(e.currentTarget)}
-            aria-haspopup="menu"
-            aria-expanded={previewMenu}
-            ><span class="toolkit-tool-icon"><Timer size={18} strokeWidth={2} /></span
-            ><span class="toolkit-tool-copy"><strong>{tool.label}</strong></span
-            ><ChevronDown class="toolkit-caret" size={14} /></button
-          >{/each}<button
+            onclick={(e) => tool.id !== 'timer' ? openTool(tool.id).catch(() => error = '도구를 열지 못했어요.') : menu(e.currentTarget)}
+            aria-haspopup={tool.id === 'timer' ? 'menu' : undefined}
+            aria-expanded={tool.id === 'timer' ? previewMenu : undefined}
+            ><span class="toolkit-tool-icon">{#if tool.id === 'picker'}<Dices size={18} strokeWidth={2} />{:else if tool.id === 'noticeboard'}<BookOpenText size={18} strokeWidth={2} />{:else}<Timer size={18} strokeWidth={2} />{/if}</span
+            ><span class="toolkit-tool-copy"><strong>{tool.label}</strong></span></button
+          >{/each}
+        {#each PLATFORM_TOOLS.filter((tool) => !config.hiddenPlatformIds.includes(tool.id)) as tool}
+          <button class="toolkit-tool" title={`${tool.label} 웹사이트 열기`}
+            onclick={() => { previewMenu = false; void openPlatform(tool.id).catch(() => (error = '웹사이트를 열지 못했어요. 다시 눌러 주세요.')); }}>
+            <span class="toolkit-platform-icon"><img src={tool.icon} alt="" draggable="false" /></span>
+            <span class="toolkit-tool-copy"><strong>{tool.label}</strong></span>
+          </button>
+        {/each}
+        {#if config.visibleToolIds.includes('roster')}<button class="toolkit-tool" onclick={() => { previewMenu = false; void openTool('roster').catch(() => error = '학급 명단을 열지 못했어요.'); }}><span class="toolkit-tool-icon"><UsersRound size={18} strokeWidth={2} /></span><span class="toolkit-tool-copy"><strong>학급 명단</strong></span></button>{/if}
+        <button
           class="toolkit-settings"
           aria-label="툴킷 설정"
           title="툴킷 설정"
           onclick={() =>
             openTool('toolkit-settings').catch(() => (error = '설정을 열지 못했어요.'))}
-          ><Settings2 size={18} strokeWidth={1.9} /><span class="settings-indicator"></span></button
-        >{/if}
+          ><Settings2 size={18} strokeWidth={1.9} /></button
+        ></div>{/if}
     </div>
     {#if error}<p role="alert" class="tk-error">{error}</p>{/if}{#if previewMenu}<div
         class="toolkit-preview-menu"

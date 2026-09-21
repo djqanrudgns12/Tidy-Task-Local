@@ -35,6 +35,7 @@
   import AnalogTimer from './AnalogTimer.svelte';
   import HourglassTimer from './HourglassTimer.svelte';
   import LapTimeline from './LapTimeline.svelte';
+  import StopwatchFace from './StopwatchFace.svelte';
   let { kind } = $props<{ kind: string }>();
   const timerKind = untrack(() => (TIMER_KINDS.includes(kind) ? kind : 'digital'));
   const stopwatch = timerKind === 'stopwatch';
@@ -74,7 +75,7 @@
   const tracker = createAlarmTracker();
   const audio = createTimerAudio((message) => {
     if (!disposed) error = message;
-  });
+  }, timerKind);
   const draggable = (node: HTMLElement) => (native ? dragRegion(node) : { destroy() {} });
   const name = TIMER_NAMES[timerKind];
   const phaseLabel = $derived(
@@ -342,7 +343,7 @@
   {/if}
   <header class="timer-titlebar" use:draggable>
     <div class="timer-kind">
-      <img src="/images/toolkit/toolkit-icon.png" alt="" /><span>학급 툴킷</span><span
+      <img src="/images/toolkit/toolkit-icon.png" alt="" /><span>Tidy 툴킷</span><span
         class="titlebar-dot">·</span
       ><span>{name}</span>
     </div>
@@ -416,6 +417,7 @@
               fraction={sandFraction(view)}
               running={view.phase === 'running'}
             />{#if prefs.showRemainingTime}<span class="secondary-time">{shownTime}</span>{/if}
+          {:else if stopwatch}<StopwatchFace time={shownTime} />
           {:else}<div class="digital-board" class:stopwatch-board={stopwatch}>
               <div class="board-rivets" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
               <div class="board-caption">

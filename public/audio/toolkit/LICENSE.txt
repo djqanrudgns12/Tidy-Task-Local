@@ -10,3 +10,43 @@ Sources: select_002.ogg and confirmation_002.ogg; decoded to mono WAV and gain r
 
 CC0 1.0: https://creativecommons.org/publicdomain/zero/1.0/
 No attribution is required; credits retained for provenance.
+
+Selected digital/analog sounds (2026-09-20)
+
+Provider: Mixkit. License: Mixkit Sound Effects Free License (not CC0).
+License: https://mixkit.co/license/#sfxFree
+
+digital/tick-t01.wav: Tick tock clock close up, Mixkit 1059 (T01).
+https://mixkit.co/free-sound-effects/clock/
+digital/warning-w05-1s.wav: Double beep tone alert, Mixkit 2868 (W05).
+https://mixkit.co/free-sound-effects/alerts/
+digital/end-e08.wav: Winning chimes, Mixkit 2015 (E08).
+https://mixkit.co/free-sound-effects/win/
+analog/warning-w09.wav: Warning alarm buzzer, Mixkit 991 (W09).
+https://mixkit.co/free-sound-effects/alarm/
+analog/end-e09.wav: Classic clock gong, Mixkit 1066 (E09).
+https://mixkit.co/free-sound-effects/clock/
+
+stopwatch/tick-st04.wav: Interface device click, Mixkit 2577 (ST04).
+https://mixkit.co/free-sound-effects/interface/
+Source is the provider's public MP3 preview, converted to the reviewed 1 s WAV cycle.
+hourglass/end-he09.wav: Happy bells notification, Mixkit 937 (HE09).
+https://mixkit.co/free-sound-effects/notification/
+User-reviewed WAV cycle copied unchanged.
+hourglass/tick-ht04.wav: Water bubble, Mixkit 1317 (HT04).
+https://mixkit.co/free-sound-effects/glass/
+User-reviewed 1 s WAV cycle copied unchanged.
+hourglass/warning-hw09.wav: Signal alert, Mixkit 771 (HW09).
+https://mixkit.co/free-sound-effects/alerts/
+User-reviewed 4.470771 s WAV cycle copied unchanged.
+
+Local application of the user's selections. Level-matched mono 48 kHz WAV.
+W05: remove trailing silence to make exactly 1 second; both beeps preserved.
+The original analog tick.wav remains unchanged.
+Source URLs, hashes and processing are in artwork/toolkit/audio/manifest.json.
+
+Mixkit permits incorporation into qualifying end products. It prohibits
+redistributing items on their own, as stock, in a tool/template, or with source
+files. These files are not CC0 assets; check distribution terms before publishing
+the assets/source or distributing the application. This change does not publish
+or upload them.

@@ -5,4 +5,12 @@ export const TIMER_TOOLS = Object.freeze(
 );
 export const TOOL_REGISTRY = Object.freeze([
   { id: 'timer', label: '타이머', entries: TIMER_TOOLS },
+  { id: 'picker', label: '간단 뽑기', entries: [] },
+  { id: 'noticeboard', label: '알림장', entries: [] },
+  { id: 'roster', label: '학급 명단', entries: [] },
 ]);
+
+export const PLATFORM_TOOLS = Object.freeze([
+  { id: 'rollinthunder', label: '롤린썬더', icon: '/images/toolkit/rollinthunder.png', url: 'https://www.rollinthunder.net/?utm_source=tidy_task&utm_medium=referral&utm_campaign=toolkit' },
+  { id: 'clanner', label: '클래너', icon: '/images/toolkit/clanner.png', url: 'https://www.clanner.kr/?utm_source=tidy_task&utm_medium=referral&utm_campaign=toolkit' },
+].map(Object.freeze));

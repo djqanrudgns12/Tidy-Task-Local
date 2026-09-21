@@ -1,7 +1,7 @@
 # Toolkit assets
 
 ## Icon
-Generated specifically for Tidy Task on 2026-09-19 using the imagegen skill. Flat stationery toolkit in sage/amber; transparent RGBA, no lettering. Original: `toolkit-icon-master.png`; runtime: `public/images/toolkit/toolkit-icon.png` (256 × 256). No third-party trademark/icon copied. Downsampled with FFmpeg Lanczos; alpha retained.
+Generated specifically for Tidy Task on 2026-09-19 using the imagegen skill, then selected by the project owner on 2026-09-20. The chosen mark is a soft powder-blue fold-out stationery case with warm cream compartments, a honey-yellow pencil, and a muted coral loop. It uses a transparent RGBA background and contains no lettering. Original: `toolkit-icon-master.png`; runtime: `public/images/toolkit/toolkit-icon.png` (256 × 256). No third-party trademark or icon was copied. Downsampled with FFmpeg Lanczos; alpha retained.
 
 ## Sounds
 All three recordings are CC0; source URLs and credits are shipped in `public/audio/toolkit/LICENSE.txt`. Original downloads are kept under `audio/`; exact runtime hashes/durations are in `audio/manifest.json`. No external network is needed during playback.
