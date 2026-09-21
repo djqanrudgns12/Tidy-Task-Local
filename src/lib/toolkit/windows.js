@@ -123,6 +123,13 @@ export async function centerToolbar() {
   const target = centerToolbarPosition({ x: position.x, y: position.y, width: size.width, height: size.height }, monitors);
   if (target) await toolbar.setPosition(new PhysicalPosition(target.x, target.y));
 }
+/** 트레이 "Tidy 툴킷 열기"로 막 뜬 툴바면, 트레이를 누른 화면 한가운데로 옮깁니다. (요청이 없으면 그대로)
+ * 왜 크기 맞춤 뒤에 부르는가: 저장 위치 복원과 크기 맞춤이 끝나야 실제 툴바 크기로 가운데를 잡을 수 있습니다.
+ * @returns {Promise<boolean>} 트레이로 불려 와 옮겼으면 true (화면이 "도착 신호"를 보낼지 판단합니다) */
+export async function centerToolbarIfRequested() {
+  if (!native) return false;
+  return Boolean(await invoke('toolkit_center_if_requested'));
+}
 /** @param {number} width @param {number} height */
 export async function resizeToolbar(width, height) {
   if (!native) return;

@@ -10,8 +10,15 @@
   import { TOOL_REGISTRY, PLATFORM_TOOLS } from '../../lib/toolkit/registry.js';
   import { defaults, TOOLBAR_SIZES } from '../../lib/toolkit/preferences.js';
   import { toolkitDrag } from '../../lib/toolkit/drag.js';
-  import { openTool, showToolkitMenu, showToolkitContextMenu, resizeToolbar } from '../../lib/toolkit/windows.js';
+  import {
+    openTool,
+    showToolkitMenu,
+    showToolkitContextMenu,
+    resizeToolbar,
+    centerToolbarIfRequested,
+  } from '../../lib/toolkit/windows.js';
   import { getCurrentWindow } from '@tauri-apps/api/window';
+  import { listen } from '@tauri-apps/api/event';
   import { PhysicalPosition } from '@tauri-apps/api/dpi';
   import { resolveSavedPosition } from '../../lib/windows/windowPlacement.js';
   import { getMonitorGeometries, ensureWindowOnScreen } from '../../lib/windows/windowRegistry.js';
@@ -43,6 +50,23 @@
       if (fittedSize === size) fittedSize = '';
       throw cause;
     }
+  }
+  // 트레이로 불려 왔을 때 둘레가 2초 동안 몇 번 깜빡여 "여기 있어요"를 알립니다.
+  // 길이는 toolkit.css의 toolkit-summon 애니메이션(2s)과 같아야 합니다.
+  const SUMMON_MS = 2000;
+  let summoned = $state(false);
+  let summonTimer: ReturnType<typeof setTimeout> | undefined;
+  async function signalArrival() {
+    // 숨어 있던 창은 보이기 전까지 화면을 그리지 않습니다. 첫 프레임이 그려진 뒤에 시작해야
+    // 깜빡임이 안 보이는 동안 흘러가 버리지 않습니다.
+    await new Promise((resolve) => requestAnimationFrame(resolve));
+    clearTimeout(summonTimer);
+    // 깜빡이는 도중 또 불려도 처음부터 다시 깜빡이도록, 뗀 상태를 한 번 화면에 확정한 뒤 다시 붙입니다.
+    summoned = false;
+    await tick();
+    void bar?.offsetWidth;
+    summoned = true;
+    summonTimer = setTimeout(() => (summoned = false), SUMMON_MS);
   }
   function observeToolbar(node: HTMLDivElement) {
     // CSS, font loading, and tool visibility can change the dock after mount.
@@ -103,6 +127,15 @@
           return;
         }
         offs.push(off);
+        if (native) {
+          // 이미 떠 있던 툴바를 트레이로 불렀을 때 Rust(open_from_tray)가 보내는 신호입니다.
+          const offSummon = await listen('toolkit-summoned', () => void signalArrival());
+          if (disposed) {
+            offSummon();
+            return;
+          }
+          offs.push(offSummon);
+        }
         config = (await readSettings()).toolkit;
         if (native) {
           const win = getCurrentWindow();
@@ -141,8 +174,11 @@
         ready = true;
         await fit();
         if (native) {
+          // 가운데 배치에 실패해도 툴바는 저장된 자리에 보여야 하므로 오류를 삼킵니다.
+          const summonedByTray = await centerToolbarIfRequested().catch(() => false);
           await ensureWindowOnScreen(getCurrentWindow());
           await getCurrentWindow().show();
+          if (summonedByTray) void signalArrival();
         }
       } catch {
         error = '툴킷 설정을 불러오지 못했어요.';
@@ -154,6 +190,7 @@
       disposed = true;
       offs.forEach((fn) => fn());
       clearTimeout(saveTimer);
+      clearTimeout(summonTimer);
     };
   });
 </script>
@@ -167,6 +204,7 @@
       style:zoom={TOOLBAR_SIZES[config.toolbarSize].scale}
       class:vertical={config.orientation === 'vertical'}
       class:collapsed={config.collapsed}
+      class:summoned
     >
       <button
         class="toolkit-home"

@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount, tick, untrack } from 'svelte';
+  import { onMount, untrack } from 'svelte';
   import { AlertDialog } from 'bits-ui';
   import {
     Play,
@@ -14,7 +14,6 @@
     Check,
     Plus,
     NotebookPen,
-    ChevronDown,
   } from 'lucide-svelte';
   import { getCurrentWindow } from '@tauri-apps/api/window';
   import { PhysicalPosition, PhysicalSize } from '@tauri-apps/api/dpi';
@@ -50,8 +49,7 @@
   // 툴킷 원칙(toolkit.rs 머리말)을 따라 창을 닫으면 함께 사라집니다.
   let title = $state(''),
     note = $state(''),
-    noteOpen = $state(false),
-    noteInput = $state<HTMLTextAreaElement | null>(null),
+    noteFocused = $state(false),
     pinned = $state(false),
     settingsOpen = $state(!stopwatch),
     error = $state(''),
@@ -87,6 +85,9 @@
   const name = TIMER_NAMES[timerKind];
   const shownTime = $derived(formatTime(stopwatch ? view.elapsedMs : view.remainingMs, stopwatch));
   const hasNote = $derived(note.trim().length > 0);
+  // 비어 있고 쓰는 중도 아니면 설명 칸을 "설명 추가" 한 줄로 납작하게 접어 시계에 자리를 내줍니다.
+  // 크기는 누를 때(포커스)만 바뀌고 글을 치는 동안에는 바뀌지 않아, 첫 글자에서 칸이 튀지 않습니다.
+  const noteCompact = $derived(!hasNote && !noteFocused);
   const progress = $derived(Math.max(0, Math.min(1, 1 - sandFraction(view))));
   const closeWarning = $derived(
     stopwatch && model.laps.length > 0
@@ -155,13 +156,17 @@
       error = '항상 위 상태를 바꾸지 못했어요.';
     }
   }
-  async function toggleNote() {
-    noteOpen = !noteOpen;
-    // 빈 설명을 펼쳤다는 것은 새로 쓰겠다는 뜻이므로 바로 입력할 수 있게 합니다.
-    // 이미 내용이 있으면 학생에게 보여 주려고 펼친 경우가 많아 커서를 두지 않습니다.
-    if (!noteOpen || hasNote) return;
-    await tick();
-    noteInput?.focus();
+  function leaveNote() {
+    noteFocused = false;
+    // 빈 줄·공백만 남았으면 비웁니다. 그대로 두면 보이지 않는 줄이 칸 높이만 차지합니다.
+    if (!hasNote) note = '';
+  }
+  function noteKeys(e: KeyboardEvent) {
+    // 창 전체의 Esc는 "최대화 풀기"입니다. 설명을 쓰다 누른 Esc는 쓰기를 마친다는 뜻이므로
+    // 여기서 멈춥니다. 그러지 않으면 전자칠판에 크게 띄운 창이 갑자기 작아집니다.
+    if (e.key !== 'Escape') return;
+    e.stopPropagation();
+    (e.currentTarget as HTMLTextAreaElement).blur();
   }
   async function readExpandedState() {
     const win = getCurrentWindow();
@@ -374,7 +379,7 @@
   </header>
   <div class="timer-workspace">
     <div class="timer-layout" class:with-settings={settingsOpen} class:with-laps={stopwatch}>
-      <section class="timer-main" class:note-open={noteOpen} aria-label={name}>
+      <section class="timer-main" aria-label={name}>
         <header class="timer-panel-heading">
           <input
             class="timer-title-input"
@@ -384,21 +389,28 @@
             bind:value={title}
             maxlength="40"
           />
-          <!-- 왜 한 줄 격자인가: 설명 버튼은 가운데, 설정 버튼은 오른쪽 끝에 두되
-               창이 좁아져도 두 버튼이 겹치지 않고 가운데 쪽이 비켜서도록 합니다. -->
+          <!-- 설명은 제목 바로 아래에 부제처럼 늘 있습니다(접기 버튼 없음). 비어 있을 때는
+               "설명 추가" 한 줄로 작게 붙어 있다가, 누르면 쓰기 좋은 크기로 펼쳐집니다.
+               문서 순서를 제목 다음에 두어 Tab 이동도 제목 → 설명 → 설정 순서가 됩니다.
+               label로 감싸 아이콘을 눌러도 바로 쓸 수 있습니다. -->
+          <label class="timer-note" class:compact={noteCompact}>
+            <NotebookPen class="note-mark" aria-hidden="true" />
+            <textarea
+              class="timer-note-input"
+              aria-label="활동 설명"
+              placeholder={noteCompact ? '설명 추가' : '활동 방법, 준비물, 주의할 점을 적어 주세요.'}
+              rows="1"
+              maxlength="1000"
+              spellcheck="false"
+              bind:value={note}
+              onfocus={() => (noteFocused = true)}
+              onblur={leaveNote}
+              onkeydown={noteKeys}
+            ></textarea>
+          </label>
+          <!-- 설정 버튼은 제목 줄 오른쪽 끝에 둡니다. -->
           <div class="timer-heading-tools">
             <button
-              class="timer-note-toggle"
-              class:active={noteOpen}
-              class:has-note={hasNote}
-              aria-expanded={noteOpen}
-              aria-controls={noteOpen ? 'timer-note-panel' : undefined}
-              onclick={toggleNote}
-              ><NotebookPen size={16} /><span
-                >{noteOpen ? '설명 접기' : hasNote ? '설명 보기' : '설명 추가'}</span
-              >{#if hasNote && !noteOpen}<i class="note-dot" aria-hidden="true"></i
-                >{/if}<ChevronDown size={15} class="note-chevron" /></button
-            ><button
               class="timer-settings-toggle"
               class:active={settingsOpen}
               aria-expanded={settingsOpen}
@@ -409,18 +421,6 @@
                   : '설정 보기'}</span></button
             >
           </div>
-          {#if noteOpen}<div class="timer-note" id="timer-note-panel">
-              <textarea
-                class="timer-note-input"
-                aria-label="활동 설명"
-                placeholder="활동 방법, 준비물, 주의할 점처럼 자세한 내용을 적어 주세요."
-                rows="2"
-                maxlength="1000"
-                spellcheck="false"
-                bind:value={note}
-                bind:this={noteInput}
-              ></textarea>
-            </div>{/if}
         </header>
         <div
           class="timer-stage"

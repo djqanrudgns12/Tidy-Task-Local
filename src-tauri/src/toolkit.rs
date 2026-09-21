@@ -4,7 +4,8 @@ use std::sync::{
     atomic::{AtomicBool, AtomicU64, Ordering},
     Mutex,
 };
-use tauri::{Emitter, Manager};
+use std::time::{Duration, Instant};
+use tauri::{Emitter, Manager, PhysicalPosition};
 use tauri_plugin_store::StoreExt;
 
 const FILE: &str = "tidy-task-toolkit.json";
@@ -383,27 +384,109 @@ pub async fn toolkit_set_enabled(app: tauri::AppHandle, enabled: bool) -> Result
     Ok(next)
 }
 /// 트레이 "Tidy 툴킷 열기" — 떠 있으면 앞으로 가져오고, 없으면 만들어 띄웁니다.
+/// 어느 쪽이든 트레이를 누른 화면의 작업영역 한가운데에 놓습니다.
+/// 왜 가운데인가: 툴바는 작고 항상 위에 떠 있어, 모니터 가장자리·다른 화면에 붙어 있으면
+///   "열었는데 안 보인다"가 됩니다. 트레이로 연다 = 지금 찾고 있다는 뜻이므로 눈앞에 가져옵니다.
 /// 왜 설정을 함께 켜는가: 사용자가 설정에서 툴킷을 꺼 두었다면 창만 띄워도 다음 실행 때 다시 사라져
 ///   "껐는데 떠 있고, 켰는데 없는" 어긋난 상태가 됩니다. 트레이로 연다 = 툴킷을 쓰겠다는 뜻입니다.
 pub fn open_from_tray(app: &tauri::AppHandle) {
     let app = app.clone();
+    // 메뉴를 누른 순간의 커서 위치 = 사용자가 보고 있는 화면(트레이를 누른 작업 표시줄)입니다.
+    // 뒤로 넘기기 전에 읽어 두어야 그사이 마우스를 옮겨도 누른 화면에 뜹니다.
+    let anchor = app.cursor_position().ok();
     // 설정 저장(파일 쓰기)과 창 생성이 트레이 메뉴 클릭을 붙잡지 않도록 뒤로 넘깁니다.
     tauri::async_runtime::spawn(async move {
         if let Some(win) = app.get_webview_window("toolkit") {
             let _ = win.unminimize();
-            crate::ensure_window_on_screen(&win);
+            // 아직 화면(JS)이 뜨는 중인 창이면 곧 저장 위치 복원·크기 맞춤이 지금 옮긴 자리를 덮어쓰므로,
+            // 준비가 끝난 뒤 한 번 더 가운데로 옮기도록 맡겨 둡니다.
+            if !win.is_visible().unwrap_or(false) {
+                request_center(anchor);
+            }
+            center_on_monitor_at(&app, &win, anchor);
             let _ = win.show();
+            raise_above_other_topmost(&win);
             let _ = win.set_focus();
+            // 툴바 화면(JS)에 "불려 왔다"고 알려 잠깐 깜빡이게 합니다. 이 이벤트는 툴바 창만 듣습니다.
+            let _ = app.emit("toolkit-summoned", ());
             return;
         }
         // 설정 저장이 실패하더라도(예: 알 수 없는 설정 버전) 창은 열어 줍니다.
         if let Err(e) = toolkit_patch(app.clone(), "toolkit".into(), json!({"enabled": true})) {
             log::warn!("툴킷 설정을 켜지 못했습니다: {e}");
         }
+        // 새 창은 화면(JS)이 저장 위치를 복원하고 툴바 크기를 맞춘 뒤에야 실제 크기를 알 수 있으므로,
+        // 가운데 배치는 그때(toolkit_center_if_requested) 합니다.
+        request_center(anchor);
         if let Err(e) = create_window(&app, "toolkit") {
+            take_center_request();
             log::warn!("툴킷 창 생성 실패: {e}");
         }
     });
+}
+
+/// 툴바를 다른 "항상 위" 창들보다 앞으로 올립니다.
+/// 왜 필요한가: "항상 위" 창끼리는 나중에 올라온 쪽이 위에 옵니다. PPT 슬라이드쇼·전자칠판 판서 도구처럼
+///   같은 "항상 위" 창이 뒤에 뜨면 툴바가 그 아래에 깔려 "켜져 있는데 안 보이는" 상태가 됩니다.
+/// 왜 풀었다 다시 거는가: 이미 켜진 상태에서 다시 켜기만 하면 tao가 변화 없음으로 보고
+///   창 순서를 건드리지 않습니다. 한 번 풀어야 다시 걸 때 "항상 위" 창들 중 맨 앞에 놓입니다.
+fn raise_above_other_topmost(win: &tauri::WebviewWindow) {
+    let _ = win.set_always_on_top(false);
+    let _ = win.set_always_on_top(true);
+}
+
+/// 트레이가 맡겨 둔 "툴바를 가운데로" 요청. `anchor`는 트레이를 누른 순간의 커서(물리 px)입니다.
+struct CenterRequest {
+    anchor: Option<PhysicalPosition<f64>>,
+    created: Instant,
+}
+static CENTER_REQUEST: Mutex<Option<CenterRequest>> = Mutex::new(None);
+// 맡겨 둔 요청의 유효 시간. 한참 뒤 다른 경로(설정에서 켜기 등)로 뜬 툴바가 엉뚱하게 옮겨지지 않게 합니다.
+// 왜 이 정도인가: 트레이 요청 보증(tray.rs PENDING_TTL)과 같은 기준 — 창 화면이 준비되는 데 길어야 2~3초입니다.
+const CENTER_REQUEST_TTL: Duration = Duration::from_secs(10);
+
+fn request_center(anchor: Option<PhysicalPosition<f64>>) {
+    if let Ok(mut slot) = CENTER_REQUEST.lock() {
+        *slot = Some(CenterRequest { anchor, created: Instant::now() });
+    }
+}
+
+// 맡겨 둔 요청을 한 번만 꺼내 줍니다. 오래 묵은 요청은 버립니다.
+fn take_center_request() -> Option<CenterRequest> {
+    let request = CENTER_REQUEST.lock().ok()?.take()?;
+    (request.created.elapsed() <= CENTER_REQUEST_TTL).then_some(request)
+}
+
+/// `anchor`가 있는 모니터의 작업영역(작업 표시줄 제외) 한가운데로 창을 옮깁니다.
+/// 커서를 읽지 못했거나 그 자리에 모니터가 없으면 주 모니터를 씁니다.
+fn center_on_monitor_at(app: &tauri::AppHandle, win: &tauri::WebviewWindow, anchor: Option<PhysicalPosition<f64>>) {
+    let monitor = anchor
+        .and_then(|point| app.monitor_from_point(point.x, point.y).ok().flatten())
+        .or_else(|| app.primary_monitor().ok().flatten());
+    let Some(monitor) = monitor else { return };
+    let area = monitor.work_area();
+    let work = (area.position.x as i64, area.position.y as i64, area.size.width as i64, area.size.height as i64);
+    // 왜 두 번인가: 배율이 다른 모니터(4K 200% ↔ FHD 100%)로 옮기면 Windows가 창의 물리 크기를
+    //   새 배율에 맞춰 다시 잡으므로, 옮긴 뒤의 크기로 가운데를 한 번 더 계산합니다. 같은 배율이면 변화가 없습니다.
+    // 새 위치의 저장은 툴바 화면의 "창 이동" 처리기가 합니다.
+    for _ in 0..2 {
+        let Ok(size) = win.outer_size() else { return };
+        let (x, y) = crate::centered_in(work, size.width as i64, size.height as i64);
+        let _ = win.set_position(PhysicalPosition::new(x as i32, y as i32));
+    }
+}
+
+/// 툴바 화면(JS)이 저장 위치 복원·크기 맞춤을 마친 뒤, 보여 주기 직전에 부릅니다.
+/// 트레이가 맡겨 둔 요청이 있으면 가운데로 옮기고 true, 없으면 아무 일도 하지 않고 false.
+#[tauri::command]
+pub async fn toolkit_center_if_requested(app: tauri::AppHandle, window: tauri::WebviewWindow) -> bool {
+    // 요청은 툴바 창 몫입니다. 다른 창이 가져가면 툴바는 옮겨지지 않은 채 요청만 사라집니다.
+    if window.label() != "toolkit" {
+        return false;
+    }
+    let Some(request) = take_center_request() else { return false };
+    center_on_monitor_at(&app, &window, request.anchor);
+    true
 }
 
 #[cfg(test)]
@@ -535,4 +618,23 @@ mod tests {
         assert_eq!(enabled["toolkit"]["hiddenPlatformIds"], json!(["clanner"]));
     }
 
+    // 트레이의 "가운데로" 요청은 한 번만 쓰이고, 오래 묵으면 버려져야 합니다.
+    // 왜 중요한가: 남아 있으면 나중에 설정에서 켠 툴바가 사용자가 둔 자리 대신 가운데로 옮겨집니다.
+    #[test]
+    fn center_request_is_taken_once_and_expires() {
+        use super::*;
+        let anchor = PhysicalPosition::new(2500.0, 400.0);
+        request_center(Some(anchor));
+        let taken = take_center_request().expect("방금 맡긴 요청은 꺼낼 수 있어야 합니다");
+        assert_eq!(taken.anchor, Some(anchor));
+        assert!(take_center_request().is_none());
+
+        let long_ago = Instant::now()
+            .checked_sub(CENTER_REQUEST_TTL + Duration::from_secs(1))
+            .unwrap_or_else(Instant::now);
+        *CENTER_REQUEST.lock().unwrap() = Some(CenterRequest { anchor: None, created: long_ago });
+        assert!(take_center_request().is_none());
+        // 버린 요청은 자리에서도 사라집니다.
+        assert!(CENTER_REQUEST.lock().unwrap().is_none());
+    }
 }

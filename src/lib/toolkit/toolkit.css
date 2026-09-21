@@ -62,12 +62,48 @@
   width: max-content;
 }
 .toolkit-bar {
+  position: relative;
   display: flex;
   align-items: center;
   width: max-content;
   user-select: none;
   touch-action: none;
   color: var(--tk-ink);
+}
+/* 트레이로 불려 왔을 때의 "도착 신호" — 툴바 둘레의 가는 고리가 2초 동안 세 번 깜빡입니다.
+   왜 둘레만 깜빡이는가: 툴바 자체를 흔들거나 빛나게 하면 도구를 누르려던 손이 망설입니다. 위치만 알립니다.
+   흰 안쪽 띠 + 테마색 고리 + 옅은 어두운 바깥 선을 겹쳐, 밝은 배경·어두운 배경 어디서나 보이게 합니다.
+   알약 모양(border-radius 999px)이라 가로·세로 툴바는 알약, 접힌 툴바(정사각형)는 원이 됩니다.
+   바깥 끝이 5px이라 가장 큰 툴바(1.1배)에서도 창의 투명 여백(7px) 안에 들어옵니다.
+   z-index: 아이콘 버튼(z-index 1)의 그림자보다 위에 그려야 고리 안쪽 흰 띠가 흐려지지 않습니다. */
+.toolkit-bar.summoned::after {
+  content: '';
+  position: absolute;
+  inset: -4px;
+  z-index: 2;
+  border: 2px solid var(--tk-accent);
+  border-radius: 999px;
+  box-shadow: inset 0 0 0 1.5px #ffffffd9, 0 0 0 1px #0f172a38;
+  pointer-events: none;
+  opacity: 0;
+  /* 길이 2s는 ToolkitToolbar.svelte의 SUMMON_MS와 같아야 합니다. */
+  animation: toolkit-summon 2s ease-in-out;
+}
+/* 한 번 깜빡임(약 0.67초) = 빠르게 켜짐 → 잠깐 머묾 → 꺼짐 → 잠깐 쉼.
+   꺼진 채로 쉬는 틈이 있어야 "깜빡인다"로 보이고, 마지막은 천천히 꺼져 차분하게 끝납니다. */
+@keyframes toolkit-summon {
+  0%, 25%, 33.33%, 58.33%, 66.67%, 100% {
+    opacity: 0;
+  }
+  4%, 17%, 37.33%, 50.33%, 70.67%, 83.67% {
+    opacity: 1;
+  }
+}
+/* 움직임 줄이기를 켠 사용자는 깜빡임 대신 2초 동안 고리를 가만히 보여 줍니다. */
+@media (prefers-reduced-motion: reduce) {
+  .toolkit-bar.summoned::after {
+    opacity: 1;
+  }
 }
 .toolkit-bar button {
   display: flex;
@@ -233,8 +269,47 @@
   margin: 5px 0 0;
   border-radius: 12px 12px 22px 22px;
 }
+/* 접힌 상태 — 아이콘 하나만 남으면 바탕화면 사진·어두운 슬라이드에 묻히기 쉽습니다.
+   두꺼운 테두리를 두르는 대신, 실제 물건처럼 "빛을 받는 가장자리 + 바닥에 드리운 그림자"로 윤곽을 만듭니다.
+   - 어두운 배경: 아래 ::after의 빛 테두리가 원의 윤곽을 잡습니다.
+   - 밝은 배경: 아주 옅은 머리카락 선 + 맞닿은 그림자 + 부드럽게 떠 있는 그림자가 경계를 잡습니다.
+   - 안쪽 아래의 옅은 그늘은 원이 평평한 스티커가 아니라 살짝 볼록하게 보이게 합니다.
+   그림자 끝이 6px이라 가장 큰 툴바(1.1배)에서도 창의 투명 여백(7px) 안에 들어옵니다. */
 .toolkit-bar.collapsed .toolkit-home {
   margin: 0;
+  box-shadow:
+    0 0 0 1px rgb(14 22 34 / 0.12),
+    0 1px 2px rgb(14 22 34 / 0.14),
+    0 2px 6px -2px rgb(14 22 34 / 0.28),
+    inset 0 -1px 3px rgb(0 0 0 / 0.1);
+}
+/* 빛 테두리 — 원 가장자리의 1px 선. 바탕 그라데이션(145deg)과 같은 왼쪽 위에서 빛이 드는 것으로 보고
+   그쪽을 가장 밝게, 아래로 갈수록 옅게 합니다. 맨 아래를 살짝 되살려 바닥에서 튄 반사광처럼 보이게 합니다.
+   펼친 상태에서는 숨겨 두고, 접을 때 부드럽게 나타나게 합니다. */
+.toolkit-bar .toolkit-home::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  padding: 1px;
+  border-radius: inherit;
+  background: linear-gradient(
+    155deg,
+    rgb(255 255 255 / 0.62),
+    rgb(255 255 255 / 0.16) 48%,
+    rgb(255 255 255 / 0.08) 74%,
+    rgb(255 255 255 / 0.24)
+  );
+  /* 가운데를 파내 가장자리 1px(padding)만 남깁니다. */
+  mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  mask-composite: exclude;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+  pointer-events: none;
+}
+.toolkit-bar.collapsed .toolkit-home::after {
+  opacity: 1;
 }
 .toolkit-preview-menu {
   position: absolute;
@@ -786,9 +861,10 @@
 }
 /* The time is the dominant object; controls are grouped by task. */
 .timer-frame {
-  /* 설명 칸이 커질 수 있는 한도를 정할 때 창 높이에서 빼 둘 몫입니다.
-     제목줄·여백·제목·버튼 줄·조작 버튼 높이에 시계 칸 목표 높이(약 210px)를 더한 값입니다. */
-  --timer-note-reserve: 552px;
+  /* 설명 글줄이 차지할 수 있는 높이입니다(1.65em = 한 줄). 창이 높을수록 넉넉히 내주되
+     2~7줄 사이로 둡니다. 이보다 긴 글은 칸 안에서 스크롤됩니다(잘리지 않습니다).
+     em은 설명 칸의 글자 크기를 따르므로, 글씨가 커져도 줄 수 기준이 그대로 맞습니다. */
+  --timer-note-room: clamp(3.3em, calc(100dvh - 620px), 11.55em);
   position: relative;
   display: flex;
   flex-direction: column;
@@ -798,9 +874,9 @@
   border-radius: 19px;
   overflow: hidden;
 }
-/* 스톱워치에는 분 증감 줄이 없어 그만큼 설명 칸에 더 내줄 수 있습니다. */
+/* 스톱워치에는 분 증감 줄이 없어 그만큼 설명 칸에 더 내줄 수 있습니다(2~8줄). */
 .timer-frame.stopwatch-frame {
-  --timer-note-reserve: 507px;
+  --timer-note-room: clamp(3.3em, calc(100dvh - 575px), 13.2em);
 }
 .timer-resize-corner {
   position: absolute;
@@ -946,18 +1022,47 @@
   overflow: hidden;
   padding: 16px 18px 19px;
 }
+/* 머리 영역은 두 줄 격자입니다.
+   1줄: [빈 칸] [제목] [설정 버튼] — 설정 버튼을 제목 줄에 올려, 버튼만 있는 줄이 휑하게 남지 않게 합니다.
+   2줄: [설명(세 칸 전체)] — 제목 바로 밑에 부제처럼 놓입니다.
+   양옆 칸이 같은 너비(1fr)라 제목과 설명이 모두 패널 정중앙, 곧 시계와 같은 세로 축에 섭니다.
+   오른쪽 칸은 설정 버튼보다 좁아지지 않으므로(max-content), 창이 좁아져도 겹치지 않습니다. */
 .timer-panel-heading {
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, auto) minmax(max-content, 1fr);
   align-items: center;
-  gap: 10px;
-  padding: 2px 0 15px;
+  column-gap: 8px;
+  row-gap: 0;
+  padding: 2px 0 13px;
   border-bottom: 1px solid var(--tk-line);
   flex: none;
 }
+/* 제목은 가운데 칸 안에서만 넓어집니다. 칸 밖으로 번지면 오른쪽 설정 버튼과 겹칩니다. */
+.timer-panel-heading > .timer-title-input {
+  grid-row: 1;
+  grid-column: 2;
+  justify-self: center;
+  max-width: 100%;
+}
+.timer-panel-heading > .timer-heading-tools {
+  grid-row: 1;
+  grid-column: 3;
+  width: auto;
+}
+.timer-panel-heading > .timer-note {
+  grid-row: 2;
+  grid-column: 1 / -1;
+  justify-self: center;
+}
+/* 제목 칸은 글자 길이만큼만 넓습니다(field-sizing). 그래야 양옆 칸이 같은 몫을 받아 제목이
+   시계와 같은 세로 축, 즉 패널 정중앙에 놓입니다. 칸을 고정 폭으로 넓게 잡으면 오른쪽 설정 버튼
+   몫 때문에 왼쪽 칸만 줄어들어 제목이 한쪽으로 쏠립니다.
+   제목이 아주 길면 왼쪽 여백부터 양보하고, 그래도 모자라면 말줄임(…)으로 줄어듭니다. */
 .timer-title-input {
-  width: min(100%, 520px);
-  min-width: 0;
+  field-sizing: content;
+  width: auto;
+  min-width: min(100%, 4em);
+  max-width: 100%;
   flex: none;
   height: 43px;
   padding: 0 9px;
@@ -977,6 +1082,12 @@
   color: var(--tk-ink);
   opacity: 1;
 }
+/* field-sizing을 모르는 WebView에서는 예전처럼 넉넉한 고정 폭으로 둡니다(겹치지는 않습니다). */
+@supports not (field-sizing: content) {
+  .timer-title-input {
+    width: min(100%, 520px);
+  }
+}
 .timer-title-input:hover {
   background: var(--tk-panel);
 }
@@ -984,132 +1095,204 @@
   background: var(--tk-panel);
   border-bottom-color: var(--tk-accent);
 }
-/* 설명 버튼은 가운데, 설정 버튼은 오른쪽 끝에 둡니다. 오른쪽 칸은 설정 버튼 폭보다
-   작아지지 않으므로, 창이 좁아지면 가운데 버튼이 왼쪽으로 비켜설 뿐 서로 겹치지 않습니다. */
+/* 설정 버튼만 오른쪽 끝에 둡니다(설명 버튼은 없앴습니다). 제목이 아무리 길어도
+   버튼 자리를 침범하지 않도록 버튼 칸은 제 너비를 지킵니다. */
 .timer-heading-tools {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto minmax(max-content, 1fr);
+  display: flex;
+  justify-content: flex-end;
   align-items: center;
-  gap: 8px;
   width: 100%;
   flex: none;
 }
-.timer-heading-tools > .timer-note-toggle {
-  grid-column: 2;
+/* 설명은 제목 바로 아래에 부제처럼 놓입니다(접기 버튼 없음). 제목·시계·버튼이 모두 패널
+   한가운데 세로 축에 서 있으므로, 설명도 가운데 정렬해야 제목과 한 덩어리로 읽힙니다.
+   두 가지 모습만 있습니다.
+   - 접힘(.compact): 비어 있고 쓰는 중도 아닐 때. 제목 밑에 "설명 추가"가 작은 글씨(13px)로
+     붙어 있을 뿐이라 시계 자리를 거의 차지하지 않습니다.
+   - 펼침: 누르거나 내용이 있을 때. 학생이 멀리서 읽을 글이므로 창 크기에 맞춰 커집니다.
+   크기는 누를 때만 바뀌고 글을 치는 동안에는 바뀌지 않아, 첫 글자에서 칸이 튀지 않습니다. */
+.timer-note {
+  --note-pad-y: 4px;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  /* 한 줄이 너무 길면 줄 끝에서 다음 줄 처음을 찾기 어렵습니다. 읽기 좋은 폭에서 줄을 바꿉니다. */
+  width: min(100%, 38em);
+  /* 폭은 위에서 정했으니 글 내용이 폭 계산에 끼지 않게 막습니다. 막지 않으면 긴 글을 "한 줄로
+     폈을 때 너비"가 머리 격자의 오른쪽 칸(설정 버튼 칸)을 부풀려 제목이 왼쪽으로 밀리고
+     패널이 옆으로 넘칩니다. 높이는 그대로 글 줄 수를 따릅니다. */
+  contain: inline-size;
+  /* 마우스를 올리거나 쓸 때 떠오르는 바탕·테두리가 제목에 딱 붙지 않을 만큼만 띄웁니다. */
+  margin-top: 4px;
+  font-size: clamp(14px, 0.8vw + 7px, 20px);
+  cursor: text;
 }
-.timer-heading-tools > .timer-settings-toggle {
-  grid-column: 3;
-  justify-self: end;
-}
-/* .tk-root button의 font: inherit보다 앞서도록 부모 클래스까지 붙여 글자 크기를 지정합니다. */
-.timer-heading-tools .timer-note-toggle {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  min-height: 38px;
-  padding: 7px 11px 7px 12px;
-  border: 1px solid var(--tk-line);
-  border-radius: 11px;
-  background: var(--tk-panel);
+/* 접힘: 아이콘과 글자만큼의 작은 알약입니다. 마우스를 올리면 바탕이 떠올라 누를 수 있는 곳임을 알립니다. */
+.timer-note.compact {
+  --note-pad-y: 0px;
+  gap: 5px;
+  /* 접힌 알약은 "설명 추가" 글자만큼만 넓어야 하므로 내용으로 폭을 정합니다(짧아서 격자를 부풀리지 않습니다). */
+  width: auto;
+  max-width: 100%;
+  contain: none;
+  margin-top: 0;
+  padding: 3px 11px 3px 9px;
+  border-radius: 999px;
   color: var(--tk-muted);
   font-size: 13px;
-  font-weight: 600;
-  line-height: 1.2;
-  white-space: nowrap;
+  transition:
+    background 0.16s ease,
+    color 0.16s ease;
 }
-.timer-heading-tools .timer-note-toggle:hover {
+.timer-note.compact:hover {
   background: var(--tk-soft);
-}
-.timer-heading-tools .timer-note-toggle.has-note {
   color: var(--tk-ink);
 }
-.timer-heading-tools .timer-note-toggle.active {
-  background: var(--tk-bg);
-  color: var(--tk-accent);
+/* 아이콘은 접혀 있을 때만 보입니다. 펼친 뒤 가운데 정렬된 여러 줄 글 옆에 아이콘이 붙어 있으면
+   글 덩어리가 한쪽으로 밀려 보입니다. */
+.timer-note .note-mark {
+  display: none;
 }
-.timer-note-toggle .note-dot {
-  width: 7px;
-  height: 7px;
+.timer-note.compact .note-mark {
+  display: block;
   flex: none;
-  border-radius: 50%;
-  background: var(--tk-accent);
+  width: 1.15em;
+  height: 1.15em;
+  /* 줄 높이(1.5em) 안에서 세로 가운데 */
+  margin-top: 0.175em;
 }
-.timer-note-toggle .note-chevron {
-  margin-left: -2px;
-  transition: transform 0.16s;
-}
-.timer-note-toggle.active .note-chevron {
-  transform: rotate(180deg);
-}
-.timer-note {
-  width: min(100%, 640px);
-  flex: none;
-  animation: note-in 0.16s ease-out;
-}
-/* 설명 칸은 내용만큼 자라되(최소 2줄), 창 높이에서 시계가 쓸 몫(--timer-note-reserve)을
-   남긴 만큼까지만 커집니다. 그보다 긴 글은 칸 안에서 스크롤되므로 글자가 잘리지 않고,
-   긴 영문·주소도 overflow-wrap으로 줄바꿈되어 옆으로 넘치지 않습니다. */
+/* 왜 테두리 없는 칸인가: 시계가 주인공인 화면에서 상자를 하나 더 그리면 시선이 갈라집니다.
+   평소에는 배경 없는 글자처럼 보이다가, 마우스를 올리면 은은한 바탕이, 쓰기 시작하면
+   테두리가 떠올라 "여기에 적는 곳"임을 알려 줍니다.
+   높이는 field-sizing: content가 글 줄 수에 맞춰 스스로 맞추고, --timer-note-room에서 멈춘 뒤로는
+   칸 안에서 스크롤됩니다(글자는 잘리지 않습니다). */
 .timer-note .timer-note-input {
   display: block;
-  width: 100%;
-  min-height: calc(3.2em + 22px);
-  max-height: clamp(
-    calc(3.2em + 22px),
-    calc(100dvh - var(--timer-note-reserve)),
-    calc(12.8em + 22px)
-  );
+  flex: 1;
+  min-width: 0;
+  min-height: calc(1.65em + 2 * var(--note-pad-y) + 2px);
+  max-height: calc(var(--timer-note-room, 11.55em) + 2 * var(--note-pad-y) + 2px);
   field-sizing: content;
   margin: 0;
-  padding: 10px 14px;
-  border: 1px solid var(--tk-line);
-  border-radius: 12px;
-  background: var(--tk-bg);
+  padding: var(--note-pad-y) 14px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  background: transparent;
   color: var(--tk-ink);
-  font-size: clamp(14px, 0.8vw + 7px, 20px);
   font-weight: 500;
-  line-height: 1.6;
+  line-height: 1.65;
+  text-align: center;
   resize: none;
   overflow-x: hidden;
   overflow-y: auto;
   white-space: pre-wrap;
+  /* 긴 영문·주소도 칸 밖으로 넘치지 않게 끊어 줍니다. */
   overflow-wrap: anywhere;
   scrollbar-width: thin;
   scrollbar-color: var(--tk-line) transparent;
+  transition:
+    background 0.16s ease,
+    border-color 0.16s ease;
+}
+/* 접힌 칸은 "설명 추가" 글자 폭만큼만(field-sizing) 넓고 테두리·여백이 없습니다.
+   바탕과 글자색은 바깥 알약(label)이 맡습니다. */
+.timer-note.compact .timer-note-input {
+  flex: none;
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  color: inherit;
+  line-height: 1.5;
+  text-align: left;
+  overflow: hidden;
+}
+/* 한도를 줄 수 단위로 끊습니다. 한도가 1.4줄처럼 어중간하면 마지막 줄이 반쯤 잘려 보입니다. */
+@supports (width: round(down, 10px, 3px)) {
+  .timer-note .timer-note-input {
+    max-height: calc(
+      round(down, var(--timer-note-room, 11.55em), 1.65em) + 2 * var(--note-pad-y) + 2px
+    );
+  }
+}
+.timer-note:not(.compact):hover .timer-note-input:not(:focus) {
+  background: var(--tk-soft);
 }
 .timer-note .timer-note-input::placeholder {
   color: var(--tk-muted);
   opacity: 1;
 }
+.timer-note.compact .timer-note-input::placeholder {
+  color: inherit;
+}
 .timer-note .timer-note-input:focus {
   outline: none;
+  background: var(--tk-bg);
   border-color: var(--tk-accent);
 }
-/* field-sizing을 모르는 오래된 WebView에서는 3줄 높이로 고정하고 안에서 스크롤합니다. */
+/* 칸 안에서 스크롤될 때만, 글이 더 이어지는 쪽 가장자리를 서서히 흐리게 합니다.
+   맨 위에 있으면 아래쪽만, 맨 아래에 있으면 위쪽만 흐려져 "여기서 이어진다"가 읽히고,
+   경계에 반쯤 걸친 줄은 딱 끊기지 않고 흐려지며 사라집니다.
+   스크롤할 것이 없으면 스크롤 타임라인이 멈춰 있어 아무 효과도 없습니다.
+   글을 쓰는 동안(:focus)에는 커서가 가려지지 않도록 끕니다. */
+@property --note-fade-top {
+  syntax: '<length>';
+  inherits: false;
+  initial-value: 0px;
+}
+@property --note-fade-bottom {
+  syntax: '<length>';
+  inherits: false;
+  initial-value: 0px;
+}
+@keyframes note-edge-fade {
+  from {
+    --note-fade-top: 0px;
+    --note-fade-bottom: 14px;
+  }
+  12%,
+  88% {
+    --note-fade-top: 14px;
+    --note-fade-bottom: 14px;
+  }
+  to {
+    --note-fade-top: 14px;
+    --note-fade-bottom: 0px;
+  }
+}
+@supports (animation-timeline: scroll()) {
+  .timer-note .timer-note-input {
+    mask-image: linear-gradient(
+      to bottom,
+      transparent,
+      #000 var(--note-fade-top),
+      #000 calc(100% - var(--note-fade-bottom)),
+      transparent
+    );
+    animation: note-edge-fade linear both;
+    animation-timeline: scroll(self);
+  }
+  .timer-note .timer-note-input:focus {
+    mask-image: none;
+  }
+}
+/* field-sizing을 모르는 오래된 WebView에서는 높이를 고정하고 안에서 스크롤합니다.
+   (자동으로 자라지 않을 뿐, 글자가 잘리지는 않습니다) */
 @supports not (field-sizing: content) {
   .timer-note .timer-note-input {
-    height: calc(4.8em + 22px);
+    height: calc(3.3em + 2 * var(--note-pad-y) + 2px);
+  }
+  .timer-note.compact .timer-note-input {
+    height: calc(1.65em + 2 * var(--note-pad-y) + 2px);
   }
 }
-@keyframes note-in {
-  from {
-    opacity: 0;
-    transform: translateY(-4px);
-  }
-}
-/* 설명을 펼치면 시계 칸이 줄어듭니다. 아주 낮은 창에서도 시계가 알아볼 수 없을 만큼
-   납작해지지 않도록 바닥 높이를 두고, 그래도 모자라면 잘라 내지 않고 패널 안에서 스크롤합니다. */
-.timer-main.note-open {
-  overflow-y: auto;
-  scrollbar-width: thin;
-  scrollbar-color: var(--tk-line) transparent;
-}
-.timer-main.note-open .timer-stage {
-  min-height: 150px;
-}
+/* 설명이 길어지면 이 칸이 줄어들며 자리를 내줍니다(설명 칸은 flex: none).
+   다만 시계를 알아볼 수 없을 만큼 납작해지지는 않도록 바닥 높이를 둡니다.
+   바닥에 닿은 뒤로는 설명 칸이 제 한도(--timer-note-room)에서 멈추고 안에서 스크롤됩니다. */
 .timer-stage {
   position: relative;
   flex: 1;
-  min-height: 0;
+  min-height: 168px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -2131,8 +2314,8 @@
     min-height: 500px;
     flex: none;
   }
-  /* 이 배치는 창 전체가 스크롤되므로, 설명을 펼치면 시계를 줄이지 않고 패널을 늘립니다. */
-  .timer-layout.with-settings:not(.with-laps) .timer-main.note-open .timer-stage {
+  /* 이 배치는 창 전체가 스크롤되므로, 설명이 길어져도 시계를 줄이지 않고 패널을 늘립니다. */
+  .timer-layout.with-settings:not(.with-laps) .timer-main .timer-stage {
     min-height: 240px;
   }
   .timer-layout.with-settings:not(.with-laps) .timer-settings-panel {
@@ -2179,33 +2362,33 @@
   }
   .timer-panel-heading {
     padding: 0 4px 12px;
-    gap: 8px;
+    column-gap: 8px;
   }
   .timer-title-input {
     height: 39px;
     font-size: 23px !important;
-  }
-  .timer-heading-tools {
-    gap: 6px;
-  }
-  .timer-heading-tools .timer-note-toggle {
-    min-height: 34px;
-    padding: 5px 9px 5px 10px;
-    gap: 6px;
-    font-size: 12px;
   }
   .timer-heading-tools > .timer-settings-toggle {
     min-height: 34px;
     padding: 6px 10px;
     font-size: 12px !important;
   }
+  /* 좁은 창에서도 설명은 2~5줄에서 멈춥니다. 설명이 제목 밑(시계 위)에 있으므로 한도가 없으면
+     긴 글이 시계를 화면 아래로 밀어내 스크롤해야 시계가 보입니다. 넘치는 글은 칸 안에서 스크롤됩니다. */
+  .timer-frame,
+  .timer-frame.stopwatch-frame {
+    --timer-note-room: clamp(3.3em, calc(100dvh - 470px), 8.25em);
+  }
+  /* 시계 칸은 기본 220px이되, 패널 최소 높이 때문에 남는 자리가 있으면 그만큼 커집니다.
+     (스톱워치처럼 분 증감 줄이 없거나 설명이 접혀 있을 때) 고정 높이로 두면 그 몫이
+     패널 바닥에 빈자리로 남아, 설명 아래가 휑하게 비어 보입니다. */
   .timer-stage {
-    height: 220px;
-    flex: none;
+    height: auto;
+    flex: 1 0 220px;
   }
   .timer-stage.analog,
   .timer-stage.hourglass {
-    height: 255px;
+    flex-basis: 255px;
   }
   /* 좁은 창의 시계 칸은 높이가 고정입니다. '시간 끝' 안내가 아래 공간을 차지하면
      시계·남은 시간 글자가 칸 밖으로 밀려나므로, 칸 높이(cqh)에 맞춰 조금 줄어들게 합니다. */
@@ -2303,11 +2486,12 @@
   .completion-message {
     font-size: 13px;
   }
+  /* 좁은 창의 시계 칸은 flex-basis가 기본 높이입니다(남는 자리는 위 규칙대로 더 받습니다). */
   .timer-stage.digital {
-    height: 220px;
+    flex-basis: 220px;
   }
   .stopwatch-frame .timer-stage {
-    height: 210px;
+    flex-basis: 210px;
   }
   .stopwatch-frame .primary-controls {
     gap: 7px;
@@ -2326,22 +2510,27 @@
   .timer-main {
     padding: 10px 12px 12px;
   }
-  /* 낮은 창: 제목·버튼 줄을 줄여 시계 칸을 지키고, 설명 칸이 빼 둘 몫도 그만큼 줄입니다. */
+  /* 낮은 창: 시계 칸을 지키려고 설명 칸이 자랄 수 있는 한도를 좁힙니다(2~3줄).
+     1줄까지 줄이면 다음 줄 윗부분이 칸 아래에 비쳐 답답해 보이므로 2줄은 지킵니다.
+     넘치는 글은 칸 안에서 스크롤되므로 읽는 데는 지장이 없습니다. */
   .timer-frame {
-    --timer-note-reserve: 452px;
+    --timer-note-room: clamp(3.3em, calc(100dvh - 500px), 4.95em);
   }
   .timer-frame.stopwatch-frame {
-    --timer-note-reserve: 412px;
+    --timer-note-room: clamp(3.3em, calc(100dvh - 460px), 6.6em);
+  }
+  /* 낮은 창에서는 시계 바닥 높이도 함께 낮춰야 패널이 넘치지 않습니다. */
+  .timer-stage {
+    min-height: 120px;
   }
   .timer-panel-heading {
-    gap: 6px;
+    column-gap: 6px;
     padding-bottom: 9px;
   }
   .timer-title-input {
     height: 34px;
     font-size: 21px !important;
   }
-  .timer-heading-tools .timer-note-toggle,
   .timer-heading-tools > .timer-settings-toggle {
     min-height: 32px;
     padding-top: 4px;
