@@ -1,6 +1,8 @@
 import { TOOLKIT_THEMES } from './themes.js';
+import { defaultClockPreferences, normalizeClockPreferences, isValidClockField } from '../clock/clockPreferences.js';
 /** @typedef {{tickEnabled:boolean,warningEnabled?:boolean,endEnabled?:boolean,warningLeadSeconds?:number,warningDurationSeconds?:number|null,dialRangeMinutes?:number,showRemainingTime?:boolean}} Preferences */
-/** @typedef {{schemaVersion:number,revision:number,toolkit:{theme:string,darkMode:boolean,enabled:boolean,externalToolsEnabled:boolean,orientation:string,toolbarSize:number,collapsed:boolean,visibleToolIds:string[],hiddenPlatformIds:string[],position:Record<string,number>|null},preferences:Record<string,Preferences>}} Settings */
+/** @typedef {{schemaVersion:number,revision:number,toolkit:{theme:string,darkMode:boolean,enabled:boolean,externalToolsEnabled:boolean,orientation:string,toolbarSize:number,collapsed:boolean,visibleToolIds:string[],hiddenPlatformIds:string[],position:Record<string,number>|null},preferences:Record<string,Preferences>}} Settings
+ * preferences.clock은 타이머와 모양이 다른 시계 설정(clockPreferences.js)입니다. 읽을 때는 normalizeClockPreferences를 거칩니다. */
 export const TOOLBAR_SIZES = [
   { label: '매우 작게', scale: 0.9 },
   { label: '작게', scale: 0.95 },
@@ -36,7 +38,7 @@ export function defaultPreferences(kind) {
 /** @returns {Settings} */
 export function defaults() {
   return {
-    schemaVersion: 6,
+    schemaVersion: 8,
     revision: 0,
     toolkit: {
       // 처음 설정에서 사용 여부를 고르기 전에는 조용히 대기합니다.
@@ -46,12 +48,15 @@ export function defaults() {
       orientation: 'horizontal',
       toolbarSize: 2,
       collapsed: false,
-      visibleToolIds: ['timer', 'picker', 'noticeboard', 'tournament', 'focus-bell', 'roster'],
+      visibleToolIds: ['timer', 'clock', 'picker', 'noticeboard', 'tournament', 'focus-bell', 'dice', 'roster'],
       hiddenPlatformIds: [],
       externalToolsEnabled: true,
       position: null,
     },
-    preferences: Object.fromEntries(TIMER_KINDS.map((kind) => [kind, defaultPreferences(kind)])),
+    preferences: {
+      ...Object.fromEntries(TIMER_KINDS.map((kind) => [kind, defaultPreferences(kind)])),
+      clock: /** @type {any} */ (defaultClockPreferences()),
+    },
   };
 }
 /** @param {string} kind @param {any} [input] @returns {Preferences} */
@@ -72,7 +77,7 @@ export function normalizePreferences(kind, input = {}) {
 }
 /** @param {any} input @returns {Settings} */
 export function normalizeSettings(input) {
-  if (input?.schemaVersion != null && ![1, 2, 3, 4, 5, 6].includes(input.schemaVersion))
+  if (input?.schemaVersion != null && ![1, 2, 3, 4, 5, 6, 7, 8].includes(input.schemaVersion))
     throw new Error('더 최신 버전의 툴킷 설정입니다.');
   const out = defaults();
   out.revision = Number.isSafeInteger(input?.revision) ? input.revision : 0;
@@ -85,7 +90,7 @@ export function normalizeSettings(input) {
     out.toolkit.toolbarSize = input.toolkit.toolbarSize;
   if (Array.isArray(input?.toolkit?.visibleToolIds))
     out.toolkit.visibleToolIds = input.toolkit.visibleToolIds.filter(
-      /** @param {unknown} id */ (id) => id === 'timer' || id === 'roster' || id === 'noticeboard' || id === 'picker' || id === 'tournament' || id === 'focus-bell',
+      /** @param {unknown} id */ (id) => id === 'timer' || id === 'clock' || id === 'roster' || id === 'noticeboard' || id === 'picker' || id === 'tournament' || id === 'focus-bell' || id === 'dice',
     );
   if (Array.isArray(input?.toolkit?.hiddenPlatformIds))
     out.toolkit.hiddenPlatformIds = [...new Set(input.toolkit.hiddenPlatformIds.filter(
@@ -96,14 +101,27 @@ export function normalizeSettings(input) {
   if ([1, 2, 3].includes(input?.schemaVersion) && !out.toolkit.visibleToolIds.includes('picker')) out.toolkit.visibleToolIds.push('picker');
   if ([1, 2, 3, 4].includes(input?.schemaVersion) && !out.toolkit.visibleToolIds.includes('tournament')) out.toolkit.visibleToolIds.push('tournament');
   if ([1, 2, 3, 4, 5].includes(input?.schemaVersion) && !out.toolkit.visibleToolIds.includes('focus-bell')) out.toolkit.visibleToolIds.push('focus-bell');
+  // 스키마 7에서 주사위가 새로 생겼습니다. 이전 설정에는 한 번만 보이게 넣고, 이후 사용자가 숨기면 그대로 둡니다.
+  if ([1, 2, 3, 4, 5, 6].includes(input?.schemaVersion) && !out.toolkit.visibleToolIds.includes('dice')) out.toolkit.visibleToolIds.push('dice');
+  // 스키마 8에서 시계가 새로 생겼습니다. 규칙은 주사위와 같습니다(Rust toolkit.rs와 같은 규칙).
+  if ([1, 2, 3, 4, 5, 6, 7].includes(input?.schemaVersion) && !out.toolkit.visibleToolIds.includes('clock')) out.toolkit.visibleToolIds.push('clock');
   if (input?.toolkit?.position) out.toolkit.position = input.toolkit.position;
   for (const kind of TIMER_KINDS)
     out.preferences[kind] = normalizePreferences(kind, input?.preferences?.[kind]);
+  out.preferences.clock = /** @type {any} */ (normalizeClockPreferences(input?.preferences?.clock));
   return out;
 }
 /** @param {Settings} input @param {string} scope @param {Record<string,unknown>} patch */
 export function applySettingsPatch(input, scope, patch) {
   const out = normalizeSettings(input);
+  if (scope === 'clock') {
+    // 시계는 항목마다 규칙이 달라 하나라도 어긋나면 통째로 거부합니다(Rust merge와 같은 동작).
+    if (!patch || !Object.keys(patch).length || Object.entries(patch).some(([key, value]) => !isValidClockField(key, value)))
+      throw new Error('저장할 수 없는 설정입니다.');
+    out.preferences.clock = /** @type {any} */ (normalizeClockPreferences({ ...out.preferences.clock, ...patch }));
+    out.revision++;
+    return normalizeSettings(out);
+  }
   const allowed =
     scope === 'toolkit' ? Object.keys(out.toolkit) : Object.keys(defaultPreferences(scope));
   if (!patch || Object.keys(patch).some((key) => !allowed.includes(key)))

@@ -30,6 +30,7 @@
   import UpdateBanner from "./components/UpdateBanner.svelte";
   import UpdateGuide from "./components/UpdateGuide.svelte";
   import UpdateNotice from "./components/UpdateNotice.svelte";
+  import UpdateInstallOverlay from "./components/UpdateInstallOverlay.svelte";
 
   import { convertFileSrc } from "@tauri-apps/api/core";
   import { getCurrentWindow } from "@tauri-apps/api/window";
@@ -538,7 +539,7 @@
     }
 
     // 공지 대기는 메인 창 복원과 분리해 앱 사용을 막지 않습니다.
-    if (currentWindow.label === "main") {
+    if (currentWindow.label === "main" && appState._hydrated) {
       void startStartupNotices(!appState.hideWelcomeMessage);
     }
 
@@ -682,7 +683,7 @@
 
     }
 
-    if (currentWindow.label === "main") {
+    if (currentWindow.label === "main" && appState._hydrated) {
       const savedWindows = [
         ...($state.snapshot(appState.activeExtraWindows) || []),
       ];
@@ -1203,6 +1204,7 @@
   }
 
   function handleGlobalKeydown(e) {
+    if (appState.storageError) return;
     // ✨ 자간 단축키: Alt+Shift+N (좁히기) / Alt+Shift+W (넓히기)
     if (e.altKey && e.shiftKey) {
       if (e.key.toLowerCase() === 'n') {
@@ -1278,6 +1280,7 @@
   }
 
   function handleGlobalPaste(e) {
+    if (appState.storageError) return;
     if (isEditingActive()) return;
     if (!appState.isEditMode) return;
 
@@ -1320,6 +1323,13 @@
   <UpdateNotice />
 {:else if getCurrentWindow().label === "reminder"}
   <ReminderPopup />
+{:else if appState.storageError && isDataWindow(getCurrentWindow().label)}
+  <div class="h-screen w-screen rounded-lg border border-red-300 bg-amber-50 p-5 text-sm text-red-800 flex flex-col justify-center gap-3">
+    <strong>저장 데이터를 아직 읽지 못했습니다.</strong>
+    <p>기존 내용을 보호하기 위해 편집과 저장을 멈췄습니다. 자동으로 다시 시도하고 있습니다.</p>
+    <p>계속 이 화면이면 Tidy Task를 완전히 종료한 뒤 다시 실행해 주세요.</p>
+    <button class="self-start rounded border border-red-300 px-3 py-1" onclick={() => getCurrentWindow().close()}>창 닫기</button>
+  </div>
 {:else if getCurrentWindow().label.startsWith("tinynote-") && appState.isReady}
   <StickerWindow />
 {:else if getCurrentWindow().label === "archive"}
@@ -1734,4 +1744,11 @@
       </span>
     </div>
   </div>
+{/if}
+
+<!-- ✨ [업데이트 설치 직전] 입력 잠금 덮개.
+     메모 창은 마지막 저장을 마친 뒤 설치가 끝날 때까지(앱이 닫힐 때까지) 새 입력을 받지 않습니다.
+     설정 창도 저장·설치 단계에서는 막습니다. 여기서 바꾼 설정은 이미 저장을 마친 메모 창에 기록되지 못하기 때문입니다. -->
+{#if appState.isUpdateFrozen || (getCurrentWindow().label === "settings" && (appState.updateInstallPhase === "preparing" || appState.updateInstallPhase === "installing"))}
+  <UpdateInstallOverlay />
 {/if}

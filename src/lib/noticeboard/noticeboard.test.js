@@ -17,6 +17,12 @@ import {
   searchEntries,
 } from "./dates.js";
 import { NoticeSession } from "./session.js";
+import {
+  pickKey,
+  allSelected,
+  toggleAllKeys,
+  describeKeys,
+} from "./selection.js";
 import { createPreviewRepository } from "./repository.js";
 /** @param {string} text */
 const doc = (text) => ({
@@ -332,4 +338,50 @@ test("formatting an untouched empty date does not create a draft", async () => {
   s.dispose();
 });
 
-test('toolkit migration adds only the new tool and honors later hiding',()=>{ const old=normalizeSettings({schemaVersion:2,toolkit:{visibleToolIds:[],hiddenPlatformIds:['clanner']}});assert.deepEqual(old.toolkit.visibleToolIds,['noticeboard','picker','tournament','focus-bell']);assert.deepEqual(old.toolkit.hiddenPlatformIds,['clanner']);assert.deepEqual(normalizeSettings({schemaVersion:3,toolkit:{visibleToolIds:[]}}).toolkit.visibleToolIds,['picker','tournament','focus-bell']);assert.deepEqual(normalizeSettings({schemaVersion:6,toolkit:{visibleToolIds:[]}}).toolkit.visibleToolIds,[]);});
+test('toolkit migration adds only the new tool and honors later hiding',()=>{ const old=normalizeSettings({schemaVersion:2,toolkit:{visibleToolIds:[],hiddenPlatformIds:['clanner']}});assert.deepEqual(old.toolkit.visibleToolIds,['noticeboard','picker','tournament','focus-bell','dice','clock']);assert.deepEqual(old.toolkit.hiddenPlatformIds,['clanner']);assert.deepEqual(normalizeSettings({schemaVersion:3,toolkit:{visibleToolIds:[]}}).toolkit.visibleToolIds,['picker','tournament','focus-bell','dice','clock']);assert.deepEqual(normalizeSettings({schemaVersion:8,toolkit:{visibleToolIds:[]}}).toolkit.visibleToolIds,[]);});
+
+const shown = ["2026-09-22", "2026-09-21", "2026-09-18", "2026-09-17"];
+test("목록 선택: 누를 때마다 고르고 풀며, 기준점은 마지막에 누른 날짜", () => {
+  const first = pickKey([], shown, "2026-09-21");
+  assert.deepEqual(first, { selected: ["2026-09-21"], anchor: "2026-09-21" });
+  const off = pickKey(first.selected, shown, "2026-09-21");
+  assert.deepEqual(off.selected, []);
+});
+test("목록 선택: Shift는 기준점부터 누른 곳까지를 더하기만 한다", () => {
+  const start = pickKey([], shown, "2026-09-22");
+  const range = pickKey(start.selected, shown, "2026-09-17", {
+    shift: true,
+    anchor: start.anchor,
+  });
+  assert.deepEqual(range.selected, shown);
+  assert.equal(range.anchor, "2026-09-22", "기준점은 그대로 남는다");
+  // 거꾸로 올라가도 같은 범위, 이미 고른 항목은 풀리지 않는다.
+  const back = pickKey(["2026-09-18"], shown, "2026-09-22", {
+    shift: true,
+    anchor: "2026-09-17",
+  });
+  assert.deepEqual([...back.selected].sort(), [...shown].sort());
+});
+test("목록 선택: 기준점이 목록에서 사라졌으면 Shift도 한 개만 고른다", () => {
+  const picked = pickKey([], shown, "2026-09-18", {
+    shift: true,
+    anchor: "2026-01-01",
+  });
+  assert.deepEqual(picked.selected, ["2026-09-18"]);
+});
+test("전체 선택은 보이는 항목만 다루고, 숨은 선택은 건드리지 않는다", () => {
+  const hidden = ["2026-08-01"];
+  const all = toggleAllKeys(hidden, shown);
+  assert.deepEqual(all, [...hidden, ...shown]);
+  assert.equal(allSelected(all, shown), true);
+  const cleared = toggleAllKeys(all, shown);
+  assert.deepEqual(cleared, hidden, "걸러져 보이지 않던 선택은 남는다");
+  assert.equal(allSelected([], []), false, "빈 목록은 '전체 선택됨'이 아니다");
+});
+test("확인 문구는 날짜를 6개까지만 적고 나머지는 세어 준다", () => {
+  assert.equal(describeKeys(["2026-09-22"]), "09-22(화)");
+  assert.equal(
+    describeKeys([...shown, "2026-09-16", "2026-09-15", "2026-09-14"]),
+    "09-22(화), 09-21(월), 09-18(금), 09-17(목), 09-16(수), 09-15(화) 외 1일",
+  );
+});

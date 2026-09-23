@@ -10,7 +10,7 @@ import { fitToolbarPosition, centerToolbarPosition } from './toolbarPlacement.js
 /** @param {string} role */
 export async function openTool(role) {
   if (native) return invoke('toolkit_open', { role });
-  window.open(`/?toolkit-preview=${role}`, '_blank', role === 'picker' ? 'width=1440,height=920' : 'width=960,height=680');
+  window.open(`/?toolkit-preview=${role}`, '_blank', role === 'picker' ? 'width=1440,height=920' : role === 'dice' ? 'width=960,height=720' : 'width=960,height=680');
 }
 /** @param {string} id */
 export async function openPlatform(id) {

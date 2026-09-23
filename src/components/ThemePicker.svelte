@@ -79,7 +79,17 @@
       popoverEl.hidePopover();
     }
     isOpen = false;
-    if (restoreFocus) triggerEl?.focus();
+    // preventScroll: 포커스를 돌려줄 때 스크롤 위치까지 끌고 가지 않도록 합니다.
+    if (restoreFocus) triggerEl?.focus({ preventScroll: true });
+  }
+
+  // 스크롤·창 크기 변경은 "사용자가 다른 곳을 보고 있다"는 신호이므로 열린 목록만 조용히 닫습니다.
+  // 왜 따로 두는가: closePicker를 리스너로 바로 달면 이벤트 객체가 옵션 자리로 들어가 restoreFocus가
+  //   기본값(true)이 되고, 목록이 닫혀 있어도 스크롤할 때마다 테마 버튼이 포커스를 가져가며 화면을
+  //   그 자리로 끌어올렸습니다. (설정 창에서 UI 글자 크기를 바꾸면 슬라이더가 사라지던 원인)
+  function handleViewportChange() {
+    if (!isOpen) return;
+    closePicker({ restoreFocus: false });
   }
 
   function togglePicker() {
@@ -148,13 +158,13 @@
   onMount(() => {
     supportsPopover = typeof HTMLElement.prototype.showPopover === 'function';
     scrollParent = triggerEl?.closest('.custom-scrollbar');
-    scrollParent?.addEventListener('scroll', closePicker);
-    window.addEventListener('resize', closePicker);
+    scrollParent?.addEventListener('scroll', handleViewportChange, { passive: true });
+    window.addEventListener('resize', handleViewportChange);
   });
 
   onDestroy(() => {
-    scrollParent?.removeEventListener('scroll', closePicker);
-    window.removeEventListener('resize', closePicker);
+    scrollParent?.removeEventListener('scroll', handleViewportChange);
+    window.removeEventListener('resize', handleViewportChange);
   });
 </script>
 

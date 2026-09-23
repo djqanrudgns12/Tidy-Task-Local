@@ -5,25 +5,62 @@
   import { cubicOut } from "svelte/easing";
   import { appState } from "../lib/appState.svelte.js";
   import { editable } from "../lib/editable.js";
-  import { Check, Plus, Trash2, GripVertical, Calendar } from "lucide-svelte";
-  import DatePicker from "./DatePicker.svelte";
+  import { Check, Plus, Trash2, GripVertical } from "lucide-svelte";
   import clsx from "clsx";
-  import { flushSync } from "svelte";
+  import { flushSync, onMount } from "svelte";
   import Icon from "@iconify/svelte";
   import { CALENDAR_BOLD_DUOTONE } from "../lib/icons.js";
+  import { daysUntil } from "../lib/dateUtils.js";
+  import { formatShortDate } from "../lib/datePicker/calendarModel.js";
+  import { datePicker, dateTrigger } from "../lib/datePicker/datePickerClient.svelte.js";
 
   let newTaskText = $state("");
   let newTaskDeadline = $state("");
-  let showNewTaskPicker = $state(false);
 
   let formDlInfo = $derived(getDeadlineInfo(newTaskDeadline));
 
-  // 개별 할 일의 DatePicker 열림 상태 관리
-  let openPickerTodoId = $state(null);
-  // 뱃지 버튼 ref 맵 (id -> HTMLElement)
-  let badgeRefs = {};
-  // 폼 캘린더 버튼 ref
-  let formCalBtnEl = $state(null);
+  // ✨ 마감일 달력은 메모 창 안이 아니라 별도 창(date-picker)으로 뜹니다.
+  // 왜: 창을 세로로 줄이면(최소 210px) 달력(약 260px)이 창 밖으로 잘렸습니다.
+  //   별도 창은 메모 창 밖·바탕화면 위까지 나올 수 있고, 모니터 작업영역 기준으로 위치를 고릅니다.
+  // 달력을 여닫는 대상 이름: 기존 할 일은 'todo:<id>', 새 할 일 입력칸은 아래 상수
+  const NEW_TASK_PICKER_KEY = "new";
+  // 새 할 일 입력칸. 날짜를 고른 뒤 바로 이어 쓰도록 초점을 돌려줄 곳입니다.
+  let newTaskInputEl = $state(null);
+
+  // 달력 창이 메모 창과 같은 모양(테마·다크 모드·UI 글꼴·크기)으로 보이도록 넘길 값
+  function pickerAppearance() {
+    const name = appState.uiFontFamily || "메이플스토리 L";
+    const font = appState.allFonts.find((f) => f.name === name);
+    const custom = appState.customFonts.find((f) => f.name === name);
+    return {
+      isDarkMode: !!appState.isDarkMode,
+      themeColor: appState.themeColor,
+      fontFamily: font ? font.family : '"Gulim", sans-serif',
+      fontSizePt: appState.uiFontSize || 10,
+      customFont: custom && custom.path ? { name: custom.name, path: custom.path } : null,
+    };
+  }
+
+  /** @param {string} id */
+  const todoPickerKey = (id) => `todo:${id}`;
+
+  // 달력이 떠 있는 동안 그 할 일이 사라지면(삭제·마감 처리·되돌리기) 달력도 닫습니다.
+  $effect(() => {
+    const key = datePicker.openKey;
+    if (!key || !key.startsWith("todo:")) return;
+    const id = key.slice("todo:".length);
+    if (!appState.todos.some((t) => t.id === id)) datePicker.close("gone");
+  });
+
+  // 업데이트 설치 직전(입력 잠금)에는 달력을 닫습니다. 잠근 뒤 고른 날짜는 저장되지 못하기 때문입니다.
+  $effect(() => {
+    if (appState.isUpdateFrozen && datePicker.openKey) datePicker.close("frozen");
+  });
+
+  onMount(() => {
+    // 처음 누를 때 창을 만드느라 늦지 않게, 한가할 때 달력 창을 미리 만들어 둡니다.
+    datePicker.schedulePrewarm();
+  });
 
   // ✨ [TCREI: Composition-Safe] 플레이스홀더는 CSS :empty 기반으로 처리합니다.
   // 왜: $derived(newTaskText)는 한글 IME 조합 중 상태가 업데이트되지 않아
@@ -41,17 +78,9 @@
       };
     }
 
-    const dDate = new Date(deadline + 'T00:00:00');
-    const today = new Date();
-    today.setHours(0,0,0,0);
-    const diffTime = dDate - today;
-    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-    
-    // 포맷팅
-    const parts = deadline.split('-');
-    const days = ['일', '월', '화', '수', '목', '금', '토'];
-    const dayName = days[dDate.getDay()];
-    const label = `${parseInt(parts[1])}/${parseInt(parts[2])}(${dayName})`;
+    // 날짜 계산·표기는 리마인더·달력과 같은 공용 함수를 씁니다(로컬 자정 기준, '9/30(수)' 형식).
+    const diffDays = daysUntil(deadline);
+    const label = formatShortDate(deadline) || String(deadline);
 
     let color, bg, borderColor;
     if (diffDays < 0) {
@@ -125,7 +154,8 @@
       appState.addTodo(newTaskText.trim(), newTaskDeadline);
       newTaskText = "";
       newTaskDeadline = "";
-      showNewTaskPicker = false;
+      // 새 할 일 달력이 아직 떠 있다면 닫습니다. 방금 추가한 할 일의 날짜를 고르던 달력이라 더 쓸 곳이 없습니다.
+      if (datePicker.openKey === NEW_TASK_PICKER_KEY) datePicker.close("requester");
     }
   }
 </script>
@@ -197,12 +227,16 @@
             </button>
           </div>
 
-          <!-- ✨ 기존 할 일 데드라인 뱃지 (커스텀 DatePicker 사용) -->
+          <!-- ✨ 기존 할 일 마감일 뱃지 — 누르면 날짜 선택 창(별도 창)이 뱃지 옆에 뜹니다 -->
           <div class="todo-lead relative justify-center ml-0.5">
             <button
               type="button"
-              bind:this={badgeRefs[todo.id]}
-              onclick={() => openPickerTodoId = openPickerTodoId === todo.id ? null : todo.id}
+              use:dateTrigger={{
+                key: todoPickerKey(todo.id),
+                value: todo.deadline || '',
+                appearance: pickerAppearance,
+                onSelect: (v) => appState.setTodoDeadline(todo.id, v),
+              }}
               class="px-[0.6em] py-[0.3em] font-bold border rounded-full transition-all hover:scale-105 active:scale-95 flex items-center justify-center whitespace-nowrap shrink-0"
               style="
                 color: {dlInfo.color};
@@ -211,8 +245,11 @@
                 min-width: 3.5em;
                 font-family: var(--ui-font-family);
                 font-size: 0.8em;
+                outline: {datePicker.openKey === todoPickerKey(todo.id) ? `2px solid ${appState.getThemeAccentColor()}` : 'none'};
+                outline-offset: 1px;
               "
               title="마감일 설정"
+              aria-expanded={datePicker.openKey === todoPickerKey(todo.id)}
             >
               {#if dlInfo.isIcon}
                 <Icon icon={CALENDAR_BOLD_DUOTONE} width="16" height="16" />
@@ -220,15 +257,6 @@
                 {dlInfo.label}
               {/if}
             </button>
-
-            {#if openPickerTodoId === todo.id}
-              <DatePicker
-                value={todo.deadline || ''}
-                anchorEl={badgeRefs[todo.id]}
-                onchange={(v) => { todo.deadline = v; appState._sortTodosByDeadline(); appState.saveNow(); if (v) appState.checkReminders(); }}
-                onclose={() => openPickerTodoId = null}
-              />
-            {/if}
           </div>
 
           <div
@@ -266,39 +294,39 @@
     <div class="relative shrink-0 flex items-center justify-center">
       <button
         type="button"
-        bind:this={formCalBtnEl}
-        onclick={() => showNewTaskPicker = !showNewTaskPicker}
+        use:dateTrigger={{
+          key: NEW_TASK_PICKER_KEY,
+          value: newTaskDeadline,
+          appearance: pickerAppearance,
+          onSelect: (v) => { newTaskDeadline = v; },
+          focusAfter: () => newTaskInputEl,
+        }}
         class="min-w-[28px] h-[28px] px-[0.4em] flex items-center justify-center rounded-lg border transition-all hover:scale-105 active:scale-95 relative whitespace-nowrap"
         style="
           background-color: {formDlInfo.bg};
           border-color: {formDlInfo.borderColor};
           color: {formDlInfo.color};
           font-family: var(--ui-font-family);
+          outline: {datePicker.openKey === NEW_TASK_PICKER_KEY ? `2px solid ${appState.getThemeAccentColor()}` : 'none'};
+          outline-offset: 1px;
         "
-        title={newTaskDeadline ? `마감일: ${newTaskDeadline}` : "마감일 설정"}
+        title={newTaskDeadline ? `마감일: ${formatShortDate(newTaskDeadline)}` : "마감일 설정"}
+        aria-expanded={datePicker.openKey === NEW_TASK_PICKER_KEY}
       >
         {#if newTaskDeadline}
           <span class="font-bold leading-none" style="font-size: 0.8em;">
-            {parseInt(newTaskDeadline.split('-')[1])}/{parseInt(newTaskDeadline.split('-')[2])}({['일', '월', '화', '수', '목', '금', '토'][new Date(newTaskDeadline).getDay()]})
+            {formatShortDate(newTaskDeadline)}
           </span>
         {:else}
           <Icon icon={CALENDAR_BOLD_DUOTONE} width="16" height="16" class="pointer-events-none shrink-0" />
         {/if}
       </button>
-
-      {#if showNewTaskPicker}
-        <DatePicker
-          value={newTaskDeadline}
-          anchorEl={formCalBtnEl}
-          onchange={(v) => { newTaskDeadline = v; showNewTaskPicker = false; }}
-          onclose={() => showNewTaskPicker = false}
-        />
-      {/if}
     </div>
 
     <!-- 내용 입력 (오른쪽) -->
     <div class="relative flex-1 min-w-0">
       <div
+        bind:this={newTaskInputEl}
         class="todo-input-field w-full border border-transparent rounded py-[4px] pl-2 pr-7 outline-none transition-all flex items-center min-h-[28px]"
         style="background-color: {appState.isDarkMode ? 'rgba(255,255,255,0.06)' : 'rgba(255,255,255,0.6)'}; color: {appState.isDarkMode ? '#e2e8f0' : '#1f2937'}; font-family: {currentFontFamily}; font-size: var(--global-font-size, 10pt); letter-spacing: var(--global-letter-spacing, 0em); --placeholder-color: {appState.isDarkMode ? '#94a3b8' : '#374151'};"
         contenteditable="true"

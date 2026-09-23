@@ -201,7 +201,7 @@
     try {
       await setEnabled(value);
       toolkitEnabled = value;
-      await completeInitialSetup({ mealStartup, toolkitEnabled: value, appVersion: '5.5.2' });
+      await completeInitialSetup({ mealStartup, toolkitEnabled: value, appVersion: '5.5.3' });
       await finish();
     } catch {
       error = '설정을 끝내지 못했어요. 저장 공간을 확인한 뒤 다시 눌러 주세요.';
@@ -220,7 +220,7 @@
         mealStartup: meal.school ? meal.behavior.startup : false,
         toolkitEnabled: toolkit.toolkit.enabled,
         skipped: true,
-        appVersion: '5.5.2',
+        appVersion: '5.5.3',
       });
       await finish();
     } catch {

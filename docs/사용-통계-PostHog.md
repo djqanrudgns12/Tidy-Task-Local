@@ -107,7 +107,9 @@ npm.cmd run tauri build
 | `meal_copied` | 급식 메뉴 클립보드 복사 성공 |
 | `settings_applied` | 설정 적용 요청 전달 |
 | `theme_changed` | 설정 적용 때 기존과 다른 내장 테마 선택 / 허용된 `theme` |
-| `update_download_opened` | 업데이트 다운로드 URL 열기 성공. 설치 완료 지표 아님 |
+| `update_download_opened` | 업데이트 다운로드 URL 열기 성공(직접 내려받기). 설치 완료 지표 아님 |
+| `update_install_started` | [지금 업데이트]로 앱 안 설치 시작. 설치 완료는 다음 실행의 `app_version_seen`으로 봄 |
+| `update_install_failed` | 앱 안 설치가 멈춤 / 허용된 `error_code`(`not_prepared`·`version_mismatch`·`check_failed`·`download_failed`·`bad_signature`·`editor_busy`·`save_failed`·`prepare_timeout`·`launch_failed`·`unknown`). 사용자 취소는 보내지 않음 |
 | `app_error` | 정해진 오류 코드만, 코드별 창별 1분 제한 |
 
 할 일 이벤트는 앱 상태에 반영한 동작 기준이며 디스크 저장 성공을 보증하지 않습니다. 저장 실패는 별도 `storage_write` 오류로 관측합니다. 전체 클릭/전체 기능의 자동 수집이 아니므로 위 목록에 없는 동작은 집계되지 않습니다.

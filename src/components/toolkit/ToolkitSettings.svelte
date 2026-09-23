@@ -28,15 +28,17 @@
       error = '설정을 저장하지 못했어요.';
     }
   }
-  // 도구 표시 줄은 모양이 모두 같아 표 하나로 그립니다. 외부 툴 묶음은 앞 3개와 뒤 3개 사이에 놓입니다.
+  // 도구 표시 줄은 모양이 모두 같아 표 하나로 그립니다. 외부 툴 묶음은 앞 4개와 뒤 4개 사이에 놓입니다.
   type ToolRow = { id: string; title: string; hint: string };
   const TOOL_ROWS_BEFORE_EXTERNAL: ToolRow[] = [
     { id: 'timer', title: '타이머', hint: '수업 시간을 한눈에 확인해요' },
+    { id: 'clock', title: '시계', hint: '지금 몇 시인지 표준시로 크게 보여줘요' },
     { id: 'noticeboard', title: '알림장', hint: '작성하고 화이트보드로 보여줘요' },
     { id: 'picker', title: '간단 뽑기', hint: '클래식 · 인형 뽑기 · 풍선 다트' },
   ];
   const TOOL_ROWS_AFTER_EXTERNAL: ToolRow[] = [
     { id: 'focus-bell', title: '집중벨', hint: '소리와 애니메이션으로 시선을 모아요' },
+    { id: 'dice', title: '주사위', hint: '1~3개를 던지고 합계를 크게 보여줘요' },
     { id: 'tournament', title: '토너먼트', hint: '대진을 만들고 우리 반 우승자를 정해요' },
     { id: 'roster', title: '학급 명단', hint: '학생과 모둠을 함께 관리해요' },
   ];

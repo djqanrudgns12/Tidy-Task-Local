@@ -4,11 +4,11 @@
   import { track } from '../lib/analytics.js';
   import { X, Palette, Type, PenLine, Monitor, Layout, Upload, Moon, Archive, FileText, Database, RefreshCw, Bell, VolumeX, Download } from 'lucide-svelte';
   import { appState } from '../lib/appState.svelte.js';
-  import { describeUpdateError, formatBytes } from '../lib/updateChecker.js';
+  import { describeDownloadProgress, describeInstallError, describeUpdateError, downloadPercent, formatBytes, isInstallActive } from '../lib/updateChecker.js';
   import { invoke, convertFileSrc } from '@tauri-apps/api/core';
   import { getCurrentWindow } from '@tauri-apps/api/window';
   import { emitTo, listen, emit } from '@tauri-apps/api/event';
-  import { onMount, onDestroy } from 'svelte';
+  import { onMount, onDestroy, tick } from 'svelte';
   import HeaderLayoutIcon from './HeaderLayoutIcon.svelte';
   import ThemePicker from './ThemePicker.svelte';
   import { getTidyTheme } from '../lib/themes.js';
@@ -44,6 +44,78 @@
   let showResetDataConfirm = $state(false);
   let showResetConfigConfirm = $state(false);
 
+  // ✨ [제자리 조절] UI 글자 크기·글꼴은 이 설정 창 글자에도 바로 적용됩니다.
+  //   그러면 위쪽 카드들 높이가 달라진 만큼 지금 만지는 컨트롤이 위아래로 밀려 커서에서 벗어납니다.
+  //   조절을 시작한 순간의 화면 위치를 기억해 두고, 카드의 글자 전환(transition-all 300ms)이
+  //   끝날 때까지 매 프레임 밀린 만큼 스크롤을 되돌려 그 자리에 붙잡아 둡니다.
+  const PIN_HOLD_MS = 450;
+  // 화면이 계속 움직이는 이상한 경우에도 붙잡기가 끝없이 이어지지 않도록 둔 상한입니다.
+  const PIN_MAX_EXTRA_MS = 1500;
+  let scrollBox = $state(null);
+  /** @type {{ anchor: Element, top: number, until: number, frame: number } | null} */
+  let pin = null;
+
+  function holdInPlace(event) {
+    const anchor = event.currentTarget;
+    if (!scrollBox || !anchor) return;
+    // 같은 컨트롤을 연달아 움직이는 동안에는 처음 잡은 위치를 그대로 기준으로 씁니다.
+    // 왜: 매번 새로 재면 전환 중 조금씩 밀린 위치가 기준이 되어 오차가 쌓입니다.
+    // 이 시점은 값만 바뀌고 화면(DOM)은 아직 옛 글자 크기라 "바뀌기 전 위치"가 잡힙니다.
+    if (!pin || pin.anchor !== anchor) {
+      releasePin();
+      pin = { anchor, top: anchor.getBoundingClientRect().top, until: 0, frame: 0 };
+    }
+    pin.until = performance.now() + PIN_HOLD_MS;
+    // 새 글자 크기가 DOM에 들어간 직후(그리기 전)에 한 번, 이후 전환 동안 매 프레임 맞춥니다.
+    tick().then(correctDrift);
+    if (!pin.frame) pin.frame = requestAnimationFrame(followPin);
+  }
+
+  /** 밀린 만큼 스크롤을 되돌리고, 실제로 되돌렸는지(=아직 화면이 움직이는 중인지) 알려 줍니다. */
+  function correctDrift() {
+    if (!pin || !scrollBox || !pin.anchor.isConnected) return false;
+    const drift = pin.anchor.getBoundingClientRect().top - pin.top;
+    if (Math.abs(drift) < 0.5) return false;
+    scrollBox.scrollTop += drift;
+    return true;
+  }
+
+  function followPin() {
+    if (!pin) return;
+    pin.frame = 0;
+    const now = performance.now();
+    // 상한을 넘긴 뒤 늦게 도착한 프레임은 보정하지 않습니다(그사이 사용자가 옮긴 스크롤을 되돌리지 않도록).
+    if (now >= pin.until + PIN_MAX_EXTRA_MS) { pin = null; return; }
+    const stillMoving = correctDrift();
+    // 정해 둔 시간이 지나도 방금 보정했다면 전환이 아직 끝나지 않은 것이므로 한 프레임 더 따라갑니다.
+    // 왜: 창이 가려져 프레임이 늦게 오면 시간만 보고 멈출 때 마지막 전환분이 그대로 밀려 남습니다.
+    if (now < pin.until || stillMoving) pin.frame = requestAnimationFrame(followPin);
+    else pin = null;
+  }
+
+  // 사용자가 직접 스크롤하면 그 뜻이 우선이므로 붙잡기를 바로 풉니다.
+  function releasePin() {
+    if (pin?.frame) cancelAnimationFrame(pin.frame);
+    pin = null;
+  }
+
+  // 스크롤바를 잡거나 다른 곳을 누르면 붙잡기를 풉니다. 조절 중인 컨트롤을 다시 누른 것은 그대로 둡니다.
+  function releasePinOnOtherPointer(event) {
+    if (pin && event.target !== pin.anchor) releasePin();
+  }
+
+  // 휠·누르기는 "사용자가 넘겨받았다"는 신호일 뿐 조작이 아니므로 마크업 대신 리스너로 답니다.
+  $effect(() => {
+    const box = scrollBox;
+    if (!box) return;
+    box.addEventListener('wheel', releasePin, { passive: true });
+    box.addEventListener('pointerdown', releasePinOnOtherPointer);
+    return () => {
+      box.removeEventListener('wheel', releasePin);
+      box.removeEventListener('pointerdown', releasePinOnOtherPointer);
+    };
+  });
+
   // ✨ [업데이트 확인] 설정 창의 테마 색을 그대로 따르도록 액센트를 계산합니다.
   const updateAccent = $derived(getTidyTheme(localThemeColor).tidy[localIsDarkMode ? 'accentDark' : 'accent']);
 
@@ -53,9 +125,28 @@
     appState.requestUpdateCheck();
   }
 
+  // [지금 업데이트] — 앱이 직접 내려받아 설치합니다. 진행 상황은 Rust가 모든 창에 방송합니다.
+  function handleInstallUpdate() {
+    appState.installUpdate();
+  }
+
+  // 앱 안 설치가 안 될 때의 대안: 브라우저로 설치 파일을 받습니다.
   async function handleDownloadUpdate() {
     await appState.openUpdateDownload();
   }
+
+  const installPhase = $derived(appState.updateInstallPhase);
+  const isInstalling = $derived(isInstallActive(installPhase));
+  const installPercent = $derived(
+    installPhase === 'downloading' ? downloadPercent(appState.updateInstallDownloaded, appState.updateInstallTotal) : null,
+  );
+  const installStatusText = $derived.by(() => {
+    if (installPhase === 'checking') return '새 버전 정보를 확인하고 있어요…';
+    if (installPhase === 'downloading') return `내려받는 중 · ${describeDownloadProgress(appState.updateInstallDownloaded, appState.updateInstallTotal)}`;
+    if (installPhase === 'preparing') return '모든 창의 내용을 저장하고 있어요…';
+    if (installPhase === 'installing') return '설치를 시작해요. 잠시 뒤 새 버전으로 다시 열려요';
+    return '';
+  });
 
   onMount(async () => {
     // ✨ 1. 무전을 받으면 타겟 이름과 그 창의 최신 설정값으로 화면을 덮어씁니다!
@@ -152,6 +243,7 @@
 
     onDestroy(() => {
     if (unlistenTarget) unlistenTarget();
+    releasePin();
   });
 </script>
 
@@ -183,7 +275,7 @@
       </button>
     </div>
 
-    <div class="flex-1 overflow-y-auto p-4 flex flex-col gap-3.5 custom-scrollbar">
+    <div bind:this={scrollBox} class="flex-1 overflow-y-auto p-4 flex flex-col gap-3.5 custom-scrollbar">
       <ToolkitToggle variant="panel" isDarkMode={localIsDarkMode} accent={updateAccent}/>
       <fieldset class="header-design-settings" class:design-dark={localIsDarkMode} style="--design-accent:{updateAccent};">
         <legend>Tidy task 상단 디자인</legend>
@@ -261,7 +353,7 @@
           UI 글자 크기 (<span class="text-amber-600">{localUiFontSize}pt</span>)
         </label>
         <div class="pl-[34px] mt-2">
-          <input type="range" min="6" max="15" step="1" bind:value={localUiFontSize} class="w-full h-1.5 bg-gray-200 rounded-full appearance-none accent-amber-500 cursor-pointer" />
+          <input type="range" min="6" max="15" step="1" bind:value={localUiFontSize} oninput={holdInPlace} class="w-full h-1.5 bg-gray-200 rounded-full appearance-none accent-amber-500 cursor-pointer" />
           <p class="text-[0.75em] font-medium mt-2 tracking-tight transition-colors" style="color: {localIsDarkMode ? '#94a3b8' : '#64748b'};">
             사용자 인터페이스 글자 크기 변경
           </p>
@@ -278,6 +370,7 @@
         <div class="pl-[34px] mt-2">
           <select
             bind:value={localUiFontFamily}
+            onchange={holdInPlace}
             class="w-full border rounded-lg py-2 px-2 text-[0.85em] outline-none cursor-pointer transition-colors duration-300" 
             style="background-color: {localIsDarkMode ? '#2d303e' : '#ffffff'}; border-color: {localIsDarkMode ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)'}; color: {localIsDarkMode ? '#e2e8f0' : '#1f2937'};"
           >
@@ -422,29 +515,71 @@
           </div>
 
           <!-- 확인 결과를 이 자리에서 바로 알려 줍니다(창을 옮겨 다니지 않아도 되도록). -->
-          {#if appState.updatePhase === 'available' && appState.updateInfo}
+          {#if (appState.updatePhase === 'available' && appState.updateInfo) || isInstalling || installPhase === 'failed'}
             <div
               class="rounded-lg px-2.5 py-2 border flex flex-col gap-2"
               style="background-color: {localIsDarkMode ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.02)'}; border-color: {updateAccent}44;"
             >
-              <p class="text-[0.75em] font-extrabold leading-[1.5]" style="color: {updateAccent};">
-                🎉 새 버전 v{appState.updateInfo.version} 이 나왔어요
-                {#if appState.updateInfo.assetSize}
-                  <span class="font-bold opacity-70">({formatBytes(appState.updateInfo.assetSize)})</span>
+              {#if appState.updateInfo}
+                <p class="text-[0.75em] font-extrabold leading-[1.5]" style="color: {updateAccent};">
+                  🎉 새 버전 v{appState.updateInfo.version} 이 나왔어요
+                  {#if appState.updateInfo.assetSize}
+                    <span class="font-bold opacity-70">({formatBytes(appState.updateInfo.assetSize)})</span>
+                  {/if}
+                </p>
+              {/if}
+
+              {#if isInstalling}
+                <!-- 진행 상황: 내려받는 동안만 비율을 보여 주고, 그 밖의 단계는 문구로 알립니다. -->
+                <div class="flex flex-col gap-1.5" role="status" aria-live="polite">
+                  {#if installPercent !== null}
+                    <div class="h-[6px] w-full rounded-full overflow-hidden" style="background-color: {localIsDarkMode ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.07)'};">
+                      <div class="h-full rounded-full transition-[width] duration-200" style="width: {installPercent}%; background-color: {updateAccent};"></div>
+                    </div>
+                  {/if}
+                  <p class="text-[0.72em] font-bold leading-[1.5]" style="color: {localIsDarkMode ? '#cbd5e1' : '#475569'};">
+                    {installStatusText}
+                  </p>
+                </div>
+                {#if installPhase === 'checking' || installPhase === 'downloading'}
+                  <button
+                    onclick={() => appState.cancelUpdateInstall()}
+                    class="w-full py-1.5 rounded-lg text-[0.75em] font-bold border transition-all active:scale-[0.98]"
+                    style="border-color: {localIsDarkMode ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.1)'}; color: {localIsDarkMode ? '#94a3b8' : '#64748b'};"
+                  >
+                    취소
+                  </button>
                 {/if}
-              </p>
-              <p class="text-[0.72em] font-medium leading-[1.5]" style="color: {localIsDarkMode ? '#94a3b8' : '#64748b'};">
-                아래 버튼을 누르면 인터넷 창이 열리며 설치 파일이 내려받아집니다.
-                작성하신 할 일과 메모는 그대로 유지됩니다.
-              </p>
-              <button
-                onclick={handleDownloadUpdate}
-                class="w-full py-1.5 rounded-lg text-[0.78em] font-extrabold text-white transition-all active:scale-[0.98] flex items-center justify-center gap-1.5"
-                style="background-color: {updateAccent};"
-              >
-                <Download size={12} strokeWidth={3} />
-                새 버전 내려받기
-              </button>
+              {:else}
+                {#if installPhase === 'failed'}
+                  <p class="text-[0.72em] font-bold leading-[1.5]" style="color: {localIsDarkMode ? '#fca5a5' : '#dc2626'};" role="alert">
+                    {describeInstallError(appState.updateInstallErrorCode)}
+                  </p>
+                {:else}
+                  <p class="text-[0.72em] font-medium leading-[1.5]" style="color: {localIsDarkMode ? '#94a3b8' : '#64748b'};">
+                    누르면 새 버전을 내려받아 설치합니다. 설치하는 동안 Tidy Task가 잠시 닫혔다가
+                    새 버전으로 다시 열려요. 작성하신 할 일과 메모는 설치 직전에 모두 저장됩니다.
+                  </p>
+                {/if}
+                <button
+                  onclick={handleInstallUpdate}
+                  class="w-full py-1.5 rounded-lg text-[0.78em] font-extrabold text-white transition-all active:scale-[0.98] flex items-center justify-center gap-1.5"
+                  style="background-color: {updateAccent};"
+                >
+                  <Download size={12} strokeWidth={3} />
+                  {installPhase === 'failed' ? '다시 시도' : '지금 업데이트'}
+                </button>
+                {#if installPhase === 'failed'}
+                  <!-- 앱 안 설치가 안 될 때의 대안: 예전처럼 브라우저로 설치 파일을 받습니다. -->
+                  <button
+                    onclick={handleDownloadUpdate}
+                    class="w-full py-1.5 rounded-lg text-[0.75em] font-extrabold border transition-all active:scale-[0.98]"
+                    style="border-color: {updateAccent}66; color: {updateAccent};"
+                  >
+                    직접 내려받기 (인터넷 창에서 받아 실행)
+                  </button>
+                {/if}
+              {/if}
             </div>
           {:else if appState.updatePhase === 'uptodate'}
             <p class="text-[0.75em] font-bold leading-[1.5]" style="color: {localIsDarkMode ? '#6ee7b7' : '#059669'};">
@@ -484,7 +619,7 @@
         </div>
         <!-- 버전을 코드에 박아두면 배포 때 갱신을 빠뜨려 실제 버전과 어긋납니다.
              appState.appVersion은 tauri.conf.json의 version을 그대로 읽어옵니다. -->
-        <span class="text-[9px] font-medium opacity-30 select-none uppercase tracking-widest" style="color: {localIsDarkMode ? '#ffffff' : '#000000'};">v.{appState.appVersion || '5.5.2'}</span>
+        <span class="text-[9px] font-medium opacity-30 select-none uppercase tracking-widest" style="color: {localIsDarkMode ? '#ffffff' : '#000000'};">v.{appState.appVersion || '5.5.3'}</span>
       </div>
 
       <div class="flex items-center justify-center gap-1 pt-3 text-[9px]" style="color: {localIsDarkMode ? '#94a3b8' : '#64748b'};">

@@ -52,10 +52,15 @@ export async function watchAppearance(callback) {
     throw error;
   }
 }
+/** 툴킷 창이 쓰는 글꼴 목록(--tk-font 값). 숫자 크기 측정(fontMetrics.js)도 같은 목록으로 재야 화면과 맞습니다.
+ * @param {Appearance} [value] */
+export function uiFontStack(value = {}) {
+  const font = String(value.uiFontFamily || DEFAULT_FONT).replace(/[";{}<>\\]/g, '');
+  return `"${font}","Malgun Gothic",sans-serif`;
+}
 /** @param {Appearance} [value] */
 export function appearanceStyle(value = {}) {
-  const font = String(value.uiFontFamily || DEFAULT_FONT).replace(/[";{}<>\\]/g, '');
   const colors = toolkitColors(value.theme, value.darkMode);
   return Object.entries(colors).map(([key, color]) => `--tk-${key}:${color};`).join('')
-    + `color-scheme:${value.darkMode ? 'dark' : 'light'};--tk-font:"${font}","Malgun Gothic",sans-serif;`;
+    + `color-scheme:${value.darkMode ? 'dark' : 'light'};--tk-font:${uiFontStack(value)};`;
 }

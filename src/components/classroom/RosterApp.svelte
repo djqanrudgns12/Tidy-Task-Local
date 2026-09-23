@@ -729,7 +729,8 @@
       {#if !ready}<div class="empty-roster">
           <p>학급을 불러오고 있어요…</p>
         </div>{:else if !cl}<div class="empty-roster">
-          <div class="empty-art"><UsersRound size={44} /><span>+</span></div>
+          <!-- 원 안의 더하기는 글자 "+" 대신 아이콘으로 그립니다. 글자는 글꼴마다 놓이는 높이가 달라 원 중앙에서 최대 4px가량 벗어났습니다. -->
+          <div class="empty-art"><UsersRound size={44} /><span aria-hidden="true"><Plus size={15} strokeWidth={3} /></span></div>
           <span class="eyebrow">우리 반의 시작</span>
           <h1>학생과 모둠을 한곳에</h1>
           <p>

@@ -384,6 +384,10 @@
   color: var(--tk-muted);
   font-size: inherit;
 }
+.nb-editor .nb-held-selection {
+  background: color-mix(in srgb, var(--tk-accent) 28%, transparent);
+  border-radius: 2px;
+}
 .nb-editor .ProseMirror-selectednode {
   outline: 2px solid var(--tk-accent);
 }
@@ -508,7 +512,7 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  margin: 14px 0;
+  margin: 14px 0 9px;
   padding: 10px;
   border: 1px solid var(--tk-line);
   border-radius: 10px;
@@ -581,6 +585,101 @@
   font-style: normal;
   color: var(--tk-accent);
 }
+/* 항목 한 줄 = 여는 단추 + 오른쪽 위 삭제 단추(또는 선택 표시).
+   단추 안에 단추를 넣을 수 없어 줄을 감싸고 겹쳐 놓습니다. */
+.nb-entry-row {
+  position: relative;
+  margin-bottom: 9px;
+}
+.nb-entry-row .nb-entry {
+  margin-bottom: 0;
+  padding-right: 36px !important;
+}
+.nb-entry-action {
+  position: absolute;
+  top: 8px;
+  right: 7px;
+  width: 26px;
+  min-height: 26px !important;
+  padding: 4px !important;
+  border-radius: 8px !important;
+  color: var(--tk-muted);
+  opacity: 0.5;
+}
+.nb-entry-row:hover .nb-entry-action,
+.nb-entry-action:focus-visible {
+  opacity: 1;
+}
+.nb-entry-action:hover {
+  background: var(--tk-danger-soft) !important;
+  color: var(--tk-danger);
+}
+/* 네모 칸 하나로 목록 위 '전체 선택'과 항목별 표시를 같은 모양으로 씁니다. */
+.nb-checkbox {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 16px;
+  height: 16px;
+  border: 1.5px solid var(--tk-line);
+  border-radius: 5px;
+  background: var(--tk-panel);
+  color: var(--tk-on-action);
+}
+.nb-checkbox.on {
+  background: var(--tk-action);
+  border-color: var(--tk-action);
+}
+.nb-entry-check {
+  position: absolute;
+  top: 12px;
+  right: 11px;
+  width: 17px;
+  height: 17px;
+  /* 표시만 하고 누름은 아래 항목 단추가 받습니다. */
+  pointer-events: none;
+}
+.nb-entry-row.picked .nb-entry {
+  background: var(--tk-soft) !important;
+  border-color: var(--tk-accent) !important;
+}
+.nb-list-tools {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 30px;
+  margin-bottom: 7px;
+}
+.nb-pick-toggle {
+  gap: 7px !important;
+  min-height: 28px !important;
+  padding: 4px 10px 4px 7px !important;
+  font-size: 11px !important;
+  color: var(--tk-muted) !important;
+}
+.nb-pick-toggle[aria-pressed] {
+  background: var(--tk-bg);
+  color: var(--tk-accent) !important;
+}
+.nb-pick-count {
+  font-size: 11px;
+  color: var(--tk-muted);
+}
+.nb-pick-cancel {
+  margin-left: auto;
+  min-height: 28px !important;
+  padding: 4px 8px !important;
+}
+.nb-archive > .nb-delete-picked {
+  width: 100%;
+  background: var(--tk-danger-soft) !important;
+  font-size: 12px !important;
+}
+.nb-archive > .nb-delete-picked:disabled {
+  background: var(--tk-bg) !important;
+  color: var(--tk-muted) !important;
+}
 .nb-empty {
   padding: 45px 3px;
   text-align: center;
@@ -639,19 +738,33 @@
   content: "오늘의 알림장을 적어 주세요.";
   color: var(--tk-muted);
 }
+/* 화이트 보드에서도 서식 도구를 늘 쓸 수 있게 본문 위 한 줄로 고정합니다.
+   왜 띄우지 않는가: 떠 있는 카드는 본문을 가리고, 도구를 열고 닫는 단계가 하나 더 생깁니다. */
 .board .nb-format {
-  position: absolute;
-  right: 25px;
-  bottom: 78px;
-  width: min(640px, calc(100vw - 50px));
-  padding: 12px;
+  padding: 10px clamp(18px, 4vw, 60px);
   background: var(--tk-panel);
-  border: 1px solid var(--tk-line);
-  border-radius: 14px;
-  box-shadow: 0 8px 28px #273a3012;
+  border-top: 0;
+  border-bottom: 1px solid var(--tk-line);
 }
-.board .nb-format.closed {
-  display: none;
+.board .nb-format select {
+  width: 148px;
+  max-width: 148px;
+  height: 36px;
+  font-size: 13px;
+}
+.board .nb-format button {
+  min-height: 36px;
+  padding: 7px;
+}
+.board .nb-size input {
+  width: 40px;
+  font-size: 13px;
+}
+.board .nb-colors {
+  top: 44px;
+}
+.board .nb-zoom {
+  font-size: 12px;
 }
 .board .nb-footer {
   padding: 13px 25px;

@@ -9,11 +9,14 @@ use tauri::{Emitter, Manager, PhysicalPosition};
 use tauri_plugin_store::StoreExt;
 
 const FILE: &str = "tidy-task-toolkit.json";
-static STORE_LOCK: Mutex<()> = Mutex::new(());
+// 업데이트 설치 직전에 app_update가 잡아, 쓰는 도중에 앱이 끝나지 않게 합니다.
+pub(crate) static STORE_LOCK: Mutex<()> = Mutex::new(());
 static WINDOW_LOCK: Mutex<()> = Mutex::new(());
 static NEXT_WINDOW: AtomicU64 = AtomicU64::new(1);
 pub static QUITTING: AtomicBool = AtomicBool::new(false);
 const KINDS: [&str; 4] = ["digital", "analog", "hourglass", "stopwatch"];
+// 시계 제목 최대 글자 수. JS src/lib/clock/clockPreferences.js의 CLOCK_TITLE_MAX와 같아야 합니다(코드포인트로 셈).
+const CLOCK_TITLE_MAX: usize = 30;
 
 fn defaults() -> Value {
     let sound = json!({"tickEnabled":true,"warningEnabled":true,"endEnabled":true,"warningLeadSeconds":5,"warningDurationSeconds":null});
@@ -21,8 +24,9 @@ fn defaults() -> Value {
     analog["dialRangeMinutes"] = json!(60);
     let mut hourglass = sound.clone();
     hourglass["showRemainingTime"] = json!(true);
-    json!({"schemaVersion":6,"revision":0,"toolkit":{"theme":"sage","darkMode":false,"enabled":false,"orientation":"horizontal","toolbarSize":2,"collapsed":false,"visibleToolIds":["timer","picker","noticeboard","tournament","focus-bell","roster"],"hiddenPlatformIds":[],"externalToolsEnabled":true,"position":null},
-        "preferences":{"digital":sound,"analog":analog,"hourglass":hourglass,"stopwatch":{"tickEnabled":true}}})
+    let clock = json!({"face":"digital","showSeconds":true,"hour12":true,"title":"","titleHidden":false,"standardTimeSync":true,"analogCaption":true,"analogMinuteNumbers":false});
+    json!({"schemaVersion":8,"revision":0,"toolkit":{"theme":"sage","darkMode":false,"enabled":false,"orientation":"horizontal","toolbarSize":2,"collapsed":false,"visibleToolIds":["timer","clock","picker","noticeboard","tournament","focus-bell","dice","roster"],"hiddenPlatformIds":[],"externalToolsEnabled":true,"position":null},
+        "preferences":{"digital":sound,"analog":analog,"hourglass":hourglass,"stopwatch":{"tickEnabled":true},"clock":clock}})
 }
 fn field_valid(scope: &str, key: &str, value: &Value) -> bool {
     if scope == "toolkit" {
@@ -33,7 +37,8 @@ fn field_valid(scope: &str, key: &str, value: &Value) -> bool {
             "orientation" => matches!(value.as_str(), Some("horizontal" | "vertical")),
             "visibleToolIds" => value
                 .as_array()
-                .is_some_and(|a| a.len() <= 6 && a.iter().all(|v| v == "timer" || v == "roster" || v == "noticeboard" || v == "picker" || v == "tournament" || v == "focus-bell")),
+                // 도구가 하나 늘 때마다 길이 상한도 함께 올려야 "모두 보이기" 설정의 저장이 거부되지 않습니다.
+                .is_some_and(|a| a.len() <= 8 && a.iter().all(|v| v == "timer" || v == "clock" || v == "roster" || v == "noticeboard" || v == "picker" || v == "tournament" || v == "focus-bell" || v == "dice")),
             "hiddenPlatformIds" => value.as_array().is_some_and(|a|
                 a.len() <= 2 && a.iter().all(|v| v == "clanner" || v == "rollinthunder")),
             "position" => {
@@ -57,6 +62,18 @@ fn field_valid(scope: &str, key: &str, value: &Value) -> bool {
                             })
                     })
             }
+            _ => false,
+        };
+    }
+    if scope == "clock" {
+        return match key {
+            "face" => matches!(value.as_str(), Some("digital" | "analog")),
+            "showSeconds" | "hour12" | "titleHidden" | "standardTimeSync" | "analogCaption"
+            | "analogMinuteNumbers" => value.is_boolean(),
+            // 제목은 한 줄 글자만 받습니다. 줄바꿈 같은 제어 문자가 있으면 화면 배치가 깨집니다.
+            "title" => value.as_str().is_some_and(|s| {
+                s.chars().count() <= CLOCK_TITLE_MAX && !s.chars().any(char::is_control)
+            }),
             _ => false,
         };
     }
@@ -85,11 +102,11 @@ fn field_valid(scope: &str, key: &str, value: &Value) -> bool {
 fn normalized(raw: Option<Value>) -> Result<Value, String> {
     let mut result = defaults();
     let Some(raw) = raw else { return Ok(result) };
-    if raw["schemaVersion"] != 1 && raw["schemaVersion"] != 2 && raw["schemaVersion"] != 3 && raw["schemaVersion"] != 4 && raw["schemaVersion"] != 5 && raw["schemaVersion"] != 6 {
+    if !matches!(raw["schemaVersion"].as_u64(), Some(1..=8)) {
         return Err("지원하지 않는 툴킷 설정 버전입니다. 원본을 보존합니다.".into());
     }
     result["revision"] = json!(raw["revision"].as_u64().unwrap_or(0));
-    for scope in ["toolkit", "digital", "analog", "hourglass", "stopwatch"] {
+    for scope in ["toolkit", "digital", "analog", "hourglass", "stopwatch", "clock"] {
         let source = if scope == "toolkit" {
             &raw[scope]
         } else {
@@ -130,6 +147,18 @@ fn normalized(raw: Option<Value>) -> Result<Value, String> {
     if matches!(raw["schemaVersion"].as_u64(), Some(1 | 2 | 3 | 4 | 5)) {
         if let Some(ids) = result["toolkit"]["visibleToolIds"].as_array_mut() {
             if !ids.iter().any(|id| id == "focus-bell") { ids.push(json!("focus-bell")); }
+        }
+    }
+    // 스키마 7에서 주사위가 새로 생겼습니다. 이전 설정에 한 번만 넣고, 이후 숨김 선택은 그대로 둡니다(JS preferences.js와 같은 규칙).
+    if matches!(raw["schemaVersion"].as_u64(), Some(1 | 2 | 3 | 4 | 5 | 6)) {
+        if let Some(ids) = result["toolkit"]["visibleToolIds"].as_array_mut() {
+            if !ids.iter().any(|id| id == "dice") { ids.push(json!("dice")); }
+        }
+    }
+    // 스키마 8에서 시계가 새로 생겼습니다. 규칙은 주사위와 같습니다(JS preferences.js와 같은 규칙).
+    if matches!(raw["schemaVersion"].as_u64(), Some(1..=7)) {
+        if let Some(ids) = result["toolkit"]["visibleToolIds"].as_array_mut() {
+            if !ids.iter().any(|id| id == "clock") { ids.push(json!("clock")); }
         }
     }
     Ok(result)
@@ -214,7 +243,7 @@ pub fn is_timer(label: &str) -> bool {
         .any(|kind| label.starts_with(&format!("timer-{kind}-")))
 }
 pub fn is_work_window(label: &str) -> bool {
-    label == "toolkit" || label == "roster" || label == "noticeboard" || label == "picker" || label == "tournament" || label == "focus-bell" || is_timer(label)
+    label == "toolkit" || label == "roster" || label == "noticeboard" || label == "picker" || label == "tournament" || label == "focus-bell" || label == "dice" || label == "clock" || is_timer(label)
 }
 
 /// 교실 도구 창의 첫 크기 규칙(모두 논리 px).
@@ -239,6 +268,10 @@ fn work_window_size(role: &str) -> Option<WorkWindowSize> {
     let (base, min, ratio, max) = match role {
         kind if KINDS.contains(&kind) => ((960.0, 680.0), (380.0, 520.0), FOCUS, (1480.0, 960.0)),
         "focus-bell" => ((960.0, 720.0), (640.0, 480.0), FOCUS, (1480.0, 960.0)),
+        // 주사위도 수업 화면 한쪽에 띄워 두는 도구라 집중벨 규칙을 따르되, 3개와 합계가 들어가는 520×480까지 줄일 수 있습니다.
+        "dice" => ((960.0, 720.0), (520.0, 480.0), FOCUS, (1480.0, 960.0)),
+        // 시계는 화면 구석에 작게 띄워 두는 일이 많아 다른 도구보다 훨씬 작게(320×220)까지 줄일 수 있습니다.
+        "clock" => ((880.0, 560.0), (320.0, 220.0), FOCUS, (1480.0, 960.0)),
         "tournament" => ((1180.0, 800.0), (640.0, 520.0), WIDE, (1680.0, 1040.0)),
         "picker" => ((1440.0, 920.0), (640.0, 520.0), WIDE, (1680.0, 1040.0)),
         "roster" | "noticeboard" => ((1040.0, 720.0), (640.0, 480.0), WIDE, (1680.0, 1040.0)),
@@ -276,7 +309,7 @@ fn create_window(app: &tauri::AppHandle, role: &str) -> Result<String, String> {
     }
     let _guard = WINDOW_LOCK.lock().map_err(|_| "창 잠금 오류")?;
     let timer = KINDS.contains(&role);
-    if !timer && !["toolkit", "toolkit-menu", "toolkit-external-menu", "toolkit-context-menu", "toolkit-settings", "roster", "noticeboard", "picker", "tournament", "focus-bell"].contains(&role) {
+    if !timer && !["toolkit", "toolkit-menu", "toolkit-external-menu", "toolkit-context-menu", "toolkit-settings", "roster", "noticeboard", "picker", "tournament", "focus-bell", "dice", "clock"].contains(&role) {
         return Err("알 수 없는 도구입니다.".into());
     }
     let id = NEXT_WINDOW.fetch_add(1, Ordering::SeqCst);
@@ -314,6 +347,8 @@ fn create_window(app: &tauri::AppHandle, role: &str) -> Result<String, String> {
         "picker" => "간단 뽑기",
         "tournament" => "토너먼트",
         "focus-bell" => "집중벨",
+        "dice" => "주사위",
+        "clock" => "시계",
         "noticeboard" => "알림장",
         "digital" => "전광판 타이머",
         "analog" => "아날로그 타이머",
@@ -330,9 +365,9 @@ fn create_window(app: &tauri::AppHandle, role: &str) -> Result<String, String> {
             .decorations(false)
             .transparent(true)
             .shadow(false)
-            .resizable(timer || role == "toolkit-settings" || role == "roster" || role == "noticeboard" || role == "picker" || role == "tournament" || role == "focus-bell")
-            .always_on_top(!timer && role != "roster" && role != "noticeboard" && role != "picker" && role != "tournament" && role != "focus-bell")
-            .skip_taskbar(!timer && role != "roster" && role != "noticeboard" && role != "picker" && role != "tournament" && role != "focus-bell")
+            .resizable(timer || role == "toolkit-settings" || role == "roster" || role == "noticeboard" || role == "picker" || role == "tournament" || role == "focus-bell" || role == "dice" || role == "clock")
+            .always_on_top(!timer && role != "roster" && role != "noticeboard" && role != "picker" && role != "tournament" && role != "focus-bell" && role != "dice" && role != "clock")
+            .skip_taskbar(!timer && role != "roster" && role != "noticeboard" && role != "picker" && role != "tournament" && role != "focus-bell" && role != "dice" && role != "clock")
             .visible(false)
             .build()
             .map_err(|e| e.to_string())?;
@@ -546,6 +581,8 @@ mod tests {
         assert!(is_work_window("timer-analog-42"));
         assert!(is_work_window("noticeboard"));
         assert!(is_work_window("picker"));
+        assert!(is_work_window("dice"));
+        assert!(is_work_window("clock"));
         assert!(!is_work_window("toolkit-menu"));
         assert!(!is_work_window("toolkit-external-menu"));
         assert!(!is_work_window("toolkit-context-menu"));
@@ -553,17 +590,58 @@ mod tests {
     #[test]
     fn notice_migration_preserves_hidden_existing_tools() {
         let value=normalized(Some(json!({"schemaVersion":2,"toolkit":{"visibleToolIds":[],"hiddenPlatformIds":["clanner"]}}))).unwrap();
-        assert_eq!(value["toolkit"]["visibleToolIds"],json!(["noticeboard","picker","tournament","focus-bell"]));
+        assert_eq!(value["toolkit"]["visibleToolIds"],json!(["noticeboard","picker","tournament","focus-bell","dice","clock"]));
         assert_eq!(value["toolkit"]["hiddenPlatformIds"],json!(["clanner"]));
-        let value=normalized(Some(json!({"schemaVersion":6,"toolkit":{"visibleToolIds":[]}}))).unwrap();
+        let value=normalized(Some(json!({"schemaVersion":8,"toolkit":{"visibleToolIds":[]}}))).unwrap();
         assert_eq!(value["toolkit"]["visibleToolIds"],json!([]));
     }
     #[test]
     fn focus_migration_preserves_hidden_tools_and_can_be_hidden() {
         let migrated = normalized(Some(json!({"schemaVersion":5,"toolkit":{"visibleToolIds":["roster"]}}))).unwrap();
-        assert_eq!(migrated["toolkit"]["visibleToolIds"], json!(["roster","focus-bell"]));
+        assert_eq!(migrated["toolkit"]["visibleToolIds"], json!(["roster","focus-bell","dice","clock"]));
         let hidden = merge(migrated, "toolkit", json!({"visibleToolIds":["roster"]})).unwrap();
         assert_eq!(normalized(Some(hidden)).unwrap()["toolkit"]["visibleToolIds"], json!(["roster"]));
+    }
+    #[test]
+    fn dice_migration_adds_once_and_all_seven_tools_can_be_saved() {
+        let all_six = json!(["timer","picker","noticeboard","tournament","focus-bell","roster"]);
+        let migrated = normalized(Some(json!({"schemaVersion":6,"toolkit":{"visibleToolIds":all_six}}))).unwrap();
+        assert_eq!(migrated["schemaVersion"], 8);
+        assert_eq!(migrated["toolkit"]["visibleToolIds"], json!(["timer","picker","noticeboard","tournament","focus-bell","roster","dice","clock"]));
+        // 모든 도구(시계 포함 8개)를 켠 설정은 저장되고, 숨긴 주사위는 다시 읽어도 되살아나지 않습니다.
+        let saved = merge(migrated.clone(), "toolkit", json!({"visibleToolIds":defaults()["toolkit"]["visibleToolIds"].clone()})).unwrap();
+        assert_eq!(saved["toolkit"]["visibleToolIds"].as_array().unwrap().len(), 8);
+        let hidden = merge(saved, "toolkit", json!({"visibleToolIds":["timer","roster"]})).unwrap();
+        assert_eq!(normalized(Some(hidden)).unwrap()["toolkit"]["visibleToolIds"], json!(["timer","roster"]));
+        assert!(merge(migrated, "toolkit", json!({"visibleToolIds":["timer","clock","picker","noticeboard","tournament","focus-bell","dice","roster","dice"]})).is_err());
+        assert!(normalized(Some(json!({"schemaVersion":9}))).is_err());
+    }
+    #[test]
+    fn clock_migration_adds_once_and_preferences_are_validated() {
+        // 스키마 7(주사위까지 있던 설정)에 시계가 한 번만 들어가고, 이후 숨김은 지켜집니다.
+        let migrated = normalized(Some(json!({"schemaVersion":7,"toolkit":{"visibleToolIds":["timer","dice"]}}))).unwrap();
+        assert_eq!(migrated["toolkit"]["visibleToolIds"], json!(["timer","dice","clock"]));
+        assert_eq!(migrated["preferences"]["clock"]["standardTimeSync"], json!(true));
+        let hidden = merge(migrated, "toolkit", json!({"visibleToolIds":["timer","dice"]})).unwrap();
+        assert_eq!(normalized(Some(hidden.clone())).unwrap()["toolkit"]["visibleToolIds"], json!(["timer","dice"]));
+        // 설정 저장·다시 읽기
+        let saved = merge(hidden, "clock", json!({"face":"analog","hour12":false,"title":"3학년 2반 ⏰","analogMinuteNumbers":true})).unwrap();
+        let reloaded = normalized(Some(saved)).unwrap();
+        assert_eq!(reloaded["preferences"]["clock"]["face"], "analog");
+        assert_eq!(reloaded["preferences"]["clock"]["hour12"], false);
+        assert_eq!(reloaded["preferences"]["clock"]["title"], "3학년 2반 ⏰");
+        assert_eq!(reloaded["preferences"]["digital"]["tickEnabled"], true);
+        // 제목 30자(코드포인트) 경계, 제어 문자, 알 수 없는 항목
+        let thirty: String = "가".repeat(30);
+        assert!(merge(defaults(), "clock", json!({"title":thirty})).is_ok());
+        assert!(merge(defaults(), "clock", json!({"title":format!("{thirty}나")})).is_err());
+        assert!(merge(defaults(), "clock", json!({"title":"줄\n바꿈"})).is_err());
+        assert!(merge(defaults(), "clock", json!({"face":"sundial"})).is_err());
+        assert!(merge(defaults(), "clock", json!({"offsetMs":2600})).is_err());
+        // 파일에 잘못 들어간 값은 기본값으로 읽습니다(원본은 그대로).
+        let broken = normalized(Some(json!({"schemaVersion":8,"preferences":{"clock":{"face":7,"showSeconds":false}}}))).unwrap();
+        assert_eq!(broken["preferences"]["clock"]["face"], "digital");
+        assert_eq!(broken["preferences"]["clock"]["showSeconds"], false);
     }
 
     #[test]
@@ -575,7 +653,7 @@ mod tests {
         // 뽑기는 예전부터 높이가 넉넉해(920) 높이는 그대로, 너비만 넓어집니다.
         assert_eq!(initial_work_size(&picker, 1920.0, 1032.0), (1574.0, 920.0));
         // 모든 도구가 예전 고정 크기보다 작아지지 않고, 너비는 모두 커집니다.
-        for role in ["digital", "analog", "hourglass", "stopwatch", "focus-bell", "tournament", "picker", "roster", "noticeboard"] {
+        for role in ["digital", "analog", "hourglass", "stopwatch", "focus-bell", "dice", "clock", "tournament", "picker", "roster", "noticeboard"] {
             let rule = work_window_size(role).unwrap();
             let (w, h) = initial_work_size(&rule, 1920.0, 1032.0);
             assert!(w > rule.base.0 && h >= rule.base.1, "{role}: {w}×{h}");

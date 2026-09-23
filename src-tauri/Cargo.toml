@@ -1,6 +1,6 @@
 [package]
 name = "tidy_task"
-version = "5.5.2"
+version = "5.5.3"
 description = "여러분들의 소중한 업무를 기록해보세요!"
 authors = ["you"]
 license = ""
@@ -34,6 +34,11 @@ tauri-plugin-single-instance = "2.4.0"
 tauri-plugin-dialog = "2"
 tauri-plugin-fs = "2"
 tauri-plugin-opener = "2"
+# 앱 안 자동 업데이트. 학교망의 인증서 검사·프록시를 그대로 따르도록 기존 reqwest와 같은 native-tls와
+# 시스템 프록시만 켭니다. (zip은 Tauri v1 형식 업데이트 파일용이라 쓰지 않습니다)
+tauri-plugin-updater = { version = "2.12", default-features = false, features = ["native-tls", "system-proxy"] }
+# 업데이트 내려받기 취소(select!)와 창 저장 대기(sleep)에 씁니다. 이미 Tauri가 쓰는 tokio를 그대로 공유합니다.
+tokio = { version = "1", features = ["macros", "sync", "time"] }
 rusqlite = { version = "0.32.1", features = ["bundled"] }
 uuid = { version = "1", features = ["v4"] }
 unicode-normalization = "0.1"

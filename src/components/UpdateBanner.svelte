@@ -4,12 +4,25 @@
   // 왜 모달이 아니라 얇은 띠인가:
   //   앱을 켜자마자 커다란 창이 화면을 막으면 "일단 닫고 보자"가 되어 안내가 무시됩니다.
   //   작업을 방해하지 않는 띠로 먼저 알리고, 사용자가 누를 때 자세한 안내를 펼칩니다.
+  // 업데이트가 진행 중이면 같은 자리에 진행 상황을 보여 줍니다.
+  //   (안내 창을 닫아도 내려받기는 계속되므로, 곧 앱이 닫힌다는 것을 여기서 알 수 있어야 합니다)
   import { slide } from 'svelte/transition';
   import { X } from 'lucide-svelte';
   import { appState } from '../lib/appState.svelte.js';
+  import { downloadPercent, isInstallActive } from '../lib/updateChecker.js';
 
   const accent = $derived(appState.getThemeAccentColor());
   const version = $derived(appState.updateInfo?.version || '');
+  const phase = $derived(appState.updateInstallPhase);
+  const isActive = $derived(isInstallActive(phase));
+  const progressText = $derived.by(() => {
+    if (phase === 'downloading') {
+      const percent = downloadPercent(appState.updateInstallDownloaded, appState.updateInstallTotal);
+      return percent === null ? '새 버전을 내려받는 중…' : `새 버전을 내려받는 중 ${percent}%`;
+    }
+    if (phase === 'checking') return '새 버전을 확인하는 중…';
+    return '곧 새 버전으로 다시 열려요';
+  });
 </script>
 
 <div
@@ -25,31 +38,37 @@
   <button
     onclick={() => appState.openUpdateGuide()}
     class="flex-1 min-w-0 flex items-center gap-1.5 text-left transition-opacity hover:opacity-80 active:scale-[0.99]"
-    title="업데이트 방법을 자세히 안내해 드립니다"
+    title={isActive ? '진행 상황을 자세히 봅니다' : '업데이트 방법을 자세히 안내해 드립니다'}
   >
-    <span class="text-[12px] leading-none shrink-0">🎉</span>
+    <span class="text-[12px] leading-none shrink-0">{isActive ? '⏳' : '🎉'}</span>
     <span
       class="text-[10px] font-extrabold tracking-tight truncate"
       style="color: {accent};"
+      role={isActive ? 'status' : undefined}
     >
-      새 버전 v{version} 이 나왔어요
+      {isActive ? progressText : `새 버전 v${version} 이 나왔어요`}
     </span>
-    <span
-      class="text-[9px] font-bold px-1.5 py-[1px] rounded-full shrink-0 border"
-      style="color: {accent}; border-color: {accent}44;"
-    >
-      눌러서 보기
-    </span>
+    {#if !isActive}
+      <span
+        class="text-[9px] font-bold px-1.5 py-[1px] rounded-full shrink-0 border"
+        style="color: {accent}; border-color: {accent}44;"
+      >
+        눌러서 보기
+      </span>
+    {/if}
   </button>
 
   <!-- 닫기는 "영구 무시"가 아니라 "하루 미루기"입니다.
-       왜: 실수로 닫아도 내일 다시 안내되므로 업데이트를 영영 놓치지 않습니다. -->
-  <button
-    onclick={() => appState.snoozeUpdate()}
-    class="p-1 rounded-md shrink-0 transition-colors hover:bg-black/5"
-    title="오늘은 그만 보기 (내일 다시 알려 드려요)"
-    aria-label="업데이트 알림 오늘 하루 숨기기"
-  >
-    <X size={11} strokeWidth={3} style="color: {appState.isDarkMode ? '#94a3b8' : '#9ca3af'};" />
-  </button>
+       왜: 실수로 닫아도 내일 다시 안내되므로 업데이트를 영영 놓치지 않습니다.
+       진행 중에는 숨깁니다(미루기가 진행 중인 설치를 멈추는 것처럼 보이지 않게). -->
+  {#if !isActive}
+    <button
+      onclick={() => appState.snoozeUpdate()}
+      class="p-1 rounded-md shrink-0 transition-colors hover:bg-black/5"
+      title="오늘은 그만 보기 (내일 다시 알려 드려요)"
+      aria-label="업데이트 알림 오늘 하루 숨기기"
+    >
+      <X size={11} strokeWidth={3} style="color: {appState.isDarkMode ? '#94a3b8' : '#9ca3af'};" />
+    </button>
+  {/if}
 </div>

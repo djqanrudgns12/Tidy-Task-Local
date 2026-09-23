@@ -4,6 +4,7 @@ import "./app.css";
 import { isTauri } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { isMealWindowLabel } from "./lib/windows/windowLabels.js";
+import { DATE_PICKER_LABEL } from "./lib/datePicker/protocol.js";
 
 // 급식 창은 App의 저장·매니저 효과 자체를 실행하지 않는 독립 진입점을 사용합니다.
 const label = isTauri()
@@ -12,6 +13,16 @@ const label = isTauri()
 async function start() {
   const target = document.getElementById("app");
   if (!target) throw new Error("Application root is missing");
+  // 날짜 선택 창은 가장 먼저 분기합니다.
+  // 왜: 메모 앱(App·appState)을 거치면 이 라벨로 저장소 초기화가 돌 수 있고, 뜨는 속도도 느려집니다.
+  if (label === DATE_PICKER_LABEL) {
+    const { default: DatePickerWindow } = await import("./components/datePicker/DatePickerWindow.svelte");
+    return mount(DatePickerWindow, { target });
+  }
+  if (!isTauri() && import.meta.env.DEV && new URLSearchParams(location.search).has("date-picker-preview")) {
+    const { default: DatePickerPreview } = await import("./dev/DatePickerPreview.svelte");
+    return mount(DatePickerPreview, { target });
+  }
   if (
     label === 'initial-setup' ||
     (!isTauri() && import.meta.env.DEV && new URLSearchParams(location.search).has('initial-setup-preview'))
@@ -47,6 +58,8 @@ async function start() {
         "picker",
         "tournament",
         "focus-bell",
+        "dice",
+        "clock",
         "noticeboard",
       ].includes(toolkitLabel))
   ) {

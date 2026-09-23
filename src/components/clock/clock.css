@@ -1,0 +1,529 @@
+/* Tidy 툴킷 시계 — "몽글 시계".
+   창 틀(제목줄·창 버튼·모서리 크기 조절)은 타이머와 같은 클래스(timer-*)를 그대로 써서 도구끼리 모양을 맞춥니다.
+   색은 모두 툴킷 테마 변수(--tk-*)만 써서 6개 테마와 다크 모드를 따라갑니다. */
+
+.clk-frame {
+  --clk-second: #f0782a;
+  --clk-ok: #36c58a;
+  --clk-stale: #f2b13b;
+  --clk-idle: #9aa4b2;
+  user-select: none;
+}
+.clk-frame.fullscreen {
+  border: 0;
+  border-radius: 0;
+}
+
+/* 전체 화면에서 마우스가 멈추면 조작 도구를 감춰 시계만 남깁니다. */
+.clk-chrome,
+.clk-chrome-soft {
+  transition: opacity 0.4s ease;
+}
+.clk-frame.idle {
+  cursor: none;
+}
+.clk-frame.idle .clk-chrome,
+.clk-frame.idle .clk-chrome-soft,
+.clk-frame.idle .clk-title.empty {
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* 창 크기를 따라 모든 것이 함께 커지도록 무대를 크기 기준(container)으로 둡니다. */
+.clk-stage {
+  container-type: size;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: clamp(6px, 2.4cqh, 18px);
+  padding: 2px clamp(12px, 2.6vw, 28px) 0;
+}
+
+/* ── 제목(이름표) ── */
+.clk-title {
+  position: relative;
+  flex: none;
+  display: flex;
+  align-items: center;
+  height: clamp(34px, 11cqh, 78px);
+  padding: 0 46px;
+  background: var(--tk-panel);
+  border: 2px solid var(--tk-line);
+  border-radius: clamp(12px, 3cqh, 22px);
+}
+/* 이름표에 달린 작은 구멍 장식 */
+.clk-title::before {
+  content: '';
+  position: absolute;
+  left: 18px;
+  top: 50%;
+  width: 10px;
+  height: 10px;
+  margin-top: -5px;
+  border-radius: 50%;
+  background: var(--tk-peach);
+  box-shadow: 0 0 0 3px var(--tk-soft);
+}
+.clk-title input {
+  width: 100%;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  color: var(--tk-ink);
+  text-align: center;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  /* 글자 수가 많을수록 작아져 한 줄 안에 다 들어갑니다(자르지 않음). */
+  /* 아주 작은 창에서는 11px 아래로 줄이지 않고, 넘치는 글자는 칸 안에서 옆으로 밀려 보입니다. */
+  font-size: max(11px, min(clamp(15px, 6.4cqh, 48px), calc((100cqw - 104px) / var(--clk-title-chars) * 1.05)));
+  outline: none;
+  user-select: text;
+}
+.clk-title input::placeholder {
+  color: var(--tk-muted);
+  opacity: 0.55;
+  font-weight: 700;
+}
+.clk-title:focus-within {
+  border-color: var(--tk-accent);
+}
+.clk-title-count {
+  position: absolute;
+  right: 44px;
+  font-size: 11px;
+  color: var(--tk-muted);
+  font-variant-numeric: tabular-nums;
+}
+.clk-title-hide {
+  position: absolute;
+  right: 8px;
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--tk-muted);
+}
+.clk-title-hide:hover {
+  background: var(--tk-soft);
+  color: var(--tk-accent);
+}
+
+/* ── 숫자판 ── */
+.clk-display {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+  display: grid;
+  /* 칸 하나를 카드 안쪽 크기에 고정해야 숫자판(SVG)이 그 안에 맞춰 줄어듭니다(auto면 SVG 크기대로 넘침). */
+  grid-template: minmax(0, 1fr) / minmax(0, 1fr);
+  place-items: center;
+  padding: clamp(10px, 6cqh, 44px) clamp(14px, 4.5cqw, 56px);
+  border-radius: clamp(18px, 5cqh, 36px);
+}
+.clk-frame[data-face='digital'] .clk-display {
+  background: var(--tk-display-bg);
+  color: var(--tk-display-ink);
+  /* 장난감처럼 아래쪽이 살짝 두툼한 느낌만 줍니다(과한 입체감은 쓰지 않음). */
+  box-shadow: inset 0 -6px 0 rgba(0, 0, 0, 0.1);
+}
+.clk-frame[data-face='analog'] .clk-display {
+  background: var(--tk-soft);
+  color: var(--tk-ink);
+  padding-block: clamp(8px, 3cqh, 24px);
+}
+
+.clk-digital {
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+.clk-seg {
+  fill: currentColor;
+  opacity: 0.08;
+}
+.clk-seg.on {
+  opacity: 1;
+}
+.clk-colon circle {
+  fill: currentColor;
+  animation: clk-breathe-a 1s ease-in-out;
+}
+/* 초마다 애니메이션 이름을 바꿔 매초 처음부터 다시 숨쉬게 합니다(초와 어긋나지 않음). */
+.clk-colon[data-phase='1'] circle {
+  animation-name: clk-breathe-b;
+}
+@keyframes clk-breathe-a {
+  0%, 100% { opacity: 1; }
+  55% { opacity: 0.38; }
+}
+@keyframes clk-breathe-b {
+  0%, 100% { opacity: 1; }
+  55% { opacity: 0.38; }
+}
+.clk-meridiem rect {
+  fill: currentColor;
+  opacity: 0.16;
+}
+.clk-meridiem text {
+  fill: currentColor;
+  font-family: var(--tk-font);
+  font-size: 17px;
+  font-weight: 800;
+}
+.clk-sun,
+.clk-moon {
+  fill: var(--tk-gold);
+}
+.clk-ray {
+  stroke: var(--tk-gold);
+  stroke-width: 2.2;
+  stroke-linecap: round;
+}
+
+/* ── 아날로그 ── */
+.clk-analog-wrap {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: clamp(2px, 1.4cqh, 12px);
+}
+/* 기준 크기를 0으로 두어야 문자판이 보조 시각을 뺀 "남는 높이"만 차지합니다(100%면 보조 시각이 카드 밖으로 밀림). */
+.clk-analog {
+  flex: 1 1 0;
+  min-height: 0;
+  width: 100%;
+  height: auto;
+  overflow: visible;
+}
+.clk-dial {
+  fill: var(--tk-panel);
+  stroke: var(--tk-accent);
+  stroke-width: 5;
+}
+.clk-dial-ring {
+  fill: none;
+  stroke: var(--tk-line);
+  stroke-width: 1.2;
+}
+.clk-ticks line {
+  stroke: var(--tk-muted);
+  stroke-width: 1.3;
+  stroke-linecap: round;
+}
+.clk-ticks line.major {
+  stroke: var(--tk-ink);
+  stroke-width: 3.4;
+}
+.clk-numbers text {
+  fill: var(--tk-ink);
+  font-family: var(--tk-font);
+  font-size: 23px;
+  font-weight: 800;
+}
+.clk-minute-numbers text {
+  fill: var(--tk-muted);
+  font-family: var(--tk-font);
+  font-size: 13px;
+  font-weight: 700;
+}
+.clk-hand {
+  transform-box: view-box;
+  transform-origin: 0 0;
+}
+.clk-hand line {
+  stroke-linecap: round;
+}
+.clk-hand-hour line {
+  stroke: var(--tk-ink);
+  stroke-width: 9.5;
+}
+.clk-hand-minute line {
+  stroke: var(--tk-accent);
+  stroke-width: 6;
+}
+/* 다크 모드의 강조색은 시침(흰색)과 거의 같은 밝은 회색이라, 분침만 하늘색으로 바꿔 색으로도 구분되게 합니다.
+   왜 light-dark()를 쓰지 않는가: 배포 빌드의 CSS 압축기가 이를 변수 대체 코드로 바꾸는데, 툴킷은 다크 모드를
+   스크립트(인라인 color-scheme)로 켜서 그 변수가 채워지지 않아 분침이 사라집니다. */
+.clk-frame[data-scheme='dark'] .clk-hand-minute line {
+  stroke: #7cc0ff;
+}
+.clk-hand-second line {
+  stroke: var(--clk-second);
+  stroke-width: 2.4;
+}
+.clk-hand-second circle {
+  fill: var(--clk-second);
+}
+.clk-cap {
+  fill: var(--tk-ink);
+}
+.clk-cap-dot {
+  fill: var(--clk-second);
+}
+.clk-caption {
+  flex: none;
+  margin: 0;
+  color: var(--tk-ink);
+  font-size: clamp(14px, 7.5cqh, 58px);
+  font-weight: 800;
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── 출처 칩(표준시 / PC 시각) ──
+   .clk-frame을 앞에 붙이는 이유: 툴킷 공용 규칙 ".tk-root button { font: inherit }"이 더 강해 글자 크기가 먹지 않습니다. */
+.clk-frame .clk-source {
+  position: absolute;
+  top: clamp(8px, 2.6cqh, 16px);
+  right: clamp(8px, 2.6cqh, 16px);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px 3px 8px;
+  border: 0;
+  border-radius: 999px;
+  color: inherit;
+  font-size: clamp(11px, 2.6cqh, 14px);
+  font-weight: 700;
+  line-height: 1.5;
+  background: color-mix(in srgb, currentColor 14%, transparent);
+  opacity: 0.88;
+}
+.clk-frame .clk-source:hover {
+  opacity: 1;
+  background: color-mix(in srgb, currentColor 22%, transparent);
+}
+.clk-source-dot {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--clk-idle);
+}
+[data-tone='ok'] > .clk-source-dot {
+  background: var(--clk-ok);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--clk-ok) 28%, transparent);
+}
+[data-tone='stale'] > .clk-source-dot {
+  background: var(--clk-stale);
+}
+[data-tone='busy'] > .clk-source-dot {
+  background: currentColor;
+  animation: clk-pulse 1.1s ease-in-out infinite;
+}
+
+/* 작은 창에서는 칩을 점 하나로 줄여 오전·오후 배지와 겹치지 않게 합니다(글자는 화면 읽기용으로 남김). */
+@container (max-width: 560px) or (max-height: 300px) {
+  .clk-frame .clk-source {
+    top: 6px;
+    right: 6px;
+    padding: 4px;
+    font-size: 0;
+    gap: 0;
+  }
+}
+
+/* ── 날짜 ── */
+.clk-date {
+  flex: none;
+  display: flex;
+  justify-content: center;
+  align-items: baseline;
+  gap: 0.4em;
+  margin: 0;
+  padding-bottom: 2px;
+  color: var(--tk-ink);
+  font-size: clamp(15px, 8.5cqh, 66px);
+  font-weight: 800;
+  line-height: 1.2;
+}
+.clk-weekday {
+  padding: 0 0.45em;
+  border-radius: 999px;
+  color: var(--tk-accent);
+  background: var(--tk-soft);
+}
+/* 달력처럼 토요일은 파랑, 일요일은 빨강. 다크 모드에서도 읽히도록 테마 색과 섞습니다. */
+.clk-weekday[data-weekend='sat'] {
+  color: color-mix(in srgb, #2f6fd1 78%, var(--tk-ink));
+  background: color-mix(in srgb, #2f6fd1 15%, var(--tk-panel));
+}
+.clk-weekday[data-weekend='sun'] {
+  color: color-mix(in srgb, #d8434d 80%, var(--tk-ink));
+  background: color-mix(in srgb, #d8434d 14%, var(--tk-panel));
+}
+
+/* ── 아래 조작줄 ── */
+.clk-controls {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px clamp(12px, 2.6vw, 28px) 14px;
+}
+.clk-segmented {
+  display: inline-flex;
+  flex: none;
+  padding: 3px;
+  border: 1px solid var(--tk-line);
+  border-radius: 999px;
+  background: var(--tk-soft);
+}
+.clk-segmented button {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 13px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--tk-muted);
+  font-size: 13px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.clk-segmented button:hover {
+  color: var(--tk-ink);
+}
+.clk-segmented button[aria-checked='true'] {
+  background: var(--tk-action);
+  color: var(--tk-on-action);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.12);
+}
+.clk-segmented.small button {
+  padding: 4px 10px;
+  font-size: 12px;
+}
+.clk-message {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  color: var(--tk-danger);
+  font-size: 12px;
+  text-align: center;
+}
+
+/* ── 설정 패널 ── */
+.clk-settings-scrim {
+  position: absolute;
+  inset: 0;
+  z-index: 29;
+  border: 0;
+  background: transparent;
+  cursor: default;
+}
+.clk-settings {
+  position: absolute;
+  top: 44px;
+  right: 12px;
+  z-index: 30;
+  width: min(360px, calc(100% - 24px));
+  max-height: calc(100% - 56px);
+  overflow: auto;
+  padding: 14px 16px 6px;
+  border: 1px solid var(--tk-line);
+  border-radius: 16px;
+  background: var(--tk-panel);
+  box-shadow: 0 14px 40px rgba(20, 30, 40, 0.18);
+  user-select: none;
+}
+.clk-settings h2 {
+  margin: 0 0 6px;
+  font-size: 15px;
+}
+.clk-setting-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 10px 0;
+  border-top: 1px solid var(--tk-line);
+}
+.clk-setting-row strong,
+.clk-sync-status strong {
+  display: block;
+  font-size: 13.5px;
+}
+.clk-setting-row small,
+.clk-sync-status small {
+  display: block;
+  color: var(--tk-muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+.clk-sync-status {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 0 10px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: var(--tk-soft);
+}
+.clk-sync-status p {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+}
+.clk-sync-status button {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 10px;
+  border: 1px solid var(--tk-line);
+  border-radius: 999px;
+  background: var(--tk-panel);
+  color: var(--tk-ink);
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.clk-spin {
+  animation: clk-spin 1s linear infinite;
+}
+@keyframes clk-spin {
+  to { transform: rotate(360deg); }
+}
+@keyframes clk-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
+}
+
+/* 작은 창(화면 구석에 둘 때): 조작줄을 줄여 숫자판에 자리를 내줍니다. */
+@media (max-height: 380px) {
+  .clk-controls {
+    padding: 4px 12px 8px;
+  }
+  .clk-segmented button {
+    padding: 3px 9px;
+    font-size: 12px;
+  }
+}
+@media (max-width: 480px) {
+  .clk-segmented button svg {
+    display: none;
+  }
+  .clk-segmented button {
+    padding-inline: 9px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .clk-colon circle,
+  [data-tone='busy'] > .clk-source-dot,
+  .clk-spin {
+    animation: none;
+  }
+  .clk-hand {
+    transition: none !important;
+  }
+}

@@ -3,7 +3,8 @@ use serde::{Deserialize, Serialize};
 use std::{collections::{HashMap, HashSet}, sync::Mutex};
 use tauri::Manager;
 use tauri_plugin_store::StoreExt;
-static LOCK: Mutex<()> = Mutex::new(());
+// 업데이트 설치 직전에 app_update가 잡아, 쓰는 도중에 앱이 끝나지 않게 합니다.
+pub(crate) static LOCK: Mutex<()> = Mutex::new(());
 const FILE: &str = "tidy-task-tournament.json";
 #[derive(Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]

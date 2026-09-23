@@ -622,11 +622,15 @@
   border-top-left-radius: 0;
   border-top-right-radius: 0;
 }
+/* 좌우 여백 0.1em을 주고 같은 만큼 바깥으로 당깁니다: 글자 위치·말줄임 시점은 그대로 두고, 자르는 경계만
+   0.1em 넓혀 손글씨·굵기 합성 글꼴에서 글자 폭 밖으로 나온 획 끝이 이름 첫 글자·끝 글자에서 깎이지 않게 합니다. */
 .tn-team span {
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
   min-width: 0;
+  padding-inline: 0.1em;
+  margin-inline: -0.1em;
 }
 .tn-team svg {
   flex-shrink: 0;

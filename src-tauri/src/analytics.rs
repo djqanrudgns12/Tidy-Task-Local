@@ -111,7 +111,29 @@ fn properties(event: &str, count: Option<u32>, choice: Option<&str>) -> Option<V
         | "meal_copied"
         | "meal_navigated"
         | "settings_applied"
-        | "update_download_opened" => {}
+        | "update_download_opened"
+        | "update_install_started" => {}
+        // 앱 안 업데이트가 멈춘 이유 (app_update.rs의 실패 코드를 소문자로 보냅니다. 사용자가 누른 취소·중복 클릭은 보내지 않습니다)
+        "update_install_failed" => {
+            let value = choice?;
+            if ![
+                "not_prepared",
+                "version_mismatch",
+                "check_failed",
+                "download_failed",
+                "bad_signature",
+                "editor_busy",
+                "save_failed",
+                "prepare_timeout",
+                "launch_failed",
+                "unknown",
+            ]
+            .contains(&value)
+            {
+                return None;
+            }
+            p["error_code"] = json!(value);
+        }
         "theme_changed" => {
             let value = choice?;
             if ![
@@ -475,6 +497,13 @@ mod tests {
         assert!(properties("arbitrary", None, None).is_none());
         assert!(properties("app_error", None, Some("secret file path")).is_none());
         assert!(properties("theme_changed", None, Some("school name")).is_none());
+        assert!(properties("update_install_failed", None, Some("disk full at secret path")).is_none());
+        assert!(properties("update_install_failed", None, None).is_none());
+        assert_eq!(
+            properties("update_install_failed", None, Some("save_failed")),
+            Some(json!({"error_code":"save_failed"}))
+        );
+        assert_eq!(properties("update_install_started", Some(3), Some("x")), Some(json!({})));
         assert_eq!(
             properties("todo_created", Some(u32::MAX), Some("secret")),
             Some(json!({"count":10000}))

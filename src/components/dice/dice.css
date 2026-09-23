@@ -1,0 +1,284 @@
+/* 주사위 도구 전용 스타일. 공통 .tk-* 규칙은 건드리지 않고 .dice-* 접두어만 씁니다. */
+
+/* 주사위 색은 자리(왼쪽부터 1·2·3번)에 묶습니다. 테마와 무관하게 물건처럼 같은 색을 유지합니다.
+   눈 대비: 복숭아 6.0:1, 민트 6.3:1, 레몬 6.7:1. 하트 #B8283A는 세 면색 모두에서 3.7:1 이상. */
+[data-tone='peach'] { --dice-face: #ffb8a6; --dice-edge: #c96f5b; --dice-pip: #5b3a33; --dice-light: #ffe2d9; }
+[data-tone='mint'] { --dice-face: #a6e6cc; --dice-edge: #4e9c81; --dice-pip: #22514a; --dice-light: #ddf7ec; }
+[data-tone='lemon'] { --dice-face: #ffe08f; --dice-edge: #a67f22; --dice-pip: #5c4a1e; --dice-light: #fff4cf; }
+
+.dice-app {
+  /* 합계 글자 높이는 주사위 한 변에 비례하되, 교실 뒤에서도 읽히도록 56px 아래로는 줄이지 않습니다. */
+  --dice-total: max(56px, calc(var(--s) * 0.55));
+  /* light-dark()는 쓰지 않습니다. 배포 빌드의 CSS 압축기가 이를 CSS 안의 color-scheme 선언에 기대는 변수로 바꾸는데,
+     툴킷은 다크 모드를 문서 뿌리 인라인 스타일로 켜서 그 변수가 비고, 값이 무효가 되어 그림자가 사라졌습니다.
+     짙은 갈색 하나면 밝은 매트·어두운 매트 모두에서 그림자로 읽힙니다. */
+  --dice-shadow: #3a281c;
+  height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--tk-panel);
+  color: var(--tk-ink);
+  border: 1px solid var(--tk-line);
+  border-radius: 18px;
+  user-select: none;
+}
+
+/* ── 제목줄 (집중벨과 같은 배치) ── */
+.dice-titlebar {
+  height: 48px;
+  min-height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 12px 0 16px;
+  border-bottom: 1px solid var(--tk-line);
+}
+.dice-brand { display: flex; align-items: center; gap: 9px; }
+.dice-brand strong { font-size: 14px; }
+.dice-brand > span { font-size: 11px; color: var(--tk-muted); margin-left: 4px; }
+.dice-window-actions { display: flex; gap: 4px; }
+.dice-window-actions button {
+  display: grid;
+  place-items: center;
+  width: 33px;
+  height: 33px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--tk-muted);
+}
+.dice-window-actions button:hover { background: var(--tk-bg); }
+.dice-window-actions button.active { color: var(--tk-accent); background: var(--tk-soft); }
+
+/* ── 무대(매트) ── */
+.dice-main {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 14px 18px 0;
+}
+.dice-stage {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  align-items: center;
+  border-radius: 28px;
+  background-color: var(--tk-soft);
+  /* 아주 옅은 점무늬 — 주사위를 굴리는 테이블 매트 느낌 */
+  background-image:
+    radial-gradient(120% 90% at 50% 115%, color-mix(in srgb, var(--tk-line) 45%, transparent) 0%, transparent 62%),
+    radial-gradient(color-mix(in srgb, var(--tk-line) 55%, transparent) 1.1px, transparent 1.6px);
+  background-size: auto, 20px 20px;
+  box-shadow: inset 0 2px 0 color-mix(in srgb, #fff 45%, transparent), inset 0 -14px 34px color-mix(in srgb, var(--tk-line) 22%, transparent);
+}
+.dice-floor { position: relative; width: 100%; height: calc(var(--s) * 2.3); }
+.dice-slot {
+  position: absolute;
+  left: calc(50% + var(--x) - var(--slot-s) / 2);
+  bottom: calc(var(--slot-s) * 0.26);
+  width: var(--slot-s);
+  height: var(--slot-s);
+  transform-origin: 50% 100%;
+}
+
+/* ── 주사위 한 개: 그림자 / 위치 / 모양 / 기울임 / 회전 다섯 층 ── */
+.dice-die { --dice-half: calc(var(--s) / 2); position: relative; width: var(--s); height: var(--s); }
+.dice-shadow {
+  position: absolute;
+  left: 4%;
+  right: 4%;
+  bottom: calc(var(--s) * -0.08);
+  height: calc(var(--s) * 0.17);
+  border-radius: 50%;
+  background: radial-gradient(closest-side, var(--dice-shadow), transparent);
+  opacity: 0.26;
+}
+.dice-hop, .dice-squash, .dice-tilt, .dice-spin { position: absolute; inset: 0; }
+.dice-squash { transform-origin: 50% 100%; perspective: calc(var(--s) * 5); }
+/* 무대를 살짝 내려다보게 기울여 윗면이 얇게 보입니다. 12°에서는 윗면 눈이 비쳐 결과와 헷갈려 7°로 낮췄습니다. */
+.dice-tilt { transform-style: preserve-3d; transform: rotateX(-7deg); }
+.dice-spin { transform-style: preserve-3d; }
+/* 회전 층(.dice-spin·.dice-tilt)에는 opacity 힌트를 절대 주지 않습니다. 불투명도 묶음은 preserve-3d를 평면으로 눌러
+   정육면체가 납작한 카드 한 장처럼 보이게 됩니다. 흐려짐은 3D 바깥층(.dice-squash)에서만 합니다. */
+.dice-die.rolling :is(.dice-hop, .dice-spin) { will-change: transform; }
+.dice-die.rolling :is(.dice-squash, .dice-shadow) { will-change: transform, opacity; }
+.dice-face, .dice-core { position: absolute; backface-visibility: hidden; }
+/* 둥근 면만으로는 꼭짓점에 틈이 비칩니다. 바깥 면보다 조금 덜 둥근 안쪽 심(한 변 99%, 깊이 96%)이
+   그 틈을 옆면색으로 메워, 굴러가는 동안에도 한 덩어리로 보이게 합니다. */
+.dice-core { --dice-half: calc(var(--s) * 0.48); inset: 0.5%; border-radius: 15%; background: var(--dice-edge); }
+/* 멈춰 있을 때는 정면만 읽히면 됩니다. 기울임 때문에 얇게 보이는 윗면·옆면의 눈이 눈썹처럼 비치고,
+   덜 둥근 심의 모서리가 귀처럼 삐져나오므로 굴리는 동안에만 보입니다. */
+.dice-die:not(.rolling) .dice-core,
+.dice-die:not(.rolling) .dice-face:not(.front) svg { visibility: hidden; }
+.dice-face {
+  inset: 0;
+  border-radius: 21%;
+  background: radial-gradient(125% 125% at 28% 20%, var(--dice-light) 0%, var(--dice-face) 44%, color-mix(in srgb, var(--dice-face) 84%, var(--dice-edge)) 100%);
+  /* 가장자리 안쪽 그림자로 쿠션처럼 부풀어 보이게 합니다. */
+  box-shadow:
+    inset 0 0 0 max(1.5px, calc(var(--s) * 0.012)) color-mix(in srgb, var(--dice-edge) 75%, transparent),
+    inset 0 calc(var(--s) * -0.05) calc(var(--s) * 0.09) color-mix(in srgb, var(--dice-edge) 34%, transparent),
+    inset 0 calc(var(--s) * 0.035) calc(var(--s) * 0.05) color-mix(in srgb, #fff 55%, transparent);
+}
+.dice-face::before {
+  content: '';
+  position: absolute;
+  left: 13%;
+  top: 9%;
+  width: 30%;
+  height: 13%;
+  border-radius: 50%;
+  background: #fff;
+  opacity: 0.55;
+  transform: rotate(-18deg);
+}
+.dice-face svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
+.dice-pip, .dice-ink { fill: var(--dice-pip); }
+.dice-glint { fill: #fff; opacity: 0.42; }
+.dice-heart { fill: #b8283a; }
+.dice-line { fill: none; stroke: var(--dice-pip); stroke-width: 4.6; stroke-linecap: round; stroke-linejoin: round; }
+.dice-blush { fill: #ff8fa3; opacity: 0.5; }
+
+/* ── 결과줄 ── */
+.dice-result {
+  flex: none;
+  height: calc(var(--dice-total) * 1.3);
+  display: grid;
+  place-items: center;
+}
+.dice-hint { margin: 0; font-size: clamp(17px, calc(var(--s) * 0.11), 24px); font-weight: 650; color: var(--tk-muted); }
+.dice-equation {
+  display: flex;
+  align-items: center;
+  gap: calc(var(--dice-total) * 0.16);
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+.dice-chip {
+  --chip: calc(var(--dice-total) * 0.45);
+  display: inline-grid;
+  place-items: center;
+  min-width: calc(var(--chip) * 1.55);
+  height: calc(var(--chip) * 1.45);
+  padding: 0 calc(var(--chip) * 0.3);
+  border-radius: calc(var(--chip) * 0.5);
+  font-size: var(--chip);
+  font-weight: 800;
+  background: var(--dice-face);
+  color: var(--dice-pip);
+  box-shadow: inset 0 0 0 2px var(--dice-edge), 0 3px 0 color-mix(in srgb, var(--dice-edge) 55%, transparent);
+}
+.dice-chip.empty { background: transparent; box-shadow: inset 0 0 0 2px transparent; outline: 2px dashed var(--dice-edge); outline-offset: -2px; opacity: 0.75; }
+.dice-op { font-size: calc(var(--dice-total) * 0.42); font-weight: 700; color: var(--tk-muted); }
+.dice-total-slot { position: relative; display: inline-grid; place-items: center; min-width: calc(var(--dice-total) * 1.2); }
+.dice-total { font-size: var(--dice-total); font-weight: 800; letter-spacing: -0.02em; color: var(--tk-ink); }
+.dice-total.pending { color: var(--tk-muted); opacity: 0.45; }
+/* 배지는 합계 위에 겹쳐 떠서 합계를 밀지 않습니다. 다크 모드에서도 금색 위 글자가 읽히도록 글자색을 고정합니다. */
+.dice-badge {
+  position: absolute;
+  left: 74%;
+  bottom: 74%;
+  padding: 0.28em 0.72em;
+  border-radius: 999px;
+  white-space: nowrap;
+  font-size: max(16px, calc(var(--dice-total) * 0.3));
+  font-weight: 800;
+  color: #3b2a0a;
+  background: var(--tk-gold);
+  box-shadow: 0 3px 0 color-mix(in srgb, #3b2a0a 16%, transparent);
+  transform: rotate(-8deg);
+  transform-origin: 0% 100%;
+  pointer-events: none;
+}
+.dice-badge[data-kind='triple'] { background: linear-gradient(100deg, #ffb8a6, #ffe08f 50%, #a6e6cc); }
+.dice-live { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+
+/* ── 조작줄 ── */
+.dice-controls {
+  flex: none;
+  height: 76px;
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: 12px;
+  padding: 0 18px 4px;
+}
+.dice-count {
+  justify-self: start;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  padding: 4px;
+  border-radius: 14px;
+  background: var(--tk-bg);
+  border: 1px solid var(--tk-line);
+}
+.dice-count-label { padding: 0 6px 0 8px; font-size: 12px; font-weight: 650; color: var(--tk-muted); }
+.dice-count button {
+  height: 38px;
+  min-width: 56px;
+  padding: 0 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--tk-muted);
+  font-weight: 750;
+  white-space: nowrap;
+}
+.dice-count button:hover:not(:disabled) { color: var(--tk-ink); }
+.dice-count button.selected { background: var(--tk-panel); color: var(--tk-ink); box-shadow: 0 1px 0 var(--tk-line), 0 2px 8px color-mix(in srgb, var(--tk-ink) 8%, transparent); }
+.dice-count-dots { display: flex; gap: 2px; }
+.dice-count-dots i { width: 7px; height: 7px; border-radius: 2.5px; background: var(--dice-face); box-shadow: inset 0 0 0 1px var(--dice-edge); }
+.dice-app .dice-roll {
+  justify-self: center;
+  min-width: 168px;
+  height: 56px;
+  padding: 0 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--tk-action);
+  color: var(--tk-on-action);
+  font-size: 19px;
+  font-weight: 800;
+  box-shadow: 0 4px 0 color-mix(in srgb, var(--tk-action) 65%, #000), 0 10px 22px color-mix(in srgb, var(--tk-action) 26%, transparent);
+  transition: transform 0.12s, box-shadow 0.12s, filter 0.12s;
+}
+.dice-app .dice-roll:hover { filter: brightness(1.07); }
+.dice-app .dice-roll:active:not(.rolling) { transform: translateY(3px); box-shadow: 0 1px 0 color-mix(in srgb, var(--tk-action) 65%, #000), 0 4px 10px color-mix(in srgb, var(--tk-action) 22%, transparent); }
+.dice-app .dice-roll.rolling { cursor: default; filter: saturate(0.85); }
+.dice-roll.rolling svg { animation: dice-wiggle 0.5s ease-in-out infinite; }
+@keyframes dice-wiggle { 0%, 100% { transform: rotate(-14deg); } 50% { transform: rotate(14deg); } }
+.dice-options { justify-self: end; display: flex; align-items: center; gap: 10px; }
+.dice-motion { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--tk-muted); white-space: nowrap; }
+.dice-sound {
+  width: 40px;
+  height: 40px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--tk-line);
+  border-radius: 12px;
+  background: var(--tk-panel);
+  color: var(--tk-muted);
+}
+.dice-sound[aria-pressed='true'] { color: var(--tk-accent); }
+.dice-error { margin: 0; padding: 0 18px 10px; font-size: 12px; text-align: center; color: var(--tk-danger); }
+
+/* 좁은 창: 색 점과 "주사위" 이름표를 빼서 세 묶음이 한 줄에 들어가게 합니다. "동작 줄이기" 글자는 뜻을 알 수 있게 남깁니다. */
+@media (max-width: 680px) {
+  .dice-count-label, .dice-count-dots { display: none; }
+  .dice-motion { gap: 6px; font-size: 11px; }
+  .dice-controls { gap: 8px; padding: 0 12px 4px; }
+  .dice-count button { min-width: 44px; padding: 0 8px; }
+  .dice-app .dice-roll { min-width: 132px; padding: 0 18px; font-size: 17px; }
+  .dice-main { padding: 10px 12px 0; }
+}

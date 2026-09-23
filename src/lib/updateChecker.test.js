@@ -5,12 +5,18 @@ import {
   AUTO_CHECK_INTERVAL_MS,
   RELEASES_PAGE_URL,
   buildUpdateInfo,
+  INSTALL_ACTIVE_PHASES,
   compareVersions,
+  describeDownloadProgress,
+  describeInstallError,
   describeUpdateError,
+  downloadPercent,
   fetchLatestRelease,
   formatBytes,
   formatReleaseDate,
+  isInstallActive,
   isNewerVersion,
+  normalizeInstallStatus,
   normalizeReleaseNotes,
   parseVersion,
   pickWindowsInstaller,
@@ -285,5 +291,77 @@ test('describeUpdateError: 모든 코드가 사용자에게 보여줄 한국어 
     const message = describeUpdateError(code);
     assert.equal(typeof message, 'string');
     assert.ok(message.length > 0);
+  }
+});
+
+// ── 앱 안 설치 ────────────────────────────────────────────────────────
+test('isInstallActive: 진행 중 단계만 참이다', () => {
+  for (const phase of INSTALL_ACTIVE_PHASES) assert.equal(isInstallActive(phase), true);
+  for (const phase of ['idle', 'failed', 'cancelled', '', undefined, null, 3]) {
+    assert.equal(isInstallActive(phase), false);
+  }
+});
+
+test('normalizeInstallStatus: Rust 방송을 검증해 화면용 값으로 정리한다', () => {
+  assert.deepEqual(
+    normalizeInstallStatus({ phase: 'downloading', version: '5.5.3', downloaded: 1048576, total: 10485760, code: null }),
+    { phase: 'downloading', version: '5.5.3', downloaded: 1048576, total: 10485760, code: '' },
+  );
+  assert.deepEqual(
+    normalizeInstallStatus({ phase: 'failed', version: '5.5.3', downloaded: 0, total: null, code: 'SAVE_FAILED' }),
+    { phase: 'failed', version: '5.5.3', downloaded: 0, total: 0, code: 'SAVE_FAILED' },
+  );
+  // 음수·NaN·소수는 진행률을 망가뜨리지 않게 정리합니다.
+  assert.deepEqual(
+    normalizeInstallStatus({ phase: 'downloading', downloaded: -5, total: Number.NaN }),
+    { phase: 'downloading', version: '', downloaded: 0, total: 0, code: '' },
+  );
+  assert.equal(normalizeInstallStatus({ phase: 'downloading', downloaded: 10.7, total: 20 }).downloaded, 10);
+});
+
+test('normalizeInstallStatus: 모르는 단계나 형식이 틀린 값은 버린다', () => {
+  for (const bad of [null, undefined, 'downloading', 42, {}, { phase: 'idle' }, { phase: 'DOWNLOADING' }, { phase: 7 }]) {
+    assert.equal(normalizeInstallStatus(bad), null);
+  }
+});
+
+test('downloadPercent: 전체 크기를 모르면 null, 넘치면 100으로 자른다', () => {
+  assert.equal(downloadPercent(0, 100), 0);
+  assert.equal(downloadPercent(45, 100), 45);
+  assert.equal(downloadPercent(99.9, 100), 99);
+  assert.equal(downloadPercent(150, 100), 100);
+  assert.equal(downloadPercent(50, 0), null);
+  assert.equal(downloadPercent(50, undefined), null);
+  assert.equal(downloadPercent(undefined, 100), 0);
+});
+
+test('describeDownloadProgress: 비율과 받은 양을 한 줄로 보여 준다', () => {
+  assert.equal(describeDownloadProgress(4718592, 10485760), '45% · 4.5MB / 10.0MB');
+  assert.equal(describeDownloadProgress(0, 10485760), '0% · 0KB / 10.0MB');
+  // 서버가 크기를 알려 주지 않으면 받은 양만 보여 줍니다.
+  assert.equal(describeDownloadProgress(2097152, 0), '2.0MB 받음');
+});
+
+test('describeInstallError: Rust의 모든 실패 코드가 한국어 안내를 가진다', () => {
+  // src-tauri/src/app_update.rs의 Failure::code()와 같은 목록입니다.
+  const rustCodes = [
+    'BUSY', 'NOT_PREPARED', 'VERSION_MISMATCH', 'CHECK_FAILED', 'DOWNLOAD_FAILED', 'BAD_SIGNATURE',
+    'CANCELLED', 'EDITOR_BUSY', 'SAVE_FAILED', 'PREPARE_TIMEOUT', 'LAUNCH_FAILED',
+  ];
+  const fallback = describeInstallError('SOMETHING_NEW');
+  for (const code of rustCodes) {
+    const message = describeInstallError(code);
+    assert.equal(typeof message, 'string');
+    assert.ok(message.length > 0);
+    // 취소는 화면에서 안내 없이 처음 상태로 돌아가므로 기본 문구여도 괜찮습니다. 나머지는 각자 안내가 있어야 합니다.
+    if (code !== 'CANCELLED') assert.notEqual(message, fallback, code);
+  }
+  // 앱 안 설치를 못 하는 경우는 직접 내려받기로 안내합니다.
+  for (const code of ['NOT_PREPARED', 'VERSION_MISMATCH', 'LAUNCH_FAILED']) {
+    assert.match(describeInstallError(code), /직접 내려받기/);
+  }
+  // 저장 확인 단계에서 멈춘 경우에는 내용이 그대로라고 안심시킵니다.
+  for (const code of ['EDITOR_BUSY', 'SAVE_FAILED', 'PREPARE_TIMEOUT']) {
+    assert.match(describeInstallError(code), /내용은 그대로/);
   }
 });

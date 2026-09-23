@@ -21,7 +21,6 @@
     Pin,
     Check,
     PanelRight,
-    SlidersHorizontal,
     Presentation,
     ArrowDown,
     RotateCcw,
@@ -54,6 +53,12 @@
     formatCompactDate,
     searchEntries,
   } from "../../lib/noticeboard/dates.js";
+  import {
+    pickKey,
+    allSelected,
+    toggleAllKeys,
+    describeKeys,
+  } from "../../lib/noticeboard/selection.js";
   import "./noticeboard.css";
 
   let recovery = $state<{ available: boolean; modified: number | null } | null>(
@@ -67,7 +72,6 @@
     busy = $state(false),
     error = $state("");
   let board = $state(false),
-    toolsOpen = $state(false),
     archiveOpen = $state(false),
     trashOpen = $state(false),
     colorOpen = $state(false),
@@ -76,6 +80,11 @@
     query = $state(""),
     period = $state("all"),
     limit = $state(50);
+  // 목록에서 여러 날짜를 골라 한 번에 지우기 위한 상태입니다.
+  let selectMode = $state(false),
+    selected = $state<string[]>([]);
+  // Shift 범위 선택의 기준점(화면 표시와 무관해 $state가 아닙니다).
+  let rangeAnchor = "";
   let entries = $state<any[]>([]),
     trash = $state<any[]>([]),
     fonts = $state<any[]>([...BUILTIN_FONTS]);
@@ -129,6 +138,9 @@
     };
   });
   const results = $derived(searchEntries(entries, query, period, today));
+  const visible = $derived(results.slice(0, limit));
+  const visibleKeys = $derived(visible.map((e) => e.dateKey));
+  const allPicked = $derived(allSelected(selected, visibleKeys));
   const fontFamily = $derived(
     fonts.find((f) => f.name === ui.doc?.attrs?.fontId)?.family ||
       '"Malgun Gothic", sans-serif',
@@ -273,19 +285,89 @@
     )
       format("replace", ui.saved);
   }
-  async function remove() {
+  /** 고른 날짜들을 휴지통으로 옮깁니다.
+   *  지금 열려 있는 날짜는 반드시 세션 경로(session.trash)로 지웁니다: 편집기와 저장 상태를
+   *  함께 정리하지 않으면 다음 저장이 CONFLICT로 막힙니다.
+   *  나머지 날짜는 지우기 직전에 다시 읽어 최신 revision으로 보냅니다(목록이 잠깐 옛것일 수 있음). */
+  async function trashDates(keys: string[]) {
+    if (!keys.length) return;
+    await run(async () => {
+      await session.flush();
+      const failed: string[] = [];
+      for (const key of keys) {
+        try {
+          if (session.active?.key === key) {
+            await session.trash();
+            editor?.switchDate();
+          } else {
+            const record = await repository.readDate(key);
+            // 이미 사라진 날짜는 조용히 넘어갑니다.
+            if (record) {
+              await repository.execute({
+                type: "trash",
+                id: record.id,
+                dateKey: key,
+                expectedRevision: record.revision,
+                operationId: crypto.randomUUID(),
+              });
+              // 캐시에 남은 옛 정보로 되살아나지 않도록 세션도 함께 버립니다.
+              session.sessions.delete(key);
+            }
+          }
+          selected = selected.filter((k) => k !== key);
+        } catch (e) {
+          // 하나만 지울 때는 원래 오류 메시지를 그대로 보여 줍니다.
+          if (keys.length === 1) throw e;
+          failed.push(key);
+        }
+      }
+      if (!selected.length) leaveSelect();
+      await refresh();
+      if (failed.length)
+        error = `${describeKeys(failed)} 알림장은 지우지 못했어요. 목록을 새로 읽었으니 다시 시도해 주세요.`;
+    });
+  }
+  async function confirmTrash(keys: string[]) {
+    if (!keys.length) return;
+    const one = keys.length === 1;
     if (
       await ask(
-        `${formatDate(ui.key)} 알림장을 삭제할까요?`,
-        "저장본과 수정 중인 초안을 함께 휴지통으로 옮겨요. 나중에 복원할 수 있어요.",
+        one
+          ? `${formatDate(keys[0])} 알림장을 삭제할까요?`
+          : `알림장 ${keys.length}개를 삭제할까요?`,
+        one
+          ? "저장본과 수정 중인 초안을 함께 휴지통으로 옮겨요. 나중에 복원할 수 있어요."
+          : `${describeKeys(keys)}의 저장본과 초안을 휴지통으로 옮겨요. 나중에 복원할 수 있어요.`,
         "휴지통으로 이동",
       )
     )
-      await run(async () => {
-        await session.trash();
-        editor?.switchDate();
-        await refresh();
-      });
+      await trashDates(keys);
+  }
+  function remove() {
+    return confirmTrash([ui.key]);
+  }
+  function leaveSelect() {
+    selectMode = false;
+    selected = [];
+    rangeAnchor = "";
+  }
+  /** 목록 항목 누름: 선택 모드면 고르기(Shift는 범위), 아니면 그 날짜를 엽니다. */
+  function pickEntry(key: string, shift: boolean) {
+    if (!selectMode) {
+      void navigate(key);
+      return;
+    }
+    const next = pickKey(selected, visibleKeys, key, {
+      shift,
+      anchor: rangeAnchor,
+    });
+    selected = next.selected;
+    rangeAnchor = next.anchor;
+  }
+  /** 지금 목록에 보이는 항목만 한 번에 고르거나 풉니다(검색·기간 결과 기준). */
+  function toggleAll() {
+    selected = toggleAllKeys(selected, visibleKeys);
+    rangeAnchor = "";
   }
   async function openTrash() {
     await run(async () => {
@@ -363,8 +445,9 @@
         } else await document.documentElement.requestFullscreen();
         editor?.beginBoard();
         board = true;
-        toolsOpen = false;
         archiveOpen = false;
+        // 보드에서는 기록 패널이 보이지 않으므로 고른 상태를 남겨 두지 않습니다.
+        leaveSelect();
         colorOpen = false;
         requestAnimationFrame(() => {
           scrollHost.scrollTop = 0;
@@ -395,7 +478,6 @@
         } else if (document.fullscreenElement) await document.exitFullscreen();
         editor?.endBoard();
         board = false;
-        toolsOpen = false;
         requestAnimationFrame(() => {
           scrollHost.scrollTop = normalScroll;
           measure();
@@ -473,6 +555,9 @@
         e.preventDefault();
       } else if (trashOpen) {
         trashOpen = false;
+        e.preventDefault();
+      } else if (selectMode && !board) {
+        leaveSelect();
         e.preventDefault();
       } else if (board) {
         e.preventDefault();
@@ -588,7 +673,6 @@
               if (board && !(await w.isFullscreen())) {
                 editor?.endBoard();
                 board = false;
-                toolsOpen = false;
                 requestAnimationFrame(
                   () => (scrollHost.scrollTop = normalScroll),
                 );
@@ -785,9 +869,8 @@
         class="nb-format"
         role="toolbar"
         tabindex="-1"
-        class:closed={board && !toolsOpen}
         aria-label="본문 서식"
-        onpointerdown={() => editor?.captureSelection()}
+        onpointerdown={() => editor?.holdForTools()}
       >
         <select
           aria-label="글꼴"
@@ -883,10 +966,12 @@
           <span>보기</span><button
             aria-label="보기 축소"
             disabled={zoom <= 50}
+            onpointerdown={keepSelection}
             onclick={() => adjustZoom(-10)}><Minus size={13} /></button
           ><span>{zoom}%</span><button
             aria-label="보기 확대"
             disabled={zoom >= 300}
+            onpointerdown={keepSelection}
             onclick={() => adjustZoom(10)}><Plus size={13} /></button
           >
         </div>
@@ -918,13 +1003,7 @@
         {#if board && savedHint}<span class="nb-save-state" role="status"
             >저장했어요</span
           >{/if}
-        {#if board}<button
-            class="nb-soft"
-            aria-label="서식 도구 열기"
-            aria-expanded={toolsOpen}
-            onclick={() => (toolsOpen = !toolsOpen)}
-            ><SlidersHorizontal size={17} /><span>도구</span></button
-          ><button class="nb-text" onclick={toggleBoard} disabled={busy}
+        {#if board}<button class="nb-text" onclick={toggleBoard} disabled={busy}
             ><Minimize2 size={17} /><span>일반 화면 <kbd>Esc</kbd></span
             ></button
           >{:else}<div class="nb-save-state">
@@ -982,34 +1061,80 @@
             oninput={() => (limit = 50)}
           /></label
         >
+        <div class="nb-list-tools">
+          <button
+            class="nb-pick-toggle"
+            aria-pressed={selectMode ? allPicked : undefined}
+            aria-label={selectMode
+              ? "보이는 알림장 모두 선택"
+              : "여러 개 선택 시작"}
+            title={selectMode
+              ? "지금 목록에 보이는 알림장을 모두 선택"
+              : "여러 날짜를 골라 한 번에 삭제"}
+            disabled={busy || !visible.length}
+            onclick={() => (selectMode ? toggleAll() : (selectMode = true))}
+            ><span class="nb-checkbox" class:on={selectMode && allPicked}
+              >{#if selectMode && allPicked}<Check size={11} />{/if}</span
+            >{selectMode ? "전체 선택" : "선택"}</button
+          >{#if selectMode}<span class="nb-pick-count"
+              >{selected.length}개 선택</span
+            ><button class="nb-text nb-pick-cancel" onclick={leaveSelect}
+              >취소</button
+            >{/if}
+        </div>
         <div class="nb-entries">
-          {#each results.slice(0, limit) as entry (entry.id)}<button
-              class="nb-entry"
-              class:selected={entry.dateKey === ui.key}
-              onclick={() => navigate(entry.dateKey)}
-              disabled={busy}
-              ><span class="nb-entry-heading"
-                ><strong
-                  >{formatDate(entry.dateKey).replace(/^\d+년 /, "")}</strong
-                ><small
-                  >{!entry.hasSaved
-                    ? "초안"
-                    : entry.hasDraft
-                      ? "수정 중"
-                      : "저장됨"}</small
-                ></span
-              >
-              <p>
-                {query &&
-                entry.draftText?.includes(query) &&
-                !entry.savedText?.includes(query)
-                  ? entry.draftText
-                  : entry.savedText || entry.draftText || "빈 초안"}
-              </p>
-              {#if query && entry.draftText?.includes(query) && !entry.savedText?.includes(query)}<em
-                  >초안에서 찾음</em
-                >{/if}</button
-            >{:else}<div class="nb-empty">
+          {#each visible as entry (entry.id)}<div
+              class="nb-entry-row"
+              class:picked={selectMode && selected.includes(entry.dateKey)}
+            >
+              <button
+                class="nb-entry"
+                class:selected={entry.dateKey === ui.key}
+                aria-pressed={selectMode
+                  ? selected.includes(entry.dateKey)
+                  : undefined}
+                onclick={(e) => pickEntry(entry.dateKey, e.shiftKey)}
+                disabled={busy}
+                ><span class="nb-entry-heading"
+                  ><strong
+                    >{formatDate(entry.dateKey).replace(/^\d+년 /, "")}</strong
+                  ><small
+                    >{!entry.hasSaved
+                      ? "초안"
+                      : entry.hasDraft
+                        ? "수정 중"
+                        : "저장됨"}</small
+                  ></span
+                >
+                <p>
+                  {query &&
+                  entry.draftText?.includes(query) &&
+                  !entry.savedText?.includes(query)
+                    ? entry.draftText
+                    : entry.savedText || entry.draftText || "빈 초안"}
+                </p>
+                {#if query && entry.draftText?.includes(query) && !entry.savedText?.includes(query)}<em
+                    >초안에서 찾음</em
+                  >{/if}</button
+              >{#if selectMode}<span
+                  class="nb-checkbox nb-entry-check"
+                  class:on={selected.includes(entry.dateKey)}
+                  aria-hidden="true"
+                  >{#if selected.includes(entry.dateKey)}<Check
+                      size={12}
+                    />{/if}</span
+                >{:else}<button
+                  class="nb-entry-action"
+                  aria-label="{formatDate(entry.dateKey).replace(
+                    /^\d+년 /,
+                    '',
+                  )} 알림장 삭제"
+                  title="이 알림장 삭제"
+                  disabled={busy}
+                  onclick={() => confirmTrash([entry.dateKey])}
+                  ><Trash2 size={14} /></button
+                >{/if}
+            </div>{:else}<div class="nb-empty">
               <BookOpenText size={30} />
               <p>
                 {query || period !== "all"
@@ -1026,7 +1151,14 @@
               onclick={() => (limit += 50)}>더 보기</button
             >{/if}
         </div>
-        {#if ui.exists}<button
+        {#if selectMode}<button
+            class="nb-delete nb-delete-picked"
+            disabled={!selected.length || busy}
+            onclick={() => confirmTrash(selected)}
+            ><Trash2 size={14} />{selected.length
+              ? selected.length + "개 삭제"
+              : "삭제"}</button
+          >{:else if ui.exists}<button
             class="nb-delete"
             onclick={remove}
             disabled={busy}><Trash2 size={14} />이 날짜 알림장 삭제</button

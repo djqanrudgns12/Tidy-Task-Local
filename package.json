@@ -1,14 +1,16 @@
 {
   "name": "tidy-task",
   "private": true,
-  "version": "5.5.2",
+  "version": "5.5.3",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "test": "node --test src/**/*.test.js",
+    "test": "node --test src/**/*.test.js scripts/**/*.test.mjs",
     "preview": "vite preview",
     "tauri": "tauri",
+    "release": "node scripts/release-build.mjs",
+    "release:verify": "node scripts/release-verify.mjs",
     "check": "svelte-check --threshold warning"
   },
   "devDependencies": {

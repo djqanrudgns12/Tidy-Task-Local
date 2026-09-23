@@ -1,6 +1,11 @@
 import { Schema, Slice, Fragment } from "prosemirror-model";
-import { EditorState, TextSelection } from "prosemirror-state";
-import { EditorView } from "prosemirror-view";
+import {
+  EditorState,
+  TextSelection,
+  Plugin,
+  PluginKey,
+} from "prosemirror-state";
+import { EditorView, Decoration, DecorationSet } from "prosemirror-view";
 import {
   history,
   undo,
@@ -60,6 +65,37 @@ export const schema = new Schema({
     },
   },
 });
+/** 서식 도구로 붙잡아 둔 본문 범위. @typedef {{from:number,to:number}|null} HeldRange */
+/** @type {PluginKey<HeldRange>} */
+const heldSelection = new PluginKey("heldSelection");
+// 왜 필요한가: 글자 크기 입력칸이나 글꼴 목록으로 초점이 넘어가면 브라우저가 본문의 선택 표시를
+// 지웁니다(입력칸이 선택을 가져감). 사용자 눈에는 드래그해 둔 블록이 풀린 것처럼 보이므로,
+// 초점이 도구에 있는 동안에는 그 범위를 직접 칠해 계속 보여 줍니다.
+/** @type {Plugin<HeldRange>} */
+const heldSelectionPlugin = new Plugin({
+  key: heldSelection,
+  state: {
+    init: () => /** @type {HeldRange} */ (null),
+    apply(tr, value) {
+      const meta = tr.getMeta(heldSelection);
+      if (meta !== undefined) return meta;
+      if (!value) return null;
+      // 붙잡아 둔 동안 본문이 바뀌어도 같은 글자를 가리키도록 위치를 따라 옮깁니다.
+      return tr.docChanged
+        ? { from: tr.mapping.map(value.from), to: tr.mapping.map(value.to) }
+        : value;
+    },
+  },
+  props: {
+    decorations(state) {
+      const range = heldSelection.getState(state);
+      if (!range || range.from >= range.to) return null;
+      return DecorationSet.create(state.doc, [
+        Decoration.inline(range.from, range.to, { class: "nb-held-selection" }),
+      ]);
+    },
+  },
+});
 /** @type {{token:string,slice:any}|null} */
 let copied = null;
 /** @param {HTMLElement} host @param {import("./session.js").NoticeSession} session @param {{changed:()=>void,error:(e:unknown)=>void}} callbacks */
@@ -71,6 +107,7 @@ export function createEditor(host, session, { changed, error }) {
   let composing = false,
     locked = false;
   const plugins = [
+    heldSelectionPlugin,
     history({ depth: 200, newGroupDelay: 500 }),
     keymap({
       "Mod-z": (s, d, v) => !v?.composing && undo(s, d),
@@ -95,6 +132,10 @@ export function createEditor(host, session, { changed, error }) {
     EditorState.create({ schema, doc: schema.nodeFromJSON(doc), plugins });
   /** @type {import('prosemirror-state').SelectionBookmark | null} */
   let normalAnchor = null;
+  /** 초점이 서식 도구로 넘어간 동안 지키고 있는 선택 범위. @type {import('prosemirror-state').SelectionBookmark | null} */
+  let held = null;
+  /** 서식 도구를 누르는 순간(초점이 옮겨가기 직전)의 선택. @type {import('prosemirror-state').SelectionBookmark | null} */
+  let pendingHold = null;
   const view = new EditorView(host, {
     state: active().editor || fresh(active().doc),
     attributes: {
@@ -110,6 +151,8 @@ export function createEditor(host, session, { changed, error }) {
         const next = view.state.apply(tr);
         if (tr.docChanged) validateDocument(next.doc.toJSON());
         if (normalAnchor) normalAnchor = normalAnchor.map(tr.mapping);
+        if (held) held = held.map(tr.mapping);
+        if (pendingHold) pendingHold = pendingHold.map(tr.mapping);
         view.updateState(next);
         active().editor = next;
         if (tr.docChanged && !view.composing && !composing)
@@ -169,8 +212,15 @@ export function createEditor(host, session, { changed, error }) {
         captureSelection();
         return false;
       },
+      focus() {
+        // 본문으로 돌아오면 브라우저가 다시 선택을 칠해 주므로 붙잡아 둔 범위를 놓아 줍니다.
+        releaseSelection();
+        return false;
+      },
       blur() {
-        captureSelection();
+        // 여기서 DOM 선택을 다시 읽지 않습니다: 초점이 입력칸으로 넘어가는 순간의 DOM 선택은
+        // 이미 지워졌거나 한 점으로 접혀 있어, 그대로 반영하면 잡아 둔 범위가 사라집니다.
+        holdSelection();
         return false;
       },
       compositionstart() {
@@ -246,13 +296,92 @@ export function createEditor(host, session, { changed, error }) {
     if (!next.eq(view.state.selection))
       view.dispatch(view.state.tr.setSelection(next));
   }
+  /** @param {HeldRange} range */
+  function setHeldRange(range) {
+    if (view.isDestroyed || !session.active) return;
+    const current = heldSelection.getState(view.state);
+    if (
+      current === range ||
+      (current &&
+        range &&
+        current.from === range.from &&
+        current.to === range.to)
+    )
+      return;
+    view.dispatch(view.state.tr.setMeta(heldSelection, range));
+  }
+  /** 서식 도구를 누른 순간의 선택을 미리 떠 둡니다.
+   *  왜 이 시점인가: 글꼴 목록 같은 요소는 초점이 넘어가기 전에 이미 브라우저가 선택을 접어 버려,
+   *  blur 때 다시 읽으면 빈 범위만 남습니다. 누르는 순간이 마지막으로 온전한 때입니다. */
+  function holdForTools() {
+    captureSelection();
+    if (view.isDestroyed) return;
+    // 커서만 있을 때는 붙잡지 않습니다: 나중에 setSelection으로 되살리면
+    // 미리 눌러 둔 서식(storedMarks)이 함께 지워지기 때문입니다.
+    pendingHold = view.state.selection.empty
+      ? null
+      : view.state.selection.getBookmark();
+  }
+  /** 초점이 서식 도구로 옮겨가도 잡아 둔 범위를 기억하고 화면에도 계속 칠해 둡니다. */
+  function holdSelection() {
+    if (view.isDestroyed || !session.active) return;
+    const bookmark =
+      pendingHold ||
+      (view.state.selection.empty ? null : view.state.selection.getBookmark());
+    if (!bookmark) return;
+    try {
+      const selection = bookmark.resolve(view.state.doc);
+      if (selection.empty) return;
+      held = bookmark;
+      setHeldRange({ from: selection.from, to: selection.to });
+    } catch {
+      /* 위치를 잃은 표시는 버립니다. */
+    }
+  }
+  function releaseSelection() {
+    held = null;
+    pendingHold = null;
+    setHeldRange(null);
+  }
+  /** 도구에서 되돌아올 때 붙잡아 둔 범위를 그대로 되살립니다. */
+  function restoreHeldSelection() {
+    const bookmark = held || pendingHold;
+    releaseSelection();
+    if (!bookmark) return;
+    try {
+      const selection = bookmark.resolve(view.state.doc);
+      if (!selection.eq(view.state.selection))
+        view.dispatch(view.state.tr.setSelection(selection));
+    } catch {
+      /* 본문이 크게 바뀌었으면 지금 선택을 그대로 씁니다. */
+    }
+  }
   return {
     view,
-    captureSelection,
-    beginBoard() { normalAnchor = view.state.selection.getBookmark(); },
-    endBoard() { if (normalAnchor) { const bookmark=normalAnchor; normalAnchor=null; view.dispatch(view.state.tr.setSelection(bookmark.resolve(view.state.doc))); } },
+    holdForTools,
+    beginBoard() {
+      normalAnchor = view.state.selection.getBookmark();
+      // 전체화면으로 넘어가며 초점을 잃어도 잡아 둔 블록이 그대로 보이게 합니다.
+      // 도구를 누른 기록은 지웁니다: 지금 보고 있는 선택이 기준이어야 합니다.
+      pendingHold = null;
+      if (!view.hasFocus()) holdSelection();
+    },
+    endBoard() {
+      if (!normalAnchor) return;
+      const bookmark = normalAnchor;
+      normalAnchor = null;
+      releaseSelection();
+      view.dispatch(
+        view.state.tr.setSelection(bookmark.resolve(view.state.doc)),
+      );
+      if (!view.hasFocus()) holdSelection();
+    },
     switchDate() {
+      // 날짜가 바뀌면 이전 문서의 위치를 가리키던 표시는 버립니다.
+      held = null;
+      pendingHold = null;
       view.updateState(active().editor || fresh(active().doc));
+      setHeldRange(null);
       changed();
     },
     /** @param {boolean} value */
@@ -287,6 +416,8 @@ export function createEditor(host, session, { changed, error }) {
     /** @param {string} name @param {any} [value] */
     command(name, value) {
       if (locked || composing || view.composing) return;
+      // 글자 크기 입력칸·글꼴 목록을 거쳐 왔다면, 초점이 옮겨가기 전에 잡아 둔 범위를 먼저 되살립니다.
+      restoreHeldSelection();
       const { state } = view;
       if (name === "undo" || name === "redo") {
         (name === "undo" ? undo : redo)(state, view.dispatch);

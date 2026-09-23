@@ -12,6 +12,7 @@ import { isPlausibleCoordinate } from './windows/windowPlacement.js';
 import { registerFontFace } from './fonts.js';
 import { BUILTIN_FONTS } from './builtinFonts.js';
 import { createSerialQueue } from './storage/serialQueue.js';
+import { assertStoreMatchesDisk } from './storage/storeIntegrity.js';
 import { collectImminentTodos } from './reminders/reminderEngine.js';
 import { buildExportText, escapeHtml, htmlToLines, linesToHtml, parseExportText } from './io/txtPorter.js';
 import { newId } from './ids.js';
@@ -35,7 +36,9 @@ import {
   SNOOZE_DURATION_MS,
   buildUpdateInfo,
   fetchLatestRelease,
+  isInstallActive,
   isNewerVersion,
+  normalizeInstallStatus,
   shouldAutoCheck,
   shouldNotifyUser,
 } from './updateChecker.js';
@@ -67,6 +70,11 @@ function sharedStore() {
 //   2) 창별 데이터는 "유령 청소기"가 빈 창을 지울 때 함께 삭제되므로,
 //      사용자가 누른 "건너뛰기 / 나중에" 선택이 창을 닫는 순간 증발해 버립니다.
 const UPDATE_STATE_KEY = 'updateState';
+
+// ✨ [업데이트 설치] 입력 잠금이 풀리지 않을 때의 안전망.
+// Rust는 잠금을 건 뒤 늦어도 약 20초 안에 설치(앱 종료)하거나 잠금 해제를 알립니다.
+// 그 알림마저 받지 못해도 창이 영영 잠긴 채 남지 않도록 넉넉히 기다린 뒤 스스로 풉니다.
+const UPDATE_FREEZE_WATCHDOG_MS = 60 * 1000;
 
 // ✨ [매니저 선출] 권한을 다시 계산하는 주기 — 신호를 놓쳤을 때를 위한 안전망입니다.
 const MANAGER_RECHECK_MS = 5 * 60 * 1000;
@@ -116,8 +124,16 @@ let settingsSaveTimer = null;
 //     나중 작업이 옛 스냅샷을 읽어 방금 저장한 내용을 덮어씁니다.
 //     큐에 태워 한 번에 하나씩만 실행하면 이 경합(race)이 원천 차단됩니다.
 const writeQueue = createSerialQueue();
-/** @template T @param {() => Promise<T>} task @returns {Promise<T>} */
+
+// ✨ [업데이트 설치 직전] 이 창의 마지막 저장을 마친 뒤로는 디스크에 쓰지 않습니다.
+// 왜: 설치 단계에서 앱은 곧바로 끝나므로(Rust app_update.rs), 그 순간 쓰던 파일은 반쯤 잘린 채 남을 수 있습니다.
+//     마지막 저장이 끝난 뒤의 쓰기를 막으면 앱이 끝나는 순간 쓰고 있는 파일이 없습니다.
+//     설치가 멈추면(update-prepare-cancel) 다시 열고, 잠근 동안의 변경은 한 번 더 저장합니다.
+let writesFrozen = false;
+
+/** @template T @param {() => Promise<T>} task @returns {Promise<T | false>} */
 function enqueueWrite(task) {
+  if (writesFrozen) return Promise.resolve(false);
   return writeQueue.enqueue(task);
 }
 export function whenWritesSettled() {
@@ -209,6 +225,23 @@ export class AppState {
   isUpdateBannerVisible = $state(false); // 상단 슬림 배너 표시 여부
   isUpdateGuideOpen = $state(false);     // 단계별 안내 모달 표시 여부
   showUpToDateToast = $state(false);      // "이미 최신입니다" 토스트
+
+  // ── 앱 안 설치 진행 상황 ─────────────────────────────────────────
+  // 설치는 Rust(app_update.rs) 한곳에서 진행하고, 진행 상황을 모든 창에 방송합니다(update-install-status).
+  // 그래서 어느 창에서 눌렀든 알림 띠·안내 창·설정 창이 같은 진행률을 보여 줍니다.
+  updateInstallPhase = $state('idle');   // idle | checking | downloading | preparing | installing | failed
+  updateInstallDownloaded = $state(0);   // 받은 바이트
+  updateInstallTotal = $state(0);        // 전체 바이트 (모르면 0)
+  updateInstallErrorCode = $state('');   // 멈춘 이유 (describeInstallError로 안내)
+  // 설치 직전 메모 창의 입력 잠금 덮개. 마지막 저장을 마친 뒤 새 입력이 사라지지 않게 막습니다.
+  isUpdateFrozen = $state(false);
+  // 지금 처리 중인 저장 확인 요청 { 요청 번호, 저장 결과(null=저장 중) }
+  /** @type {{ id: number, result: boolean | null } | null} */
+  _updatePrepare = null;
+  /** @type {TimerHandle | null} */
+  _updateFreezeWatchdog = null;
+  /** @type {(() => void) | null} */
+  _unlistenInstallStatus = null;
 
   // 디스크에 보존되는 사용자 선택 (전역 키 updateState)
   _updateSkippedVersion = '';
@@ -340,6 +373,7 @@ export class AppState {
   }
 
 async init() {
+    let restoredPersistedData = false;
     try {
       const win = getCurrentWindow();
       this.windowLabel = win.label;
@@ -359,6 +393,7 @@ async init() {
         console.error(`🛑 [${this.windowLabel}] 저장소 읽기 실패 — 데이터 보호를 위해 저장을 잠급니다.`);
         tauriStore = createStubStore();
         this._scheduleHydrationRetry();
+        return;
       }
 
       this.activeExtraWindows = await tauriStore.get('activeExtraWindows') || [];
@@ -379,6 +414,12 @@ async init() {
 
       // 🚨 [데이터 마이그레이션: 구버전 데이터 증발 완벽 방어]
       let winData = await tauriStore.get(this.windowLabel);
+      if (!winData) {
+        const health = await invoke('store_health');
+        if (health?.keys?.includes(this.windowLabel)) {
+          throw new Error(`디스크의 ${this.windowLabel} 데이터를 저장소가 돌려주지 않았습니다.`);
+        }
+      }
 
       if (!winData && this.windowLabel === 'main') {
         const oldTodos = await tauriStore.get('todos');
@@ -430,6 +471,7 @@ async init() {
       for (const [name, value] of Object.entries(decoded)) {
         /** @type {any} */ (this)[name] = value;
       }
+      restoredPersistedData = true;
       // 디스크에서 실제 내용을 읽어왔다면, 이 창은 "내용을 가졌던 창"으로 표시합니다.
       if (hasWindowContent(decoded)) {
         this._everHadContent = true;
@@ -497,6 +539,11 @@ async init() {
           this.flushPendingSaves(true);
         });
 
+        // 업데이트 설치 직전: 저장을 마치고 입력을 막은 뒤 Rust에 "끝났다"고 답합니다.
+        // 설치가 멈추면 잠금을 풀고 잠근 동안의 변경을 저장합니다. (src-tauri/src/app_update.rs)
+        await listen('update-prepare', (event) => this._handleUpdatePrepare(event?.payload));
+        await listen('update-prepare-cancel', (event) => this._releaseUpdateFreeze(event?.payload?.id));
+
         // ✨ 트레이 메뉴 요청 — Rust가 열려 있는 창 하나를 "지명"해서 보냅니다.
         // 왜 매니저가 아니라 지명인가: 매니저는 메모 창 중 하나인데, 툴킷·급식 창만 띄워 둔
         //   상태(앱은 계속 살아 있습니다)에서는 매니저가 없어 트레이 메뉴가 아무 반응도 없었습니다.
@@ -531,6 +578,13 @@ async init() {
 
     } catch (e) {
       console.error(e);
+      // 읽기·복원 중 예외가 나도 빈 기본 상태를 정상 데이터로 저장하면 안 됩니다.
+      if (!restoredPersistedData) {
+        this._hydrated = false;
+        this.storageError = true;
+        tauriStore = createStubStore();
+        this._scheduleHydrationRetry();
+      }
     } finally {
       this.isReady = true;
       this._readyAt = Date.now();
@@ -791,6 +845,12 @@ async init() {
       this.isUpdateBannerVisible = false;
       this.isUpdateGuideOpen = false;
     });
+
+    // 5) 모든 창: 앱 안 설치의 진행 상황을 받습니다.
+    if (this._unlistenInstallStatus) this._unlistenInstallStatus();
+    this._unlistenInstallStatus = await listen('update-install-status', (event) => {
+      this._applyInstallStatus(event?.payload);
+    });
   }
 
   // 매니저 창만 실행하는 백그라운드 확인 일정입니다.
@@ -970,9 +1030,145 @@ async init() {
   openUpdateGuide() { this.isUpdateGuideOpen = true; }
   closeUpdateGuide() { this.isUpdateGuideOpen = false; }
 
-  // 사용자가 [새 버전 내려받기]를 누르면 기본 브라우저로 공식 설치 파일을 엽니다.
-  // 왜 앱이 직접 받지 않는가: B 방식의 핵심은 "다운로드/설치는 사용자와 OS가 하게 두는 것"입니다.
-  //   앱이 파일을 만지지 않으므로 사용자의 메모·할 일 데이터가 위험해질 여지가 없습니다.
+  // ✨ [지금 업데이트] 새 버전을 앱이 직접 내려받아 설치합니다. 순서는 Rust(app_update.rs)가 쥡니다:
+  //   설치 정보·서명 확인 → 내려받기 → 모든 창 저장 확인 → 업데이트 직전 사본 → 설치 프로그램 실행.
+  // 성공하면 앱이 곧바로 닫혔다가 새 버전으로 다시 열리므로 이 함수는 끝까지 돌아오지 않습니다.
+  async installUpdate() {
+    if (isInstallActive(this.updateInstallPhase)) return false;
+    this._resetInstallStatus();
+    this.updateInstallPhase = 'checking';
+
+    // 누른 순간의 최신 릴리스를 다시 확인합니다. (저장된 정보는 그사이 더 새 버전이 나와 낡았을 수 있습니다)
+    // 확인에 실패해도 저장된 버전으로 진행합니다. 설치할지는 Rust가 서명된 설치 정보(latest.json)와
+    //   이 버전이 같은지 다시 확인한 뒤에만 결정하므로, 다른 파일이 설치될 일은 없습니다.
+    let targetVersion = this.updateInfo?.version || '';
+    try {
+      const freshInfo = buildUpdateInfo(await fetchLatestRelease());
+      if (freshInfo) {
+        const checkedAt = Date.now();
+        this.updateInfo = freshInfo;
+        this.updateCheckedAt = checkedAt;
+        this._updateLastCheckedAt = checkedAt;
+        targetVersion = freshInfo.version;
+        await this._persistUpdateState();
+      }
+    } catch (e) {
+      console.warn('최신 릴리스를 다시 확인하지 못해 저장된 버전으로 진행합니다:', e);
+    }
+
+    if (!isNewerVersion(targetVersion, this.appVersion)) {
+      this._resetInstallStatus();
+      this.updatePhase = 'uptodate';
+      this.isUpdateBannerVisible = false;
+      this.isUpdateGuideOpen = false;
+      this._flashUpToDateToast();
+      return false;
+    }
+
+    track('update_install_started');
+    try {
+      await invoke('update_install', { expectedVersion: targetVersion });
+      return true;
+    } catch (e) {
+      const code = typeof e === 'string' && e ? e : 'UNKNOWN';
+      if (code === 'CANCELLED') {
+        this._resetInstallStatus();
+        return false;
+      }
+      // 실패는 Rust가 모든 창에 방송하지만, 방송 전에 멈춘 경우(BUSY 등)도 이 창에는 보여 줍니다.
+      this.updateInstallPhase = 'failed';
+      this.updateInstallErrorCode = code;
+      // 실패 통계는 누른 창에서만 보냅니다(방송을 받은 창마다 보내면 중복됩니다).
+      if (code !== 'BUSY') track('update_install_failed', { choice: code.toLowerCase() });
+      return false;
+    }
+  }
+
+  // 내려받기 취소. 저장 확인 단계부터는 되돌릴 수 없어 Rust가 거절합니다(false).
+  async cancelUpdateInstall() {
+    try {
+      return Boolean(await invoke('update_cancel'));
+    } catch (e) {
+      return false;
+    }
+  }
+
+  _resetInstallStatus() {
+    this.updateInstallPhase = 'idle';
+    this.updateInstallDownloaded = 0;
+    this.updateInstallTotal = 0;
+    this.updateInstallErrorCode = '';
+  }
+
+  // Rust가 방송한 진행 상황을 이 창의 화면에 반영합니다(모든 창에서 실행됩니다).
+  /** @param {unknown} payload */
+  _applyInstallStatus(payload) {
+    const status = normalizeInstallStatus(payload);
+    if (!status) return;
+    if (status.phase === 'cancelled') {
+      this._resetInstallStatus();
+      return;
+    }
+    this.updateInstallPhase = status.phase;
+    this.updateInstallDownloaded = status.downloaded;
+    this.updateInstallTotal = status.total;
+    this.updateInstallErrorCode = status.phase === 'failed' ? (status.code || 'UNKNOWN') : '';
+  }
+
+  // 설치 직전(데이터 창): 입력을 막고 → 예약된 저장을 모두 기록하고 → 쓰기를 멈춘 뒤 → Rust에 답합니다.
+  // 왜 입력부터 막는가: 저장한 뒤에 친 글자는 설치와 함께 사라지므로, 저장보다 먼저 막아야 합니다.
+  // 왜 쓰기를 멈추는가: 설치 단계에서 앱이 곧바로 끝나므로, 그 순간 쓰던 파일이 반쯤 잘린 채 남지 않게 합니다.
+  /** @param {any} payload */
+  async _handleUpdatePrepare(payload) {
+    const id = payload?.id;
+    if (typeof id !== 'number') return;
+    // 아직 불러오는 중인 창은 답하지 않습니다. Rust가 1초마다 다시 보내므로 준비가 끝난 뒤 답하게 됩니다.
+    if (!this.isReady) return;
+
+    if (this._updatePrepare?.id === id) {
+      // 다시 보낸 요청: 저장을 마쳤다면 같은 답을 다시 보냅니다. (저장 중이면 끝날 때 답합니다)
+      if (this._updatePrepare.result !== null) this._answerUpdatePrepare(id, this._updatePrepare.result);
+      return;
+    }
+
+    this._updatePrepare = { id, result: null };
+    this.isUpdateFrozen = true;
+    // 편집기에 남은 커서를 빼서, 덮개 뒤에서 글자가 입력되지 않게 합니다.
+    try { /** @type {HTMLElement | null} */ (document.activeElement)?.blur?.(); } catch (e) {}
+    if (this._updateFreezeWatchdog) clearTimeout(this._updateFreezeWatchdog);
+    this._updateFreezeWatchdog = setTimeout(() => this._releaseUpdateFreeze(id), UPDATE_FREEZE_WATCHDOG_MS);
+
+    // 저장소를 읽지 못한 창(_hydrated=false)은 "저장할 것 없음"으로 답합니다.
+    // 왜: 이런 창은 편집 화면 대신 오류 화면만 보여 주고(App.svelte), 읽기에 성공하면 창을 새로 불러오므로
+    //   메모리의 내용은 어떤 경로로도 저장되지 않습니다. 디스크의 원본은 한 번도 건드리지 않았습니다.
+    //   이 창 때문에 설치를 막으면, 오류 화면이 권하는 "앱 다시 시작"과 같은 업데이트가 영영 막힙니다.
+    const saved = this._hydrated ? await this.flushPendingSaves(true) : true;
+    // 저장하는 사이 설치가 멈췄다면(잠금도 이미 풀림) 답하지 않습니다.
+    if (this._updatePrepare?.id !== id) return;
+    this._updatePrepare.result = saved;
+    if (saved) writesFrozen = true;
+    this._answerUpdatePrepare(id, saved);
+  }
+
+  /** @param {number} id @param {boolean} ok */
+  _answerUpdatePrepare(id, ok) {
+    invoke('update_prepare_ack', { id, ok }).catch((e) => console.warn('저장 확인 답을 보내지 못했습니다:', e));
+  }
+
+  // 설치가 멈췄을 때: 입력 잠금을 풀고 쓰기를 다시 열고, 잠근 동안 바뀐 내용을 저장합니다.
+  // (잠근 동안에도 매니저의 리마인더 기록처럼 화면 밖에서 바뀌는 값이 있을 수 있습니다)
+  /** @param {unknown} id 멈춘 요청 번호 (다른 요청의 해제 신호는 무시합니다) */
+  _releaseUpdateFreeze(id) {
+    if (!this._updatePrepare || this._updatePrepare.id !== id) return;
+    this._updatePrepare = null;
+    if (this._updateFreezeWatchdog) { clearTimeout(this._updateFreezeWatchdog); this._updateFreezeWatchdog = null; }
+    writesFrozen = false;
+    this.isUpdateFrozen = false;
+    this.saveNow(false);
+  }
+
+  // 앱 안 설치를 할 수 없을 때의 대안: 기본 브라우저로 공식 설치 파일을 엽니다.
+  // (설치 정보가 없는 옛 릴리스, 서명 확인 실패, 설치 프로그램 실행 실패 등)
   async openUpdateDownload() {
     let url = RELEASES_PAGE_URL;
     try {
@@ -1184,8 +1380,7 @@ async init() {
   // ✨ [영속성 안전장치] 저장소 읽기 검증 & 자동 복구
   // ═══════════════════════════════════════════════════════════
 
-  // keys() 호출이 성공했다는 것은 디스크 로딩이 정상적으로 끝났다는 뜻입니다.
-  // (키가 0개면 "첫 실행"이라는 정상 상태이고, 예외가 나면 "읽기 실패"입니다.)
+  // keys() 성공만으로는 읽기 성공을 보증할 수 없으므로 디스크의 키와 대조합니다.
   //
   // 왜 시도할 때마다 LazyStore를 새로 만드는가:
   //   LazyStore는 로딩 Promise를 인스턴스 내부에 캐시합니다. 한 번 실패하면
@@ -1195,18 +1390,18 @@ async init() {
     for (let i = 1; i <= attempts; i++) {
       const candidate = new LazyStore(STORE_FILE);
       try {
-        const keys = await candidate.keys();
+        let keys = await candidate.keys();
+        const health = await invoke('store_health');
         // 저장소가 비어 있는데 디스크 파일에는 데이터가 있다면 "읽기 실패"입니다.
         // 왜 이 확인이 필요한가: 저장 플러그인은 파일을 못 읽어도 오류 없이 빈 저장소로 시작하므로,
         //   keys() 성공만으로는 실패를 알 수 없습니다. 이 상태로 저장하면 모든 창의 데이터가 빈 값으로 덮입니다.
         // 왜 이 경우에만 reload()를 쓰는가: 메모리가 완전히 비어 있어 되돌려질 내용이 없고,
         //   디스크를 다시 읽는 것만이 데이터를 살리는 방법이기 때문입니다.
-        if (keys.length === 0 && await this._diskHasData()) {
+        if (keys.length === 0 && health?.exists && health?.parse_ok && health?.keys?.length > 0) {
           await candidate.reload();
-          if ((await candidate.keys()).length === 0) {
-            throw new Error('디스크에는 데이터가 있지만 저장소를 읽지 못했습니다.');
-          }
+          keys = await candidate.keys();
         }
+        assertStoreMatchesDisk(health, keys);
         // 읽기가 검증된 인스턴스만 실제 저장소로 채택합니다.
         tauriStore = candidate;
         return true;
@@ -1219,17 +1414,7 @@ async init() {
     return false;
   }
 
-  // 디스크의 저장 파일에 실제 데이터가 있는지 Rust에 물어봅니다. (확인할 수 없으면 false)
-  async _diskHasData() {
-    try {
-      const health = await invoke('store_health');
-      return Boolean(health && health.parse_ok && health.key_count > 0);
-    } catch (e) {
-      return false;
-    }
-  }
-
-  // 읽기가 실패한 창은 저장이 잠긴 채로 방치되지 않고, 살아날 때까지 스스로 재시도합니다.
+  // 읽기가 실패한 창은 저장을 잠그고, 읽기 검증에 성공하면 화면 전체를 안전하게 다시 시작합니다.
   _scheduleHydrationRetry(delay = 2000) {
     if (this._hydrationRetryTimer) return;
     this._hydrationRetryTimer = setTimeout(async () => {
@@ -1240,38 +1425,8 @@ async init() {
         this._scheduleHydrationRetry(Math.min(delay * 2, 30000));
         return;
       }
-      this._hydrated = true;
-      this.storageError = false;
-      await this._rehydrateFromDisk();
+      window.location.reload();
     }, delay);
-  }
-
-  // 저장소가 살아난 뒤, 화면이 아직 빈 상태라면 디스크의 진짜 데이터를 되살립니다.
-  // 왜 "빈 상태일 때만"인가: 그 사이 사용자가 뭔가 입력했다면 그쪽이 최신이므로 덮으면 안 됩니다.
-  async _rehydrateFromDisk() {
-    try {
-      const winData = await tauriStore.get(this.windowLabel);
-      if (!winData) return;
-
-      const isEmptyNow = !hasWindowContent({
-        todos: this.todos,
-        archivedTodos: this.archivedTodos,
-        notes: this.notes,
-      });
-      if (!isEmptyNow) return;
-
-      this.isRestoring = true;
-      this.todos = winData.todos || [];
-      this.archivedTodos = winData.archivedTodos || [];
-      this.notes = winData.notes || '';
-      this.title = winData.title || this.title;
-      this.activeExtraWindows = (await tauriStore.get('activeExtraWindows')) || this.activeExtraWindows;
-      setTimeout(() => { this.isRestoring = false; }, 50);
-
-      console.log(`♻️ [${this.windowLabel}] 저장소 복구 성공 — 디스크 데이터를 되살렸습니다.`);
-    } catch (e) {
-      console.error(`[${this.windowLabel}] 데이터 재복원 실패:`, e);
-    }
   }
 
   // 되돌리기 기록용 사진을 찍습니다. (대상 필드는 windowDataCodec.js의 SNAPSHOT_FIELDS)
@@ -1563,6 +1718,25 @@ async init() {
     this._sortTodosByDeadline();
     this.saveNow();
     if (deadline) setTimeout(() => this.checkReminders(), 100);
+  }
+
+  // 날짜 선택 창(별도 창)에서 고른 마감일을 할 일에 적용합니다.
+  // 왜 id로 다시 찾는가: 달력이 떠 있는 동안 정렬·삭제·되돌리기로 목록이 바뀔 수 있어,
+  //   달력을 열 때 잡아 둔 객체나 순서 번호는 이미 다른 할 일을 가리킬 수 있습니다.
+  /** @param {string} id @param {string} deadline 'YYYY-MM-DD' 또는 ''(지우기) @returns {boolean} 적용했는지 */
+  setTodoDeadline(id, deadline) {
+    // 업데이트 직전 마지막 저장이 끝난 뒤의 변경은 디스크에 남지 않고 사라지므로 받지 않습니다.
+    if (this.isUpdateFrozen) return false;
+    const todo = this.todos.find((t) => t.id === id);
+    if (!todo) return false;
+    const next = deadline || '';
+    // 같은 날짜를 다시 고른 경우: 저장·되돌리기 기록을 새로 만들지 않습니다.
+    if ((todo.deadline || '') === next) return true;
+    todo.deadline = next;
+    this._sortTodosByDeadline();
+    this.saveNow();
+    if (next) this.checkReminders();
+    return true;
   }
 
   /** @param {string[]} texts */

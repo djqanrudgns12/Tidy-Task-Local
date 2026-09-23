@@ -5,9 +5,9 @@
 //   버전 비교·설치 파일 선택·릴리스 노트 정리는 앱 실행 없이도 검증돼야 하는 순수 로직입니다.
 //   (node --test 로 단위 테스트하기 위해 fetch 외에는 어떤 외부 의존성도 두지 않습니다)
 //
-// 왜 "자동 설치"가 아니라 "안내 + 공식 다운로드 링크"인가:
-//   설치 과정이 사용자의 로컬 데이터(tidy-task-config.json)를 건드릴 수 있어,
-//   먼저 안전한 안내 방식으로 검증한 뒤 자동 설치로 승격하는 단계적 전략을 택했습니다.
+// 새 버전 "발견"은 여기(GitHub API)가, "설치"는 Rust(src-tauri/src/app_update.rs)가 맡습니다.
+//   앱 안 설치는 설치 파일의 서명을 확인하고 모든 창의 저장이 끝났다는 답을 받은 뒤에만 진행합니다.
+//   앱 안 설치를 할 수 없는 경우(설치 정보가 없는 옛 릴리스 등)에는 예전처럼 공식 다운로드 링크로 안내합니다.
 // ═══════════════════════════════════════════════════════════════════════
 
 // ── 저장소 좌표 ────────────────────────────────────────────────────────
@@ -294,5 +294,86 @@ export function describeUpdateError(code) {
       return '확인이 지연되고 있습니다. 잠시 뒤 다시 눌러 주세요.';
     default:
       return '업데이트 정보를 가져오지 못했습니다. 잠시 뒤 다시 시도해 주세요.';
+  }
+}
+
+// ── 앱 안 설치 (Rust app_update.rs와 같은 단계 이름·실패 코드를 씁니다) ──────
+
+// 설치가 진행 중인 단계들. 이 단계에서는 버튼을 다시 누를 수 없고 "나중에"도 숨깁니다.
+export const INSTALL_ACTIVE_PHASES = Object.freeze(['checking', 'downloading', 'preparing', 'installing']);
+const INSTALL_STATUS_PHASES = new Set([...INSTALL_ACTIVE_PHASES, 'failed', 'cancelled']);
+
+/** @param {unknown} phase */
+export function isInstallActive(phase) {
+  return typeof phase === 'string' && INSTALL_ACTIVE_PHASES.includes(phase);
+}
+
+// Rust가 방송한 진행 상황(update-install-status)을 화면이 쓰는 모양으로 검증·정리합니다.
+// 왜 검증하는가: 형식이 어긋난 값 하나 때문에 진행률이 NaN%로 보이거나 화면이 멈추면 안 됩니다.
+/** @typedef {{ phase: string, version: string, downloaded: number, total: number, code: string }} InstallStatus */
+/** @param {unknown} payload @returns {InstallStatus | null} */
+export function normalizeInstallStatus(payload) {
+  if (!payload || typeof payload !== 'object') return null;
+  const raw = /** @type {Record<string, unknown>} */ (payload);
+  if (typeof raw.phase !== 'string' || !INSTALL_STATUS_PHASES.has(raw.phase)) return null;
+  const count = (/** @type {unknown} */ value) => (
+    typeof value === 'number' && Number.isFinite(value) && value > 0 ? Math.floor(value) : 0
+  );
+  return {
+    phase: raw.phase,
+    version: typeof raw.version === 'string' ? raw.version : '',
+    downloaded: count(raw.downloaded),
+    total: count(raw.total),
+    code: typeof raw.code === 'string' ? raw.code : '',
+  };
+}
+
+// 내려받은 비율(0~100). 전체 크기를 모르면 null (막대 대신 받은 양만 보여 줍니다).
+/** @param {unknown} downloaded @param {unknown} total @returns {number | null} */
+export function downloadPercent(downloaded, total) {
+  const done = Number(downloaded);
+  const all = Number(total);
+  if (!Number.isFinite(all) || all <= 0) return null;
+  if (!Number.isFinite(done) || done <= 0) return 0;
+  return Math.min(100, Math.floor((done / all) * 100));
+}
+
+// "45% · 4.5MB / 10.0MB" 처럼 진행 상황을 한 줄로 보여 줍니다.
+/** @param {unknown} downloaded @param {unknown} total */
+export function describeDownloadProgress(downloaded, total) {
+  const percent = downloadPercent(downloaded, total);
+  const done = formatBytes(downloaded) || '0KB';
+  if (percent === null) return `${done} 받음`;
+  return `${percent}% · ${done} / ${formatBytes(total)}`;
+}
+
+// 앱 안 설치가 멈춘 이유를 사용자가 읽을 수 있는 안내로 바꿉니다.
+// 왜 "내용은 그대로 있어요"를 반복하는가: 설치가 멈추면 가장 먼저 "쓰던 게 날아갔나?"를 걱정하기 때문입니다.
+//   (저장 확인 단계에서 멈추면 창은 그대로 열려 있고, 입력 잠금도 풀립니다)
+/** @param {string | undefined} code */
+export function describeInstallError(code) {
+  switch (code) {
+    case 'NOT_PREPARED':
+    case 'VERSION_MISMATCH':
+      return '이번 버전은 앱 안 자동 설치가 준비되지 않았어요. 아래 [직접 내려받기]로 설치해 주세요.';
+    case 'CHECK_FAILED':
+    case 'DOWNLOAD_FAILED':
+    case 'OFFLINE':
+    case 'TIMEOUT':
+      return '새 버전을 내려받지 못했어요. 인터넷 연결을 확인한 뒤 다시 눌러 주세요.';
+    case 'BAD_SIGNATURE':
+      return '내려받은 파일이 공식 파일인지 확인되지 않아 설치하지 않았어요. 잠시 뒤 다시 시도하거나 직접 내려받아 주세요.';
+    case 'EDITOR_BUSY':
+      return '알림장·명단 창에서 하던 작업을 마친 뒤 다시 눌러 주세요. 내용은 그대로 있어요.';
+    case 'SAVE_FAILED':
+      return '저장을 마치지 못한 창이 있어 설치를 멈췄어요. 내용은 그대로 있어요. 잠시 뒤 다시 눌러 주세요.';
+    case 'PREPARE_TIMEOUT':
+      return '창들의 저장 확인이 늦어져 설치를 멈췄어요. 내용은 그대로 있어요. 다시 눌러 주세요.';
+    case 'LAUNCH_FAILED':
+      return '설치 프로그램을 실행하지 못했어요. 아래 [직접 내려받기]로 설치해 주세요.';
+    case 'BUSY':
+      return '이미 업데이트를 진행하고 있어요. 잠시만 기다려 주세요.';
+    default:
+      return '업데이트를 마치지 못했어요. 잠시 뒤 다시 시도하거나 직접 내려받아 주세요.';
   }
 }

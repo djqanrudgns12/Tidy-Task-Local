@@ -2,7 +2,7 @@
 <html lang="ko"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="color-scheme" content="light"><title>Tidy Task 사용 가이드</title><link rel="preload" href="fonts/MaplestoryL.woff2" as="font" type="font/woff2" crossorigin><link rel="stylesheet" href="help.css"><script src="help.js" defer></script></head>
 <body><a class="skip" href="#main">본문으로 건너뛰기</a><header class="masthead"><a class="brand" href="#start" aria-label="Tidy Task 사용 가이드 처음으로"><span class="brand-mark" aria-hidden="true">✓</span><div><small>Tidy Task</small><h1>사용 가이드</h1>
 </div>
-</a><span class="version">v5.5.2</span></header>
+</a><span class="version">v5.5.3</span></header>
 
 <div class="reading-tools js-only"><div class="search-field"><label for="guide-search">궁금한 기능 찾기</label><div class="search-box"><input id="guide-search" type="search" placeholder="예: 뽑기, 글꼴, 백업" autocomplete="off" aria-controls="search-results"><button id="clear-search" type="button" hidden>지우기</button></div>
 </div>
@@ -20,18 +20,20 @@
 <p class="nav-group">수업 도구</p>
 <a href="#toolkit"><span aria-hidden="true">06</span>Tidy 툴킷 켜기</a>
 <a href="#timers"><span aria-hidden="true">07</span>타이머 · 스톱워치</a>
-<a href="#classroom"><span aria-hidden="true">08</span>학급 명단 · 모둠 만들기</a>
-<a href="#picker"><span aria-hidden="true">09</span>간단 뽑기</a>
-<a href="#tournament"><span aria-hidden="true">10</span>토너먼트 진행하기</a>
-<a href="#noticeboard"><span aria-hidden="true">11</span>날짜별 알림장 쓰기</a>
-<a href="#focus-bell"><span aria-hidden="true">12</span>집중벨 울리기</a>
-<a href="#meals"><span aria-hidden="true">13</span>오늘의 급식 보기</a>
+<a href="#clock"><span aria-hidden="true">08</span>시계 보기</a>
+<a href="#classroom"><span aria-hidden="true">09</span>학급 명단 · 모둠 만들기</a>
+<a href="#picker"><span aria-hidden="true">10</span>간단 뽑기</a>
+<a href="#tournament"><span aria-hidden="true">11</span>토너먼트 진행하기</a>
+<a href="#noticeboard"><span aria-hidden="true">12</span>날짜별 알림장 쓰기</a>
+<a href="#focus-bell"><span aria-hidden="true">13</span>집중벨 울리기</a>
+<a href="#dice"><span aria-hidden="true">14</span>주사위 던지기</a>
+<a href="#meals"><span aria-hidden="true">15</span>오늘의 급식 보기</a>
 <p class="nav-group">설정과 도움말</p>
-<a href="#toolkit-settings"><span aria-hidden="true">14</span>툴킷 모양과 도구 바꾸기</a>
-<a href="#settings"><span aria-hidden="true">15</span>앱 설정 · 자료 내보내기</a>
-<a href="#shortcuts"><span aria-hidden="true">16</span>자주 쓰는 단축키</a>
-<a href="#troubleshooting"><span aria-hidden="true">17</span>잘 안될 때 확인하기</a>
-<a href="#privacy"><span aria-hidden="true">18</span>사용 통계 안내</a></nav>
+<a href="#toolkit-settings"><span aria-hidden="true">16</span>툴킷 모양과 도구 바꾸기</a>
+<a href="#settings"><span aria-hidden="true">17</span>앱 설정 · 자료 내보내기</a>
+<a href="#shortcuts"><span aria-hidden="true">18</span>자주 쓰는 단축키</a>
+<a href="#troubleshooting"><span aria-hidden="true">19</span>잘 안될 때 확인하기</a>
+<a href="#privacy"><span aria-hidden="true">20</span>사용 통계 안내</a></nav>
 </details>
 <main class="main" id="main" tabindex="-1"><noscript><p>목차에서 주제를 누르면 해당 설명으로 이동합니다.</p>
 </noscript><div id="search-results" class="search-results" hidden><h2>검색 결과</h2>
@@ -226,6 +228,28 @@
 <nav class="related" aria-label="함께 읽기"><a href="#focus-bell">집중벨로 소리 내기 →</a><a href="#shortcuts">타이머 단축키 →</a></nav>
 </section>
 
+<section class="chapter " id="clock" aria-label="시계 보기"><header class="chapter-heading" tabindex="-1"><span class="eyebrow">수업 도구</span><h2>시계 보기</h2>
+<p>지금 한국 표준시를 크게 보여 줍니다. PC 시각이 틀려 있어도 한국표준과학연구원 시간 서버에 맞춰 바로잡아 보여 줍니다.</p>
+</header>
+<p class="route"><strong>여는 곳</strong>Tidy 툴킷 → 시계</p>
+<ol class="steps"><li><h3>모양을 고르세요</h3>
+<p>창 아래의 <b>디지털 · 아날로그</b>를 누르세요. 오른쪽의 <b>시:분:초 · 시:분</b>으로 초를 보이거나 감춥니다. 다음에 열 때도 마지막 선택을 기억합니다.</p>
+</li>
+<li><h3>제목을 적어 보세요</h3>
+<p>위쪽 칸에 <b>3학년 2반</b>, <b>10시 40분에 끝나요</b>처럼 30자까지 적을 수 있습니다. 필요 없으면 칸 오른쪽의 <b>^</b> 버튼으로 숨기고, 제목줄의 이름표 버튼으로 다시 꺼냅니다.</p>
+</li>
+<li><h3>전체 화면으로 크게 띄우세요</h3>
+<p>제목줄의 전체 화면 버튼이나 <kbd>F11</kbd>을 누르세요. 마우스가 3초 멈추면 조작 도구가 사라지고 시계만 남습니다. <kbd>Esc</kbd>를 누르면 나옵니다.</p>
+</li>
+</ol>
+<aside class="note"><strong>숫자판 구석의 표시로 기준을 확인하세요.</strong><p><b>표준시</b>는 시간 서버에 맞춘 시각이고, <b>PC 시각</b>은 인터넷이 막혀 PC 시각을 그대로 보여 주는 상태입니다. 표시에 마우스를 올리면 PC 시각이 얼마나 틀렸는지 보이고, 누르면 다시 맞춥니다. Windows 시각 설정은 바꾸지 않습니다.</p>
+</aside>
+<details class="more"><summary>설정 더 보기</summary><div><p>제목줄의 설정 버튼에서 <b>12시간 · 24시간</b> 표기, <b>표준시 맞춤</b>, 아날로그 시계의 <b>디지털 시각 함께 보기</b>와 <b>분 숫자 보기</b>를 바꿉니다. 분 숫자를 켜면 시계 바깥에 5, 10, 15…가 적혀 시계 읽기 수업에 도움이 됩니다.</p>
+</div>
+</details>
+<nav class="related" aria-label="함께 읽기"><a href="#timers">남은 시간을 보여 주려면 타이머 →</a><a href="#troubleshooting">시각이 이상할 때 →</a></nav>
+</section>
+
 <section class="chapter " id="classroom" aria-label="학급 명단 · 모둠 만들기"><header class="chapter-heading" tabindex="-1"><span class="eyebrow">수업 도구</span><h2>학급 명단 · 모둠 만들기</h2>
 <p>학급을 만든 뒤 학생을 등록하세요. 등록한 명단은 뽑기와 토너먼트에서 불러올 수 있습니다.</p>
 </header>
@@ -360,6 +384,25 @@
 <nav class="related" aria-label="함께 읽기"><a href="#timers">활동 시간을 정하려면 타이머 →</a></nav>
 </section>
 
+<section class="chapter " id="dice" aria-label="주사위 던지기"><header class="chapter-heading" tabindex="-1"><span class="eyebrow">수업 도구</span><h2>주사위 던지기</h2>
+<p>주사위를 1~3개 던지고 합계를 크게 보여 줍니다.</p>
+</header>
+<p class="route"><strong>여는 곳</strong>Tidy 툴킷 → 주사위</p>
+<ol class="steps"><li><h3>주사위 개수를 고르세요</h3>
+<p>창 아래의 <b>1개 · 2개 · 3개</b> 중 하나를 누르세요. 처음에는 1개로 시작하고, 다음에 열 때는 마지막으로 고른 개수를 기억합니다.</p>
+</li>
+<li><h3>던지기를 누르세요</h3>
+<p><b>던지기</b>나 <kbd>Space</kbd>를 누르면 주사위가 굴러갑니다. 주사위가 1개면 나온 숫자만, 2개 이상이면 <b>5 + 2 = 7</b>처럼 식과 합계가 나옵니다.</p>
+</li>
+<li><h3>같은 눈이 나오면 배지가 떠요</h3>
+<p>주사위 2개가 같으면 <b>더블!</b>, 3개가 모두 같으면 <b>트리플!</b>이 합계 옆에 잠깐 나타납니다.</p>
+</li>
+</ol>
+<aside class="note"><strong>움직임이 부담스러우면 동작 줄이기를 켜세요.</strong><p>주사위가 구르지 않고 바로 결과로 바뀝니다. 효과음은 스피커 버튼이나 <kbd>M</kbd>으로 켜고 끕니다.</p>
+</aside>
+<nav class="related" aria-label="함께 읽기"><a href="#picker">학생을 뽑으려면 간단 뽑기 →</a></nav>
+</section>
+
 <section class="chapter " id="meals" aria-label="오늘의 급식 보기"><header class="chapter-heading" tabindex="-1"><span class="eyebrow">수업 도구</span><h2>오늘의 급식 보기</h2>
 <p>학교를 등록하면 날짜별 식단을 확인할 수 있습니다.</p>
 </header>
@@ -465,6 +508,12 @@
 <div><dt>타이머 · 뽑기에서 Space</dt>
 <dd>타이머를 시작·일시정지하거나 뽑기를 시작합니다. 입력칸이나 다른 조작 버튼을 사용 중일 때는 화면의 시작 버튼을 누르세요.</dd>
 </div>
+<div><dt>주사위에서 Space · 1 / 2 / 3 · M</dt>
+<dd>주사위를 던집니다 · 주사위 개수를 바꿉니다 · 효과음을 켜고 끕니다.</dd>
+</div>
+<div><dt>시계에서 F11</dt>
+<dd>전체 화면을 켜고 끕니다. 전체 화면에서 마우스가 3초 멈추면 조작 도구가 숨고 시계만 남습니다.</dd>
+</div>
 <div><dt>전체화면에서 Esc</dt>
 <dd>타이머·알림장 등의 전체화면을 나옵니다. 집중벨에서는 재생 중인 소리도 멈춥니다.</dd>
 </div>
@@ -492,6 +541,10 @@
 </div>
 </details>
 <details class="more"><summary>타이머 소리나 집중벨 소리가 안 나요</summary><div><p>타이머 설정에서 원하는 소리가 켜져 있는지 확인하고 <b>듣기</b>를 눌러 보세요. 집중벨은 창 아래의 음량과 음소거를 확인하세요. 컴퓨터의 스피커 음량과 출력 장치도 확인하세요.</p>
+</div>
+</details>
+<details class="more"><summary>시계가 "PC 시각"으로 나오거나 작업 표시줄 시계와 달라요</summary><div><p>시계는 한국표준과학연구원 시간 서버에 맞춘 <b>표준시</b>를 보여 줍니다. 작업 표시줄 시계와 몇 초 다르다면 PC 시각이 틀린 것이며, 숫자판 구석의 <b>표준시</b> 표시에 마우스를 올리면 얼마나 다른지 보입니다.</p>
+<p><b>PC 시각</b>으로 나오면 인터넷 연결을 확인하고 표시를 눌러 다시 맞춰 보세요. 학교망에서 시간 서버가 막혀 있어도 다른 방법으로 다시 시도합니다.</p>
 </div>
 </details>
 <details class="more"><summary>마감일 알림이 보이지 않아요</summary><div><p>해당 할 일의 마감일과 시스템 설정의 <b>통합 리마인더</b>를 확인하세요. 알림창에서 <b>오늘 끄기</b>나 <b>1시간 후·시간 지정</b>을 선택했는지도 확인하세요.</p>
@@ -522,7 +575,7 @@
 </section>
 
 <nav class="page-turn js-only" aria-label="가이드 앞뒤로 읽기"><a id="previous" href="#start"><small>이전 설명</small><span></span></a><a id="next" href="#notes"><small>다음 설명</small><span></span></a></nav>
-<footer class="footer"><a href="#start">가이드 처음으로</a><p>Tidy Task v5.5.2 · 찰떡쌤</p>
+<footer class="footer"><a href="#start">가이드 처음으로</a><p>Tidy Task v5.5.3 · 찰떡쌤</p>
 </footer>
 </main>
 </div>

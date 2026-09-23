@@ -5,10 +5,13 @@ export const TIMER_TOOLS = Object.freeze(
 );
 export const TOOL_REGISTRY = Object.freeze([
   { id: 'timer', label: '타이머', entries: TIMER_TOOLS },
+  // 시간을 다루는 도구끼리 모이도록 타이머 바로 오른쪽에 둡니다(툴바 순서는 이 배열을 따릅니다).
+  { id: 'clock', label: '시계', entries: [] },
   { id: 'picker', label: '간단 뽑기', entries: [] },
   { id: 'noticeboard', label: '알림장', entries: [] },
   { id: 'tournament', label: '토너먼트', entries: [] },
   { id: 'focus-bell', label: '집중벨', entries: [] },
+  { id: 'dice', label: '주사위', entries: [] },
   { id: 'roster', label: '학급 명단', entries: [] },
 ]);
 

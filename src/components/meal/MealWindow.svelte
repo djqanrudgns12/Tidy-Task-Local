@@ -261,7 +261,9 @@
     let dead = false,
       raf = 0,
       timer = 0,
-      saveTimer = 0;
+      saveTimer = 0,
+      // 마지막으로 위치를 저장한 업데이트 준비 요청 번호
+      lastUpdatePrepareId = 0;
     /** @type {Array<()=>void>} */
     const cleanup = [];
     const observer = new ResizeObserver(([entry]) => {
@@ -332,6 +334,17 @@
               }
             }),
           () => listen("before-quit", () => void saveBounds()),
+          // 업데이트 설치 직전: 예약된 위치 저장을 기다리지 않고 지금 기록합니다.
+          // (설치 단계에서 앱이 곧바로 닫히므로 400ms 뒤의 예약 저장은 실행되지 못합니다.
+          //  Rust가 같은 요청을 1초마다 다시 보내므로 요청 번호마다 한 번만 저장합니다)
+          () =>
+            listen("update-prepare", (event) => {
+              const id = /** @type {{ id?: unknown } | null} */ (event.payload)?.id;
+              if (typeof id !== "number" || id === lastUpdatePrepareId) return;
+              lastUpdatePrepareId = id;
+              clearTimeout(saveTimer);
+              void saveBounds();
+            }),
           () => listen("meal-refresh", () => void load(true)),
         ]) {
           const off = await setup();

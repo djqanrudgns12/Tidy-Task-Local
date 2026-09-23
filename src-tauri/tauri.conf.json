@@ -38,9 +38,26 @@
       "csp": null
     }
   },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IERBODRCNkRFMUVEMkY0NQpSV1JGTCszaGJVdW9EWVQzMVBhekFWQTc1QllSUDNlZzc1OXI3Q3p6TjVCQUpqVWJQenBZdk1Vbwo=",
+      "endpoints": [
+        "https://github.com/djqanrudgns12/Tidy-Task-Local/releases/latest/download/latest.json"
+      ],
+      "windows": {
+        "installMode": "passive"
+      }
+    }
+  },
   "bundle": {
     "active": true,
     "targets": "nsis",
+    "createUpdaterArtifacts": true,
+    "windows": {
+      "nsis": {
+        "installerHooks": "windows/data-preserving-uninstall.nsh"
+      }
+    },
     "icon": [
       "icons/32x32.png",
       "icons/64x64.png",

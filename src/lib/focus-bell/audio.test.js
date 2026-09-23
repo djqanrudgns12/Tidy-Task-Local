@@ -61,7 +61,7 @@ test('failed file can be retried and mute survives loading', async () => {
 });
 test('v5 migration preserves hidden tools; user can hide focus bell in v6', () => {
   const next = normalizeSettings({ schemaVersion: 5, toolkit: { visibleToolIds: ['roster'], hiddenPlatformIds: ['clanner'] } });
-  assert.deepEqual(next.toolkit.visibleToolIds, ['roster', 'focus-bell']);
+  assert.deepEqual(next.toolkit.visibleToolIds, ['roster', 'focus-bell', 'dice', 'clock']);
   assert.deepEqual(next.toolkit.hiddenPlatformIds, ['clanner']);
   const hidden = applySettingsPatch(next, 'toolkit', { visibleToolIds: ['roster'] });
   assert.deepEqual(normalizeSettings(hidden).toolkit.visibleToolIds, ['roster']);

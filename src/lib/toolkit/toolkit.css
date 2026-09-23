@@ -239,9 +239,14 @@
   margin-right: 0;
   margin-bottom: -17px;
 }
+/* 세로 툴바의 폭은 56px이 기본이지만, 글꼴이 넓어 "간단 뽑기"·"학급 명단" 같은 이름이 46px 버튼에
+   다 들어가지 않으면 그만큼만 넓어집니다(버튼들은 같은 폭으로 늘어남). 창 크기는 툴바 크기 맞춤(fit)이 따라갑니다.
+   왜: 폭을 고정하면 굴림·바탕체 등에서 이름이 버튼 밖으로 삐져나와 옆 테두리에 걸렸습니다. */
 .toolkit-bar.vertical .toolkit-crescent {
   flex-direction: column;
-  width: 56px;
+  align-items: stretch;
+  width: auto;
+  min-width: 56px;
   min-height: 52px;
   padding: 29px 5px 6px;
   gap: 1px;
@@ -256,15 +261,16 @@
 }
 .toolkit-bar.vertical .toolkit-tool {
   flex-direction: column;
-  width: 46px;
-  min-width: 0;
+  width: auto;
+  min-width: 46px;
   height: 51px;
   gap: 2px;
 }
 .toolkit-bar.vertical .toolkit-settings {
   flex-direction: column;
   gap: 1px;
-  width: 46px;
+  width: auto;
+  min-width: 46px;
   height: 49px;
   margin: 5px 0 0;
   border-radius: 12px 12px 22px 22px;
@@ -1401,16 +1407,37 @@
   font-weight: 550;
   letter-spacing: 0.11em;
 }
+/* 숫자 크기·위치·자간은 현재 글꼴을 잰 값(--tk-num-*, fontMetrics.js)으로 정합니다.
+   왜: 글꼴마다 숫자의 키·놓이는 높이·폭·옆 여백이 달라, 고정 줄 높이(0.98)와 좁힌 자간(-0.055em)만으로는
+   여기어때 잘난체처럼 숫자가 줄 상자 위로 솟아 "남은 시간 / 분 : 초"를 덮거나, 숫자끼리 맞닿았습니다.
+   - 줄 상자 = 숫자 잉크 높이(--num-ink). 위아래 여백은 잉크 높이에 비례해 기본 글꼴의 모습(위 0.0865, 아래 0.1699)을 그대로 둡니다.
+   - top: 글꼴마다 기준선 위치가 달라 처지거나 뜨는 만큼을 되돌려 잉크를 줄 상자에 딱 맞춥니다(배치에는 영향 없음).
+   - 자간: 디자인 값(-0.055em)을 쓰되, 이웃한 숫자가 닿는 글꼴이면 닿지 않을 만큼만 넓힙니다(최대 0.08em).
+   - 글자 크기 = 세 값 중 가장 작은 값: ① 너비 기준(기본 글꼴 22cqw와 같은 폭) ② 높이 기준(기본 글꼴 31cqh와
+     같은 줄 높이) ③ 판 안쪽 폭 안에 "00:00"이 반드시 들어가는 크기. ③ 덕분에 넓은 글꼴도 판 밖으로 잘리지 않습니다.
+   괄호 안 기본값은 기본 글꼴(메이플스토리 L)을 잰 값이라, 측정 전에도 예전 크기·위치 그대로 보입니다. */
 .digital-time {
+  --num-ink: var(--tk-num-ink, 0.78);
+  --num-track: clamp(-0.055, var(--tk-num-track-min, 0.006), 0.08);
+  --num-run: calc(4 * var(--tk-num-advance, 0.675) + var(--tk-num-colon, 0.246));
+  --num-fit-w: 22cqw;
+  --num-fit-h: 31cqh;
+  --num-room: calc(min(92cqw, 760px) - 88px);
   position: relative;
   z-index: 1;
+  top: calc(var(--tk-num-shift, -0.0325) * -1em);
   font-family: var(--tk-font);
   font-variant-numeric: tabular-nums;
   font-feature-settings: 'tnum';
   font-weight: 700;
-  letter-spacing: -0.055em;
-  line-height: 0.98;
-  font-size: min(22cqw, 31cqh);
+  letter-spacing: calc(var(--num-track) * 1em);
+  line-height: var(--num-ink);
+  padding: calc(var(--num-ink) * 0.0865em) 0 calc(var(--num-ink) * 0.1699em);
+  font-size: min(
+    calc(var(--num-fit-w) * 2.726 / (var(--num-run) - 0.22)),
+    calc(var(--num-fit-h) * 0.98 / (var(--num-ink) * 1.2564)),
+    calc(var(--num-room) / (var(--num-run) + 4 * var(--num-track)))
+  );
   color: #fff8df;
   display: flex;
   align-items: baseline;
@@ -1497,11 +1524,12 @@
   flex: none;
   margin-top: 9px;
 }
+/* 자간은 디자인 값(-0.045em)을 쓰되, 숫자끼리 닿는 글꼴이면 닿지 않을 만큼만 넓힙니다(.digital-time과 같은 측정값). */
 .secondary-time {
   font-family: var(--tk-font);
   font-variant-numeric: tabular-nums;
   font-weight: 650;
-  letter-spacing: -0.045em;
+  letter-spacing: calc(clamp(-0.045, var(--tk-num-track-min, 0.006), 0.08) * 1em);
   font-size: 34px;
   line-height: 1.2;
   color: var(--tk-ink);
@@ -2158,7 +2186,8 @@
 .lap-top time {
   font: 600 16px var(--tk-font);
   font-variant-numeric: tabular-nums;
-  letter-spacing: -0.03em;
+  /* 디자인 자간(-0.03em)에서 숫자끼리 닿는 글꼴만 닿지 않을 만큼 넓힙니다(.digital-time과 같은 측정값). */
+  letter-spacing: calc(clamp(-0.03, var(--tk-num-track-min, 0.006), 0.08) * 1em);
   color: var(--tk-muted);
 }
 .lap-bottom {
@@ -2297,7 +2326,7 @@
     padding: 0 14px;
   }
   .digital-time {
-    font-size: min(22cqw, 30cqh);
+    --num-fit-h: 30cqh;
   }
 }
 @media (min-width: 600px) and (max-width: 760px) {
@@ -2433,8 +2462,11 @@
   .board-caption small {
     font-size: 9px;
   }
+  /* 좁은 창은 판이 칸을 꽉 채우고(좌우 여백 20px) 높이 제한 없이 너비로만 크기를 정합니다. */
   .digital-time {
-    font-size: 23cqw;
+    --num-fit-w: 23cqw;
+    --num-fit-h: 1000cqh;
+    --num-room: calc(100cqw - 48px);
   }
   .digital-progress {
     width: 82%;

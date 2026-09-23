@@ -12,11 +12,15 @@ mod tournament;
 mod noticeboard;
 mod noticeboard_quit;
 mod classroom;
+mod app_update;
+mod clock_time;
 
 // 모든 창이 함께 쓰는 저장 파일과 그 백업 파일 이름
 const STORE_FILE: &str = "tidy-task-config.json";
 const BACKUP_FILE: &str = "tidy-task-config.backup.json";
 const BACKUP_PREV_FILE: &str = "tidy-task-config.backup-prev.json";
+// 앱 안 업데이트가 설치 프로그램을 실행하기 직전의 사본 (가장 최근 업데이트 한 번분만 둡니다)
+const BEFORE_UPDATE_FILE: &str = "tidy-task-config.before-update.json";
 
 // 트레이 "종료" 후 창들이 마지막 입력을 저장할 수 있도록 기다리는 시간
 
@@ -93,6 +97,23 @@ fn rotate_backups(dir: &Path) {
     }
 }
 
+// 업데이트 설치 직전의 저장 파일을 따로 남깁니다.
+// 왜 교대 백업과 따로 두는가: 교대 백업은 5분마다 밀려나므로, 새 버전을 며칠 쓰다가 문제를 발견하면
+//   이미 설치 직전 상태가 남아 있지 않습니다. 이 사본은 다음 업데이트 전까지 그대로 남습니다.
+// 왜 임시 파일을 거쳐 이름을 바꾸는가: 쓰는 도중에 앱이 끝나도 이전 사본이 반쯤 잘린 파일로 바뀌지 않게 합니다.
+pub(crate) fn snapshot_before_update(dir: &Path) {
+    let main = dir.join(STORE_FILE);
+    let Ok(current) = fs::read(&main) else { return };
+    // 손상된 파일로 멀쩡한 이전 사본을 덮지 않습니다.
+    if !matches!(serde_json::from_slice::<serde_json::Value>(&current), Ok(serde_json::Value::Object(_))) {
+        return;
+    }
+    let staging = dir.join("tidy-task-config.before-update.tmp");
+    if fs::write(&staging, &current).is_ok() && fs::rename(&staging, dir.join(BEFORE_UPDATE_FILE)).is_err() {
+        let _ = fs::remove_file(&staging);
+    }
+}
+
 // ✨ [데이터 안전장치] 앱이 저장 파일을 읽기 전에 백업하고, 손상됐다면 백업에서 복구합니다.
 // 왜 필요한가:
 //   저장 플러그인은 파일을 읽다가 실패하면(전원 차단으로 반쯤 잘린 파일 등) 오류를 알리지 않고
@@ -101,9 +122,21 @@ fn rotate_backups(dir: &Path) {
 //   여기서의 점검은 어떤 창이 저장소를 열기보다 항상 먼저 끝납니다.
 fn protect_store_file(app: &tauri::AppHandle) {
     let Ok(dir) = app.path().app_data_dir() else { return };
+    protect_store_dir(&dir);
+}
+
+fn protect_store_dir(dir: &Path) {
     let main = dir.join(STORE_FILE);
-    // 파일이 없으면 첫 실행(또는 사용자가 직접 지운 것)이므로 아무것도 하지 않습니다.
+    // 저장 파일만 없어졌다면 같은 폴더의 마지막 정상 사본에서 되살립니다.
+    // 첫 실행에는 사본도 없으므로 그대로 진행합니다.
     if !main.exists() {
+        for candidate in [BACKUP_FILE, BACKUP_PREV_FILE, BEFORE_UPDATE_FILE] {
+            let backup = dir.join(candidate);
+            if read_json_object(&backup).is_some() && fs::copy(&backup, &main).is_ok() {
+                log::warn!("저장 파일이 없어 백업({})에서 복구했습니다.", backup.display());
+                break;
+            }
+        }
         return;
     }
     if read_json_object(&main).is_some() {
@@ -132,6 +165,7 @@ struct StoreHealth {
     exists: bool,
     bytes: u64,
     key_count: usize,
+    keys: Vec<String>,
     parse_ok: bool,
 }
 
@@ -141,7 +175,7 @@ struct StoreHealth {
 #[tauri::command]
 fn store_health(app: tauri::AppHandle) -> StoreHealth {
     let Ok(dir) = app.path().app_data_dir() else {
-        return StoreHealth { exists: false, bytes: 0, key_count: 0, parse_ok: false };
+        return StoreHealth { exists: false, bytes: 0, key_count: 0, keys: Vec::new(), parse_ok: false };
     };
     let main = dir.join(STORE_FILE);
     let exists = main.exists();
@@ -150,6 +184,7 @@ fn store_health(app: tauri::AppHandle) -> StoreHealth {
         exists,
         bytes: file_len(&main),
         key_count: parsed.as_ref().map(|m| m.len()).unwrap_or(0),
+        keys: parsed.as_ref().map(|m| m.keys().cloned().collect()).unwrap_or_default(),
         parse_ok: parsed.is_some(),
     }
 }
@@ -295,7 +330,9 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_opener::init())
-        .invoke_handler(tauri::generate_handler![tournament::tournament_read, tournament::tournament_write, picker::picker_read, picker::picker_write, noticeboard::noticeboard_execute, noticeboard_quit::noticeboard_quit_reply, noticeboard_quit::noticeboard_cancel_quit, save_custom_font, store_health, neis::neis_search_schools, neis::neis_meals, neis::neis_schedule, neis::meal_take_launch_token, analytics::analytics_track, classroom::classroom_quit_reply, classroom::classroom_read, classroom::classroom_execute, classroom::classroom_clear_history, classroom::import::classroom_take_drop, classroom::import::classroom_parse, classroom::import::classroom_cancel_parse, classroom::import::classroom_project, toolkit::toolkit_read, toolkit::toolkit_patch, toolkit::toolkit_open, toolkit::toolkit_set_enabled, toolkit::toolkit_center_if_requested, tray::tray_request_done, tray::tray_take_pending_request])
+        // 앱 안 자동 업데이트 (진행 순서는 app_update.rs가 쥡니다)
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .invoke_handler(tauri::generate_handler![app_update::update_install, app_update::update_cancel, app_update::update_prepare_ack, tournament::tournament_read, tournament::tournament_write, picker::picker_read, picker::picker_write, noticeboard::noticeboard_execute, noticeboard_quit::noticeboard_quit_reply, noticeboard_quit::noticeboard_cancel_quit, save_custom_font, store_health, neis::neis_search_schools, neis::neis_meals, neis::neis_schedule, neis::meal_take_launch_token, analytics::analytics_track, classroom::classroom_quit_reply, classroom::classroom_read, classroom::classroom_execute, classroom::classroom_clear_history, classroom::import::classroom_take_drop, classroom::import::classroom_parse, classroom::import::classroom_cancel_parse, classroom::import::classroom_project, toolkit::toolkit_read, toolkit::toolkit_patch, toolkit::toolkit_open, toolkit::toolkit_set_enabled, toolkit::toolkit_center_if_requested, clock_time::clock_time_offset, clock_time::clock_wall_skew, tray::tray_request_done, tray::tray_take_pending_request])
         .setup(|app| {
             // 어떤 창보다 먼저 저장 파일을 점검·백업합니다.
             protect_store_file(app.handle());
@@ -404,6 +441,18 @@ mod tests {
     }
 
     #[test]
+    fn missing_store_recovers_from_last_valid_backup() {
+        let dir = temp_dir("missing-store");
+        let original = br#"{"main":{"todos":[{"text":"keep me"}]}}"#;
+        fs::write(dir.join(BACKUP_FILE), br#"{"main": "#).unwrap();
+        fs::write(dir.join(BACKUP_PREV_FILE), original).unwrap();
+        protect_store_dir(&dir);
+        assert_eq!(fs::read(dir.join(STORE_FILE)).unwrap(), original);
+        assert_eq!(fs::read(dir.join(BACKUP_PREV_FILE)).unwrap(), original);
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
     fn shrunk_or_broken_file_never_overwrites_good_backup() {
         let dir = temp_dir("shrink");
         let rich = br#"{"main":{"notes":"a long memo that should survive a sudden wipe of the file"}}"#;
@@ -419,6 +468,30 @@ mod tests {
         fs::write(dir.join(STORE_FILE), br#"{"main": {"no"#).unwrap();
         rotate_backups(&dir);
         assert_eq!(fs::read(dir.join(BACKUP_FILE)).unwrap(), rich);
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn update_snapshot_keeps_the_last_good_file() {
+        let dir = temp_dir("before-update");
+        // 저장 파일이 없으면 아무것도 만들지 않습니다.
+        snapshot_before_update(&dir);
+        assert!(!dir.join(BEFORE_UPDATE_FILE).exists());
+
+        fs::write(dir.join(STORE_FILE), br#"{"main":{"notes":"before 5.5.3"}}"#).unwrap();
+        snapshot_before_update(&dir);
+        assert_eq!(fs::read(dir.join(BEFORE_UPDATE_FILE)).unwrap(), br#"{"main":{"notes":"before 5.5.3"}}"#);
+
+        // 다음 업데이트 때는 새 상태로 바꿉니다.
+        fs::write(dir.join(STORE_FILE), br#"{"main":{"notes":"before 5.5.4"}}"#).unwrap();
+        snapshot_before_update(&dir);
+        assert_eq!(fs::read(dir.join(BEFORE_UPDATE_FILE)).unwrap(), br#"{"main":{"notes":"before 5.5.4"}}"#);
+
+        // 손상된 파일은 멀쩡한 사본을 덮지 않고, 임시 파일도 남기지 않습니다.
+        fs::write(dir.join(STORE_FILE), br#"{"main": {"no"#).unwrap();
+        snapshot_before_update(&dir);
+        assert_eq!(fs::read(dir.join(BEFORE_UPDATE_FILE)).unwrap(), br#"{"main":{"notes":"before 5.5.4"}}"#);
+        assert!(!dir.join("tidy-task-config.before-update.tmp").exists());
         let _ = fs::remove_dir_all(&dir);
     }
 }
