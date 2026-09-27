@@ -18,9 +18,9 @@ export function makeLayout(count, shape = 'pairs', width = 6, requestedRows=0) {
   });
   return {shape,seats,props:[],front:'top',columns,rows};
 }
-/** @param {number} count @returns {import("./types").Draft} */
 /** @param {string} date YYYY-MM-DD */
 export function defaultArchiveTitle(date) { const [,month,day]=date.split('-').map(Number); return `${month}월 ${day}일 저장`; }
+/** @param {number} count @returns {import("./types").Draft} */
 export function newDraft(count=0) { return {title:defaultArchiveTitle(new Date().toLocaleDateString('sv-SE')),layout:makeLayout(count),assignments:{},rules:[],excluded:[],appearances:{},comparisonArchiveId:null,avoidPartners:true,avoidGroups:false,avoidPosition:false,gender:'any',rosterRevision:0}; }
 /** @param {number} count @returns {import("./types").SeatingDocument} */
 export function newDocument(count=0) { return {version:1,revision:0,draft:newDraft(count),archives:[],currentId:null}; }

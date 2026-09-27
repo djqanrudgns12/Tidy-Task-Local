@@ -12,6 +12,7 @@
 //   이름이 어긋나면 모든 사용자의 앱 안 업데이트가 멈춥니다. 손으로 하던 단계를 묶어 실수를 없앱니다.
 //
 // 옵션: --skip-build  이미 만든 설치 파일로 3)·4)만 다시 합니다.
+//       --tag 5.6.0   파일 없이 잠긴 v5.6.0 대신 같은 버전의 v 없는 태그로 준비합니다.
 // 서명 키 위치: 기본 ~/.tauri/tidy-task-updater.key
 //   (바꾸려면 환경변수나 src-tauri/.env에 TAURI_SIGNING_PRIVATE_KEY_PATH, 암호가 있으면 TAURI_SIGNING_PRIVATE_KEY_PASSWORD)
 // ═══════════════════════════════════════════════════════════════════════
@@ -36,6 +37,7 @@ const TAURI_DIR = path.join(ROOT, 'src-tauri');
 const TAURI_CLI = path.join(ROOT, 'node_modules', '@tauri-apps', 'cli', 'tauri.js');
 const DEFAULT_KEY_PATH = path.join(homedir(), '.tauri', 'tidy-task-updater.key');
 const skipBuild = process.argv.includes('--skip-build');
+const tagAt = process.argv.indexOf('--tag');
 
 /** @param {string} message @returns {never} */
 function fail(message) {
@@ -78,6 +80,8 @@ const config = readJson(path.join(TAURI_DIR, 'tauri.conf.json'));
 const pkg = readJson(path.join(ROOT, 'package.json'));
 const version = pkg.version;
 if (!isReleaseVersion(version)) fail(`package.json의 version 형식이 올바르지 않습니다: ${version}`);
+const tag = tagAt === -1 ? releaseTag(version) : process.argv[tagAt + 1];
+if (![version, releaseTag(version)].includes(tag)) fail(`--tag에는 ${version} 또는 ${releaseTag(version)}을 지정하세요.`);
 
 // 배포 가이드의 규칙: 버전의 기준은 package.json이고, 아래 파일들도 같은 번호여야 합니다.
 const lock = readJson(path.join(ROOT, 'package-lock.json'));
@@ -102,7 +106,7 @@ if (!pubkey) fail('tauri.conf.json에 plugins.updater.pubkey가 없습니다.');
 if (config.bundle?.createUpdaterArtifacts !== true) {
   fail('tauri.conf.json의 bundle.createUpdaterArtifacts가 true가 아닙니다(서명 파일이 만들어지지 않습니다).');
 }
-console.log(`   버전 ${version} · 태그 ${releaseTag(version)}`);
+console.log(`   버전 ${version} · 태그 ${tag}`);
 
 // ── 서명 키 점검 ──────────────────────────────────────────────────────
 step('업데이트 서명 키를 확인합니다');
@@ -202,7 +206,7 @@ mkdirSync(outDir, { recursive: true });
 const assetName = releaseAssetName(installerName);
 const assetPath = path.join(outDir, assetName);
 copyFileSync(installerPath, assetPath);
-const manifest = buildLatestJson({ version, signature, url: assetDownloadUrl(version, assetName) });
+const manifest = buildLatestJson({ version, signature, url: assetDownloadUrl(version, assetName, tag) });
 writeFileSync(path.join(outDir, 'latest.json'), `${JSON.stringify(manifest, null, 2)}\n`);
 
 // 준비한 파일 그대로 한 번 더 확인합니다(복사·기록 중 문제가 없었는지).
@@ -218,7 +222,7 @@ console.log(`
    · latest.json
 
 다음 순서로 GitHub 릴리스를 만드세요 (docs/업데이트-배포-가이드.md):
-   1. 새 태그: ${releaseTag(version)}
+   1. 새 태그: ${tag}
    2. 위 폴더의 파일 두 개를 모두 첨부합니다.
       ⚠️ latest.json을 빠뜨리면 앱 안 설치가 멈추고, 사용자에게 직접 내려받기를 안내합니다.
    3. Publish release 후 확인: npm run release:verify

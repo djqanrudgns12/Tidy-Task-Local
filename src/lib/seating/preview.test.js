@@ -25,7 +25,8 @@ test('automatic current record keeps one latest result per day across sessions',
   previewAction(snapshot,command({type:'saveCurrent',date:'2026-09-26',sessionId:'session-2'}));
   assert.equal(doc.archives.length,2);
   assert.notEqual(doc.currentId,id);
-  assert.equal(doc.archives.at(-1).title,'9월 26일 저장');
+  const latest=doc.archives.at(-1);assert.ok(latest);
+  assert.equal(latest.title,'9월 26일 저장');
   doc.archives.push({...doc.archives[0],id:'legacy-duplicate',createdAt:doc.archives[0].createdAt-1});
   reconcilePreview(snapshot);
   assert.equal(doc.archives.length,2);

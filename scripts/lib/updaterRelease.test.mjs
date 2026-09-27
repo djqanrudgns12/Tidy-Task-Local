@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import { buildUpdateInfo } from '../../src/lib/updateChecker.js';
 import {
   LATEST_JSON_URL,
   PLATFORM_KEYS,
@@ -36,6 +37,20 @@ test('assetDownloadUrl: 버전 태그(v 접두사) 아래의 첨부 파일 주�
     assetDownloadUrl('5.5.3', 'Tidy.Task_5.5.3_x64-setup.exe'),
     'https://github.com/djqanrudgns12/Tidy-Task-Local/releases/download/v5.5.3/Tidy.Task_5.5.3_x64-setup.exe',
   );
+});
+
+test('immutable recovery: v 없는 태그도 앱에 같은 정식 버전으로 안내하고 설치 주소와 일치한다', () => {
+  const version = '5.6.0', name = 'Tidy.Task_5.6.0_x64-setup.exe';
+  const url = assetDownloadUrl(version, name, '5.6.0');
+  const manifest = readLatestJson(buildLatestJson({ version, signature: SIGNATURE, url }));
+  const info = buildUpdateInfo({ tag_name: '5.6.0', assets: [{ name, browser_download_url: url }] });
+  assert.ok(info);
+  assert.equal(info.version, '5.6.0');
+  assert.equal(manifest.version, info.version);
+  assert.equal(info.downloadUrl, manifest.url);
+  assert.equal(new URL(url).pathname, '/djqanrudgns12/Tidy-Task-Local/releases/download/5.6.0/Tidy.Task_5.6.0_x64-setup.exe');
+  assert.throws(() => assetDownloadUrl(version, name, '5.6.1'), /태그/);
+  assert.throws(() => assetDownloadUrl(version, name, '5.6.0-republish'), /태그/);
 });
 
 test('buildLatestJson: 앱이 찾는 두 가지 항목 이름으로 같은 파일을 가리킨다', () => {

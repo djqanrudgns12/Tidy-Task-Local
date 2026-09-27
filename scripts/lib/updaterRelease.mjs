@@ -45,9 +45,14 @@ export function releaseAssetName(fileName) {
   return fileName.replace(/\s+/g, '.');
 }
 
-/** @param {string} version @param {string} assetName */
-export function assetDownloadUrl(version, assetName) {
-  return `https://github.com/${GITHUB_OWNER}/${GITHUB_REPO}/releases/download/${releaseTag(version)}/${encodeURIComponent(assetName)}`;
+/** @param {string} version @param {string} assetName @param {string} [tag] */
+export function assetDownloadUrl(version, assetName, tag = releaseTag(version)) {
+  // immutable 릴리스를 파일 없이 게시한 경우, 앱 버전은 유지하고 v 없는 별도 태그로 복구합니다.
+  // 앱이 같은 버전으로 읽는 두 표기만 허용해 안내 버전과 설치 버전이 달라지는 일을 막습니다.
+  if (!isReleaseVersion(version) || ![version, releaseTag(version)].includes(tag)) {
+    throw new Error(`태그는 ${version} 또는 ${releaseTag(version)}이어야 합니다: ${tag}`);
+  }
+  return `https://github.com/${GITHUB_OWNER}/${GITHUB_REPO}/releases/download/${tag}/${encodeURIComponent(assetName)}`;
 }
 
 // latest.json 내용을 만듭니다.

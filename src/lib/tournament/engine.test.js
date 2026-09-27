@@ -100,7 +100,7 @@ test("toolkit migration adds tournament once and preserves hidden tools thereaft
     schemaVersion: 4,
     toolkit: { visibleToolIds: [] },
   });
-  assert.deepEqual(old.toolkit.visibleToolIds, ["tournament", "focus-bell", "dice", "clock", "scoreboard", "thermometer", "vote"]);
+  assert.deepEqual(old.toolkit.visibleToolIds, ["tournament", "focus-bell", "dice", "clock", "scoreboard", "thermometer", "vote", "seating"]);
   assert.deepEqual(
     normalizeSettings({
       ...old,
