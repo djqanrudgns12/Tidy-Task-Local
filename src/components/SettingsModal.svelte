@@ -1,5 +1,8 @@
 <script>
   // @ts-nocheck — 타입 주석이 아직 없는 기존 코드라 타입 검사에서 뺍니다. 고칠 때 JSDoc 타입을 붙이고 이 줄을 지워 주세요.
+  import { openReleaseNews } from '../lib/releaseNewsWindow.js';
+  let newsError = $state('');
+  async function showNews() { newsError = ''; try { await openReleaseNews(); } catch { newsError = '새로운 소식을 열지 못했어요. 다시 눌러 주세요.'; } }
   import ToolkitToggle from './toolkit/ToolkitToggle.svelte';
   import { track } from '../lib/analytics.js';
   import { X, Palette, Type, PenLine, Monitor, Layout, Upload, Moon, Archive, FileText, Database, RefreshCw, Bell, VolumeX, Download } from 'lucide-svelte';
@@ -205,9 +208,13 @@
     if (!file) return;
     isUploading = true;
     try {
-      const arrayBuffer = await file.arrayBuffer();
-      const bytes = Array.from(new Uint8Array(arrayBuffer));
-      const fullPath = await invoke('save_custom_font', { name: file.name, bytes });
+      // 글꼴 파일은 원본 바이트로, 이름은 헤더로 보냅니다(헤더는 ASCII만 되므로 한글 이름은 encodeURIComponent).
+      // 왜: 예전의 Array.from(bytes)는 JSON 숫자 배열(원래 크기의 약 3.6배)이 되어, 몇 MB짜리 한글 글꼴을
+      //   등록하는 동안 변환·해석 때문에 모든 창이 잠깐 멈췄습니다(claude.md 5번 IPC 규칙).
+      const bytes = new Uint8Array(await file.arrayBuffer());
+      const fullPath = await invoke('save_custom_font', bytes, {
+        headers: { name: encodeURIComponent(file.name) },
+      });
       const fontName = file.name.split('.')[0].replace(/[^a-zA-Z0-9\uAC00-\uD7A3\u3131-\u314E\u314F-\u3163]/g, '');
       await emit('req-add-custom-font', { name: fontName, path: fullPath });
 
@@ -488,6 +495,8 @@
         </div>
       </div>
 
+      <button onclick={showNews} class="news-entry"><span><b>새로운 소식</b><small>5.6.0 업데이트 · 지난 소식 · 롤링 썬더</small></span><span aria-hidden="true">↗</span></button>
+      {#if newsError}<p role="alert">{newsError}</p>{/if}
       <!-- ✨ [앱 업데이트] 사용자가 직접 확인하고 싶을 때 쓰는 자리입니다.
            왜 설정 안에 두는가: 자동 알림을 "나중에/건너뛰기"로 넘긴 사용자도
            원할 때 스스로 확인할 수 있는 고정된 경로가 반드시 하나는 필요합니다. -->
@@ -619,7 +628,7 @@
         </div>
         <!-- 버전을 코드에 박아두면 배포 때 갱신을 빠뜨려 실제 버전과 어긋납니다.
              appState.appVersion은 tauri.conf.json의 version을 그대로 읽어옵니다. -->
-        <span class="text-[9px] font-medium opacity-30 select-none uppercase tracking-widest" style="color: {localIsDarkMode ? '#ffffff' : '#000000'};">v.{appState.appVersion || '5.5.3'}</span>
+        <span class="text-[9px] font-medium opacity-30 select-none uppercase tracking-widest" style="color: {localIsDarkMode ? '#ffffff' : '#000000'};">v.{appState.appVersion || '5.6.0'}</span>
       </div>
 
       <div class="flex items-center justify-center gap-1 pt-3 text-[9px]" style="color: {localIsDarkMode ? '#94a3b8' : '#64748b'};">
@@ -662,6 +671,7 @@
 </div>
 
 <style>
+  .news-entry{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:16px;border:1px solid #b9cbbd;border-radius:12px;background:#eef4ed;color:#264b37;text-align:left}.news-entry span:first-child{display:flex;flex-direction:column;gap:5px}.news-entry b{font-size:14px}.news-entry small{font-size:12px}.news-entry:hover{background:#e0ebdf}.news-entry:focus-visible{outline:3px solid #598465;outline-offset:2px}
   .header-design-settings { --design-ink:#374151; --design-muted:#626d7b; --design-border:#9ca3af38; padding:10px; border:1px solid var(--design-border); border-radius:11px; color:var(--design-ink); background:#ffffff40; }
   .header-design-settings.design-dark { --design-ink:#e2e8f0; --design-muted:#aeb9c9; --design-border:#cbd5e12b; background:#ffffff04; }
   .header-design-settings legend { padding:0 5px; font-size:11px; font-weight:600; }

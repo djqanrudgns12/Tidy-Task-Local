@@ -32,6 +32,8 @@ pub struct Snapshot {
     pub revision: u64,
     pub default_class_id: Option<String>,
     pub classes: Vec<Class>,
+    #[serde(default)]
+    pub seating: std::collections::BTreeMap<String, serde_json::Value>,
 }
 #[derive(Clone, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -49,6 +51,12 @@ pub struct StudentInput {
     deny_unknown_fields
 )]
 pub enum Command {
+    Seating {
+        class_id: String,
+        expected_document_revision: u64,
+        expected_class_revision: u64,
+        action: serde_json::Value,
+    },
     CreateClass {
         name: String,
     },
@@ -186,6 +194,9 @@ fn ids_exist(c: &Class, ids: &[String]) -> Result<(), String> {
 }
 pub fn apply(s: &mut Snapshot, cmd: Command) -> Result<(), String> {
     match cmd {
+        Command::Seating { class_id, expected_document_revision, expected_class_revision, action } => {
+            super::seating::apply(s, &class_id, expected_document_revision, expected_class_revision, action)?;
+        }
         Command::CreateClass { name: n } => {
             let cid = id();
             if s.classes.is_empty() {
@@ -329,7 +340,7 @@ pub fn apply(s: &mut Snapshot, cmd: Command) -> Result<(), String> {
             }
         }
         Command::Restore { backup } => {
-            if backup.format != "tidy-classroom" || backup.schema_version != 1 {
+            if backup.format != "tidy-classroom" || ![1, 2].contains(&backup.schema_version) {
                 return Err("UNSUPPORTED_SCHEMA: 지원하지 않는 백업이에요.".into());
             }
             validate(&backup.data)?;
@@ -339,5 +350,7 @@ pub fn apply(s: &mut Snapshot, cmd: Command) -> Result<(), String> {
         }
         Command::Undo => return Err("UNDO_CONFLICT: 실행 취소할 작업이 없어요.".into()),
     }
+    super::seating::reconcile(s);
+    super::seating::validate_all(s)?;
     validate(s)
 }

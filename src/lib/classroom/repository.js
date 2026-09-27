@@ -1,26 +1,32 @@
+import { previewAction, reconcilePreview } from '../seating/preview.js';
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { validateStudents, cleanName } from "./domain.js";
 export const native = isTauri();
 /** @typedef {{id:string,number:number,name:string,gender:string,groupId:string|null}} Student */
 /** @typedef {{id:string,name:string,revision:number,students:Student[],groups:{id:string,name:string}[]}} Class */
-/** @typedef {{revision:number,defaultClassId:string|null,classes:Class[]}} Snapshot */
+/** @typedef {{revision:number,defaultClassId:string|null,classes:Class[],seating?:Record<string,import("../seating/types").SeatingDocument>}} Snapshot */
 /** @type {Snapshot[]} */ let history = [];
 /** @type {Snapshot} */ let preview = {
   revision: 0,
   defaultClassId: null,
   classes: [],
+  seating: {},
 };
 /** @type {Set<()=>void>} */ const listeners = new Set();
 const seen = new Set();
+const previewKey = 'tidy-classroom-preview-v2';
+function readPreview() { try { const stored=localStorage.getItem(previewKey); if(stored) preview=JSON.parse(stored); } catch {} return structuredClone(preview); }
 /** @returns {Promise<Snapshot>} */
-export const readRoster = () =>
-  native ? invoke("classroom_read") : Promise.resolve(structuredClone(preview));
+export const readRoster = () => native ? invoke("classroom_read") : Promise.resolve(readPreview());
 /** @param {()=>void} callback */
 export async function subscribeRoster(callback) {
   if (native) return listen("classroom-changed", () => callback());
   listeners.add(callback);
-  return () => listeners.delete(callback);
+  /** @param {StorageEvent} e */
+  const changed = e => { if (e.key === previewKey) callback(); };
+  window.addEventListener('storage', changed);
+  return () => { listeners.delete(callback); window.removeEventListener('storage', changed); };
 }
 /** @param {any} command @param {number} revision @param {string} [operationId] @returns {Promise<{snapshot:Snapshot,canUndo:boolean}>} */
 export async function execute(
@@ -34,6 +40,7 @@ export async function execute(
       expectedRevision: revision,
       operationId,
     });
+  readPreview();
   if (seen.has(operationId))
     return { snapshot: structuredClone(preview), canUndo: history.length > 0 };
   if (revision !== preview.revision)
@@ -49,6 +56,7 @@ export async function execute(
   };
   const uid = () => crypto.randomUUID();
   switch (command.type) {
+    case "seating": previewAction(s, command); break;
     case "createClass": {
       const cl = {
         id: uid(),
@@ -128,7 +136,7 @@ export async function execute(
     case "restore":
       if (
         command.backup.format !== "tidy-classroom" ||
-        command.backup.schemaVersion !== 1
+        ![1, 2].includes(command.backup.schemaVersion)
       )
         throw new Error("지원하지 않는 백업이에요.");
       s = structuredClone(command.backup.data);
@@ -147,8 +155,10 @@ export async function execute(
     if (history.length > 20) history.shift();
   }
   s.revision = before.revision + 1;
-  s.classes.forEach((c) => c.students.sort((a, b) => a.number - b.number));
+  s.classes.forEach((c) => { c.students.sort((a,b)=>a.number-b.number); const old=before.classes.find(p=>p.id===c.id); c.revision=old ? old.revision+(JSON.stringify(old)!==JSON.stringify(c)?1:0) : 1; });
+  reconcilePreview(s);
   preview = s;
+  try { localStorage.setItem(previewKey, JSON.stringify(s)); } catch (e) { preview = before; throw new Error("저장하지 못했어요. 브라우저 저장 공간을 확인해 주세요."); }
   seen.add(operationId);
   listeners.forEach((fn) => fn());
   return { snapshot: structuredClone(preview), canUndo: history.length > 0 };
@@ -158,7 +168,7 @@ export const clearHistory = () =>
 /** @param {Snapshot} snapshot */
 export async function exportRoster(snapshot) {
   const text = JSON.stringify(
-    { format: "tidy-classroom", schemaVersion: 1, data: snapshot },
+    { format: "tidy-classroom", schemaVersion: 2, data: snapshot },
     null,
     2,
   );

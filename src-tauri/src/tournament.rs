@@ -1,10 +1,13 @@
 //! Tournament documents have their own revisioned store; the tool reuses one window.
 use serde::{Deserialize, Serialize};
-use std::{collections::{HashMap, HashSet}, sync::Mutex};
+use std::{collections::{HashMap, HashSet}, sync::{atomic::{AtomicBool, Ordering}, Mutex}};
 use tauri::Manager;
 use tauri_plugin_store::StoreExt;
 // 업데이트 설치 직전에 app_update가 잡아, 쓰는 도중에 앱이 끝나지 않게 합니다.
 pub(crate) static LOCK: Mutex<()> = Mutex::new(());
+// 디스크 파일을 한 번 검사해 저장소가 메모리에 올라오면, 그 뒤로 플러그인은 파일을 다시 읽지 않습니다.
+// 그래서 경기 결과를 누를 때마다 파일 전체를 다시 읽어 검사할 필요가 없습니다(toolkit.rs의 FILE_VALIDATED와 같은 방식, 검사 실패 시에는 계속 확인).
+static DISK_CHECKED: AtomicBool = AtomicBool::new(false);
 const FILE: &str = "tidy-task-tournament.json";
 #[derive(Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -49,7 +52,7 @@ fn validate(v: &Library) -> Result<(), String> {
 }
 fn read(app: &tauri::AppHandle) -> Result<Library, String> {
     let path = app.path().app_data_dir().map_err(|e|e.to_string())?.join(FILE);
-    if path.exists() {
+    if !DISK_CHECKED.load(Ordering::Acquire) && path.exists() {
         let bytes = std::fs::read(path).map_err(|e|e.to_string())?;
         let raw: serde_json::Value = serde_json::from_slice(&bytes).map_err(|_|"토너먼트 자료가 손상됐어요. 원본을 보존합니다.")?;
         if let Some(data) = raw.get("library") {
@@ -58,12 +61,15 @@ fn read(app: &tauri::AppHandle) -> Result<Library, String> {
         } else if !raw.as_object().is_some_and(|o|o.is_empty()) { return Err("토너먼트 자료 형식이 달라요. 원본을 보존합니다.".into()); }
     }
     let store = app.store(FILE).map_err(|e|e.to_string())?;
+    DISK_CHECKED.store(true, Ordering::Release);
     let value = match store.get("library") { Some(v) => serde_json::from_value(v).map_err(|_|"토너먼트 자료를 읽지 못했어요.")?, None => defaults() };
     validate(&value)?; Ok(value)
 }
-#[tauri::command]
+// 왜 async인가: 동기 명령은 메인(UI) 스레드에서 돌아 파일 읽기·쓰기 동안 모든 창의 이벤트 처리가 멈춥니다(toolkit.rs와 같은 이유).
+// 창 안에서는 저장 중(busy)에 다음 저장을 막고, 창 사이는 LOCK과 revision 검사로 순서를 지킵니다.
+#[tauri::command(async)]
 pub fn tournament_read(app: tauri::AppHandle) -> Result<Library,String> { let _g = LOCK.lock().map_err(|_|"저장 잠금 오류")?; read(&app) }
-#[tauri::command]
+#[tauri::command(async)]
 pub fn tournament_write(app: tauri::AppHandle, mut value: Library) -> Result<Library,String> {
     let _g = LOCK.lock().map_err(|_|"저장 잠금 오류")?;
     validate(&value)?; let old = read(&app)?;

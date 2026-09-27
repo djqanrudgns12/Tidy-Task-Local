@@ -1,0 +1,11 @@
+<!doctype html><html lang="ko"><meta charset="utf-8"><title>학급 투표 오프라인 검증</title><body><h1>음성 캐시 오프라인 검증</h1><p>검증용 이름 세 문장을 모델 네트워크 요청을 금지한 worker에서 새로 합성합니다.</p><button id="run">오프라인 합성 검사</button><pre id="status">대기</pre><script type="module">
+import {createLocalSpeech} from '/src/lib/vote/speech/local.js';
+import {normalizeConfig} from '/src/lib/vote/model.js';
+const local=createLocalSpeech({createWorker:()=>new Worker(new URL('./vote-offline.worker.js',import.meta.url),{type:'module'})});
+document.querySelector('#run').onclick=async()=>{
+ const status=document.querySelector('#status'); status.textContent='검사 중';
+ const c=normalizeConfig({type:'candidate',title:'오프라인 안내 검사',items:[{id:'qa1',number:1,name:'가나다'},{id:'qa2',number:2,name:'라마바'}],speechContent:{readDynamic:true,titleAlias:'인터넷 없이 안내를 준비합니다.'}});
+ try {await local.prepare(c,'female','normal',s=>status.textContent=s);status.textContent=(await local.ready(c,'female','normal'))?'PASS: 네트워크 금지 상태에서 새 문장 합성·해시·캐시 확인':'FAIL: 준비되지 않음';}
+ catch(e){status.textContent='FAIL: '+e.message;} finally{local.dispose();}
+};
+</script></body></html>

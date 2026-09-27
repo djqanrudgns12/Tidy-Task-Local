@@ -1,0 +1,1782 @@
+/* 학급 온도계 전용 스타일(.th-*). 점수판과 다른 디자인 — 무드 색(--th-accent 등)은 칸마다 ThermoColumn이 넣습니다.
+   글자 요소는 한 줄(nowrap)이 원칙이고, 좁아지면 말줄임·짧은 말로 줄입니다(PRD 4.4).
+   light-dark()는 쓰지 않습니다(배포 빌드에서 값이 사라지는 문제). 다크 모드는 --tk-* 테마 변수가 바꿔 줍니다. */
+
+.th-app {
+  position: relative;
+  height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--tk-panel);
+  color: var(--tk-ink);
+  border: 1px solid var(--tk-line);
+  border-radius: 18px;
+  user-select: none;
+}
+.th-app button {
+  white-space: nowrap;
+}
+
+/* ── 제목줄 ── */
+.th-titlebar {
+  flex: none;
+  height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 0 10px 0 14px;
+  border-bottom: 1px solid var(--tk-line);
+}
+.th-brand {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-width: 0;
+  white-space: nowrap;
+}
+.th-brand strong {
+  flex: none;
+  font-size: 14px;
+}
+.th-divider {
+  flex: none;
+  width: 1px;
+  height: 18px;
+  background: var(--tk-line);
+}
+.th-context {
+  overflow: hidden;
+  color: var(--tk-muted);
+  font-size: 13.5px;
+  font-weight: 700;
+  text-overflow: ellipsis;
+}
+.th-actions-top {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 4px;
+}
+.th-top-btn,
+.th-win,
+.th-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  height: 33px;
+  min-width: 33px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--tk-muted);
+  font-size: 13px;
+  font-weight: 700;
+}
+.th-top-btn:hover:not(:disabled),
+.th-win:hover,
+.th-icon-btn:hover:not(:disabled) {
+  background: var(--tk-bg);
+}
+.th-top-btn:disabled {
+  opacity: 0.4;
+}
+.th-top-btn.active,
+.th-win.active {
+  color: var(--tk-accent);
+  background: var(--tk-soft);
+}
+.th-sep {
+  width: 1px;
+  height: 20px;
+  margin: 0 2px;
+  background: var(--tk-line);
+}
+@media (max-width: 560px) {
+  .th-top-btn span {
+    display: none;
+  }
+}
+.th-hintbar {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 10px 7px 14px;
+  border-bottom: 1px solid color-mix(in srgb, var(--tk-line) 70%, transparent);
+  background: var(--tk-soft);
+  color: var(--tk-muted);
+  font-size: 13px;
+  white-space: nowrap;
+}
+.th-hintbar span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.th-hintbar button {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 4px;
+  height: 28px;
+  padding: 0 10px;
+  border: 1px solid var(--tk-line);
+  border-radius: 999px;
+  background: var(--tk-panel);
+  color: var(--tk-ink);
+  font-weight: 700;
+}
+.th-hintbar .th-hintbar-x {
+  width: 28px;
+  margin-left: auto;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  justify-content: center;
+}
+
+/* ── 무대 ── */
+.th-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  container-type: inline-size;
+}
+.th-stage {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  gap: 16px;
+  padding: 14px;
+  background-color: var(--tk-soft);
+  background-image: radial-gradient(color-mix(in srgb, var(--tk-line) 55%, transparent) 1.1px, transparent 1.6px);
+  background-size: 20px 20px;
+}
+.th-loading {
+  margin: auto;
+  color: var(--tk-muted);
+}
+.th-empty-thermos {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  margin: auto;
+  text-align: center;
+}
+.th-empty-thermos p {
+  margin: 0;
+  color: var(--tk-muted);
+  font-size: 15px;
+}
+.th-empty-thermos button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  min-height: 58px;
+  padding: 0 24px;
+  border: 1px solid color-mix(in srgb, var(--tk-action) 35%, var(--tk-line));
+  border-radius: 16px;
+  background: var(--tk-panel);
+  color: var(--tk-action);
+  font-size: 18px;
+  font-weight: 900;
+  box-shadow: 0 8px 22px color-mix(in srgb, var(--tk-ink) 8%, transparent);
+}
+.th-empty-thermos button:hover {
+  background: var(--tk-bg);
+}
+
+/* ── 온도계 한 칸 ── */
+.th-col {
+  --th-accent: #2f6fd1;
+  --th-soft: #eaf4ff;
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 14px 14px;
+  overflow: hidden;
+  border: 1.5px solid color-mix(in srgb, var(--th-accent) 30%, var(--tk-line));
+  border-radius: 22px;
+  background:
+    radial-gradient(color-mix(in srgb, var(--th-accent) 12%, transparent) 1.2px, transparent 1.7px) 0 0 / 18px 18px,
+    color-mix(in srgb, var(--th-soft) 65%, var(--tk-panel));
+  box-shadow: 0 2px 0 color-mix(in srgb, var(--th-accent) 22%, var(--tk-line)), 0 10px 26px color-mix(in srgb, var(--tk-ink) 8%, transparent);
+  transition: box-shadow 0.2s ease;
+}
+.th-col.selectable {
+  cursor: default;
+}
+.th-col.selected {
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--th-accent) 70%, transparent), 0 10px 26px color-mix(in srgb, var(--tk-ink) 10%, transparent);
+}
+.th-ribbon {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  white-space: nowrap;
+}
+.th-ribbon strong {
+  overflow: hidden;
+  font-size: clamp(16px, 2.2cqi, 22px);
+  font-weight: 900;
+  text-overflow: ellipsis;
+}
+.th-ribbon-icon {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--th-accent);
+  color: #fff;
+}
+.th-selected-tag {
+  flex: none;
+  margin-left: auto;
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: var(--th-accent);
+  color: #fff;
+  font-size: 11.5px;
+  font-weight: 800;
+}
+.th-remove {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  margin-left: auto;
+  padding: 0;
+  border: 0;
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--tk-panel) 84%, transparent);
+  color: var(--tk-muted);
+}
+.th-selected-tag + .th-remove {
+  margin-left: 0;
+}
+/* 초기화는 닫기(✕) 바로 왼쪽에 붙입니다. 오른쪽 끝 정렬은 초기화가 맡고 ✕는 그 옆에 따라붙습니다. */
+.th-reset {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 5px;
+  height: 30px;
+  margin-left: auto;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--tk-panel) 84%, transparent);
+  color: var(--tk-muted);
+  font-size: 13px;
+  font-weight: 800;
+}
+.th-col.compact .th-reset {
+  width: 30px;
+  padding: 0;
+  justify-content: center;
+}
+.th-selected-tag + .th-reset,
+.th-reset + .th-remove {
+  margin-left: 0;
+}
+.th-reset:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--th-accent) 12%, var(--tk-panel));
+  color: var(--th-accent);
+}
+.th-reset:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+.th-remove:hover {
+  background: color-mix(in srgb, var(--tk-danger) 10%, var(--tk-panel));
+  color: var(--tk-danger);
+}
+.th-top {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 7px 12px;
+  border: 1.5px dashed color-mix(in srgb, var(--th-accent) 45%, var(--tk-line));
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--tk-panel) 80%, transparent);
+  white-space: nowrap;
+}
+.th-top.reached {
+  border-style: solid;
+  border-color: var(--th-accent);
+  background: color-mix(in srgb, var(--th-accent) 14%, var(--tk-panel));
+}
+.th-top-icon {
+  display: grid;
+  flex: none;
+  place-items: center;
+  color: var(--th-accent);
+}
+.th-top b {
+  flex: none;
+  font-size: 17px;
+  font-weight: 900;
+}
+.th-top-text {
+  overflow: hidden;
+  font-weight: 800;
+  text-overflow: ellipsis;
+}
+.th-deadline {
+  flex: none;
+  margin-left: auto;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--tk-soft);
+  color: var(--tk-muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+.th-deadline.urgent {
+  background: var(--th-accent);
+  color: #fff;
+}
+.th-deadline.past {
+  text-decoration: line-through;
+}
+/* 결과가 난 기한: 무드 색 옅은 바탕으로 "끝난 일"임을 조용히 알립니다. */
+.th-deadline.done {
+  background: var(--th-soft);
+  color: var(--th-accent);
+}
+.th-main {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.th-col[data-layout='split'] .th-main {
+  flex-direction: row;
+  gap: 18px;
+}
+/* 관 자리는 남는 높이만 씁니다. 공간이 모자라면 관이 먼저 줄어 올리기·내리기 버튼이 칸 밖으로 잘리지 않게 합니다
+   (예전엔 최소 160px을 고집해 520px 창에서 버튼이 가려졌습니다). */
+.th-tube-area {
+  position: relative;
+  flex: 1;
+  min-height: 64px;
+  min-width: 0;
+}
+.th-col[data-layout='split'] .th-tube-area {
+  flex: 0 0 min(42%, 300px);
+}
+/* 단계 스티커가 없으면 관 자리만 남겨 숫자 쪽을 넓힙니다(빈 공간이 생기지 않게). */
+.th-col[data-layout='split'].no-stages .th-tube-area {
+  flex: 0 0 150px;
+}
+.th-col[data-layout='stack'].no-stages .th-tube-area {
+  align-self: center;
+  width: 150px;
+  flex: 1 1 auto;
+}
+.th-info {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+.th-col[data-layout='split'] .th-info {
+  flex: 1;
+  justify-content: center;
+}
+
+/* 관 */
+.th-tube-wrap {
+  position: absolute;
+  inset: 0;
+}
+.th-tube {
+  display: block;
+  overflow: visible;
+}
+.th-ticks line {
+  stroke: color-mix(in srgb, var(--tk-muted) 55%, transparent);
+  stroke-width: 1.5;
+  stroke-linecap: round;
+}
+.th-ticks line.major {
+  stroke: var(--tk-muted);
+  stroke-width: 2;
+}
+.th-ticks text {
+  fill: var(--tk-muted);
+  font-size: 12px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.th-ticks text.goal {
+  fill: var(--th-accent);
+  font-weight: 900;
+}
+.th-glass rect,
+.th-glass circle {
+  fill: color-mix(in srgb, #ffffff 72%, transparent);
+  stroke: color-mix(in srgb, var(--th-accent) 55%, #ffffff);
+  stroke-width: 3;
+}
+.th-wave {
+  animation: th-wave 3s linear infinite;
+}
+@keyframes th-wave {
+  to { transform: translateX(var(--wave, 50px)); }
+}
+.th-bubble {
+  opacity: 0;
+  animation: th-bubble 0.9s ease-out forwards;
+}
+@keyframes th-bubble {
+  0% { transform: translateY(0) scale(0.6); opacity: 0; }
+  20% { opacity: 0.9; }
+  100% { transform: translateY(-46px) scale(1.1); opacity: 0; }
+}
+.th-ice {
+  fill: none;
+  stroke: #7cc4f5;
+  stroke-width: 2;
+  stroke-linecap: round;
+  animation: th-pop 0.4s ease-out;
+}
+.th-face .th-eyes {
+  transform-box: fill-box;
+  transform-origin: center;
+}
+.th-face.blink .th-eyes {
+  animation: th-blink 4.6s infinite;
+}
+@keyframes th-blink {
+  0%, 94%, 100% { transform: scaleY(1); }
+  96% { transform: scaleY(0.1); }
+}
+.th-steam path {
+  animation: th-steam 1.6s ease-in-out infinite;
+}
+@keyframes th-steam {
+  0%, 100% { transform: translateY(0); opacity: 0.9; }
+  50% { transform: translateY(-3px); opacity: 0.5; }
+}
+.th-siren .th-beam {
+  opacity: 0;
+  transform-origin: 0 0;
+}
+.th-siren.spinning .th-beam {
+  opacity: 1;
+  animation: th-spin 1s linear 3;
+}
+@keyframes th-spin {
+  to { transform: rotate(360deg); }
+}
+.th-connector {
+  fill: none;
+  stroke: color-mix(in srgb, var(--th-accent) 35%, var(--tk-line));
+  stroke-width: 1.5;
+  stroke-dasharray: 3 3;
+}
+.th-connector[data-status='reached'] {
+  stroke: var(--th-accent);
+  stroke-dasharray: none;
+}
+.th-connector[data-status='next'] {
+  stroke: var(--th-accent);
+}
+
+/* 단계 스티커 */
+.th-sticker {
+  position: absolute;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: var(--stk-h);
+  padding: 0 10px 0 4px;
+  overflow: hidden;
+  border: 1.5px dashed color-mix(in srgb, var(--th-accent) 40%, var(--tk-line));
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--tk-panel) 88%, transparent);
+  color: var(--tk-muted);
+  white-space: nowrap;
+  transform: translateY(-50%);
+  transition: background 0.3s ease, color 0.3s ease, border-color 0.3s ease;
+}
+.th-sticker b {
+  display: grid;
+  flex: none;
+  place-items: center;
+  height: calc(var(--stk-h) - 8px);
+  min-width: calc(var(--stk-h) - 8px);
+  padding: 0 6px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--th-accent) 18%, var(--tk-panel));
+  color: var(--tk-ink);
+  font-size: 12.5px;
+  font-weight: 900;
+  line-height: 1;
+}
+.th-sticker span {
+  overflow: hidden;
+  font-size: 13.5px;
+  font-weight: 800;
+  text-overflow: ellipsis;
+}
+.th-sticker small {
+  flex: none;
+  color: var(--th-accent);
+  font-size: 11.5px;
+  font-weight: 800;
+}
+.th-sticker[data-status='future'] {
+  opacity: 0.72;
+}
+.th-sticker[data-status='next'] {
+  border-style: solid;
+  border-color: var(--th-accent);
+  color: var(--tk-ink);
+  animation: th-glow 4s ease-in-out infinite;
+}
+.th-sticker[data-status='reached'] {
+  border-style: solid;
+  border-color: transparent;
+  background: var(--th-accent);
+  color: #fff;
+}
+.th-sticker[data-status='reached'] b {
+  background: color-mix(in srgb, #fff 28%, transparent);
+  color: #fff;
+}
+.th-sticker.compact {
+  padding: 0 4px;
+}
+.th-sticker-mark {
+  display: grid;
+  flex: none;
+  place-items: center;
+  /* 낮은 창에서 스티커가 22px까지 작아져도 표시가 스티커 밖으로 삐져나오지 않게 합니다. */
+  width: min(18px, calc(var(--stk-h) - 6px));
+  height: min(18px, calc(var(--stk-h) - 6px));
+  border-radius: 50%;
+  background: #fff;
+  color: var(--th-accent);
+}
+@keyframes th-glow {
+  0%, 100% { box-shadow: 0 0 0 0 transparent; }
+  50% { box-shadow: 0 0 0 4px color-mix(in srgb, var(--th-accent) 22%, transparent); }
+}
+.th-app.reduced .th-sticker[data-status='next'] {
+  animation: none;
+}
+
+/* 큰 숫자·다음 줄·오늘 요약 */
+.th-number {
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: 2px;
+  color: var(--tk-ink);
+  font-size: clamp(56px, min(12cqi, 16vh), 170px);
+  font-weight: 900;
+  line-height: 1;
+  letter-spacing: -0.03em;
+}
+.th-col[data-layout='stack'] .th-number {
+  font-size: clamp(44px, min(16cqi, 11vh), 120px);
+}
+.th-number.cold {
+  color: #3b8fd6;
+}
+.th-unit {
+  color: var(--th-accent);
+  font-size: 0.42em;
+  font-weight: 900;
+}
+.th-next {
+  margin: 0;
+  overflow: hidden;
+  color: var(--tk-ink);
+  font-size: clamp(14px, 1.6cqi, 19px);
+  font-weight: 800;
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.th-next.urgent {
+  color: var(--th-accent);
+}
+.th-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 6px 12px;
+  color: var(--tk-muted);
+  font-size: 13px;
+  white-space: nowrap;
+}
+.th-today b.up {
+  color: var(--th-accent);
+}
+.th-today b.down {
+  color: var(--tk-muted);
+}
+.th-stamps {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.th-stamp-label {
+  font-weight: 700;
+}
+.th-stamp-row {
+  display: inline-grid;
+  grid-template-columns: repeat(min(var(--n), 10), 16px);
+  gap: 3px;
+}
+.th-stamp-row i {
+  display: grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  border: 1.5px dashed color-mix(in srgb, var(--th-accent) 45%, var(--tk-line));
+  border-radius: 50%;
+}
+.th-stamp-row i.on {
+  border: 0;
+  background: var(--th-accent);
+  color: #fff;
+  animation: th-stamp 0.35s cubic-bezier(0.3, 1.6, 0.5, 1);
+}
+@keyframes th-stamp {
+  0% { transform: translateY(-10px) scale(1.6); opacity: 0; }
+  100% { transform: none; opacity: 1; }
+}
+.th-stamp-count {
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+}
+.th-stamp-goal {
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 3px 10px;
+  min-width: 0;
+  padding: 8px 12px;
+  border: 1px solid color-mix(in srgb, var(--th-accent) 38%, var(--tk-line));
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--tk-panel) 88%, var(--th-soft));
+  text-align: center;
+}
+.th-stamp-goal span {
+  color: var(--tk-muted);
+  font-size: 12.5px;
+  font-weight: 800;
+}
+.th-stamp-goal strong {
+  color: var(--th-accent);
+  font-size: 15px;
+  overflow-wrap: anywhere;
+}
+.th-stamp-goal.complete {
+  border-color: var(--th-accent);
+}
+.th-ladder {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 2px 0 0;
+  padding: 8px;
+  list-style: none;
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--tk-panel) 75%, transparent);
+}
+.th-ladder li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 4px 6px;
+  border-radius: 10px;
+  white-space: nowrap;
+}
+.th-ladder b {
+  flex: none;
+  min-width: 40px;
+  font-variant-numeric: tabular-nums;
+}
+.th-ladder span {
+  overflow: hidden;
+  font-weight: 700;
+  text-overflow: ellipsis;
+}
+.th-ladder small {
+  flex: none;
+  margin-left: auto;
+  color: var(--th-accent);
+  font-weight: 800;
+}
+.th-ladder li[data-status='reached'] {
+  background: var(--th-accent);
+  color: #fff;
+}
+.th-ladder li[data-status='next'] {
+  box-shadow: inset 0 0 0 2px var(--th-accent);
+}
+.th-ladder li[data-status='future'] {
+  opacity: 0.7;
+}
+
+/* 사유 칩 */
+.th-chips {
+  display: flex;
+  justify-content: center;
+  gap: 6px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  animation: th-pop 0.2s ease-out;
+}
+.th-chips button {
+  flex: none;
+  height: 30px;
+  padding: 0 12px;
+  border: 1.5px solid color-mix(in srgb, var(--th-accent) 45%, var(--tk-line));
+  border-radius: 999px;
+  background: var(--tk-panel);
+  color: var(--tk-ink);
+  font-size: 13px;
+  font-weight: 800;
+}
+.th-chips button:hover {
+  background: color-mix(in srgb, var(--th-accent) 14%, var(--tk-panel));
+}
+
+/* 버튼 */
+.th-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+.th-actions button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: clamp(48px, 7vh, 64px);
+  min-width: 0;
+  border-radius: 16px;
+  font-size: clamp(17px, 2cqi, 22px);
+  font-weight: 900;
+}
+.th-actions button span {
+  font-size: 0.72em;
+  font-weight: 800;
+}
+.th-down {
+  border: 1.5px solid color-mix(in srgb, var(--th-accent) 30%, var(--tk-line));
+  background: var(--tk-panel);
+  color: var(--tk-muted);
+}
+.th-col[data-mood='positive'] .th-down {
+  border: 0;
+  background: #d93f45;
+  color: #fff;
+  box-shadow: inset 0 -3px 0 color-mix(in srgb, #000 16%, transparent), 0 6px 14px color-mix(in srgb, #d93f45 30%, transparent);
+}
+.th-col[data-mood='positive'] .th-down:hover {
+  background: color-mix(in srgb, #d93f45 88%, #000);
+}
+.th-up {
+  border: 0;
+  background: var(--th-accent);
+  color: #fff;
+  box-shadow: inset 0 -3px 0 color-mix(in srgb, #000 16%, transparent), 0 6px 14px color-mix(in srgb, var(--th-accent) 30%, transparent);
+}
+.th-up:hover {
+  background: color-mix(in srgb, var(--th-accent) 88%, #000);
+}
+.th-actions button:active {
+  transform: translateY(1px);
+}
+.th-followup {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+}
+.th-followup button {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 36px;
+  padding: 0 14px;
+  border: 1.5px solid var(--th-accent);
+  border-radius: 12px;
+  background: var(--tk-panel);
+  color: var(--th-accent);
+  font-weight: 800;
+}
+.th-followup button.strong {
+  background: var(--th-accent);
+  color: #fff;
+}
+
+/* 낮은 창(두 개를 520~620px 높이로 띄울 때 등): 관이 설 자리를 넓히려고 덜 급한 것부터 줄입니다.
+   도장 줄 → 개수만, "다음 단계" 줄 → 이어 할 일 버튼이 떠 있으면 숨김(버튼이 같은 뜻을 말함), 여백·버튼 높이 살짝. */
+@media (max-height: 620px) {
+  .th-col {
+    gap: 6px;
+    padding: 10px 12px 10px;
+  }
+  .th-top {
+    padding: 3px 10px;
+  }
+  .th-main,
+  .th-info {
+    gap: 6px;
+  }
+  .th-col[data-layout='stack'] .th-number {
+    font-size: clamp(40px, min(16cqi, 9.5vh), 120px);
+  }
+  .th-stamp-row {
+    display: none;
+  }
+  .th-info:has(.th-followup) .th-next {
+    display: none;
+  }
+  .th-actions button {
+    height: 42px;
+  }
+  .th-followup button {
+    height: 32px;
+  }
+}
+
+/* 알림 리본·꽃가루 */
+.th-banner {
+  position: absolute;
+  top: 44%;
+  left: 50%;
+  z-index: 5;
+  max-width: calc(100% - 28px);
+  padding: 12px 22px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--th-accent);
+  color: #fff;
+  font-size: clamp(18px, 2.6cqi, 28px);
+  font-weight: 900;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  box-shadow: 0 12px 30px color-mix(in srgb, var(--th-accent) 40%, transparent);
+  transform: translate(-50%, -50%);
+  animation: th-banner 0.45s cubic-bezier(0.3, 1.5, 0.5, 1);
+  pointer-events: none;
+}
+.th-banner[data-tone='warn'] {
+  background: #fff;
+  color: var(--th-accent);
+  border: 3px solid var(--th-accent);
+}
+@keyframes th-banner {
+  from { transform: translate(-50%, -50%) scale(0.6); opacity: 0; }
+}
+.th-app.reduced .th-banner {
+  animation: none;
+}
+.th-confetti {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  overflow: hidden;
+  pointer-events: none;
+}
+.th-confetti-piece {
+  position: absolute;
+  width: 9px;
+  height: 13px;
+  border-radius: 3px;
+}
+@keyframes th-pop {
+  from { transform: scale(0.85); opacity: 0; }
+}
+
+/* ── 학급 준비 ── */
+.th-prepare {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  margin: auto;
+  padding: 24px;
+  text-align: center;
+}
+.th-prepare h2 {
+  margin: 4px 0 0;
+  font-size: 21px;
+}
+.th-prepare p,
+.th-prepare small {
+  margin: 0;
+  color: var(--tk-muted);
+}
+.th-prepare-art {
+  display: grid;
+  place-items: center;
+  width: 96px;
+  height: 96px;
+  border-radius: 30px;
+  background: var(--tk-panel);
+  box-shadow: 0 8px 22px color-mix(in srgb, var(--tk-ink) 8%, transparent);
+}
+.th-prepare-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+/* ── 공용 버튼 ── */
+.th-btn {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 34px;
+  padding: 0 12px;
+  border: 1px solid var(--tk-line);
+  border-radius: 10px;
+  background: var(--tk-panel);
+  color: var(--tk-ink);
+  font-size: 13px;
+  font-weight: 700;
+}
+.th-btn:hover:not(:disabled) {
+  background: var(--tk-bg);
+}
+.th-btn:disabled {
+  opacity: 0.45;
+}
+.th-btn.primary {
+  border-color: transparent;
+  background: var(--tk-action);
+  color: var(--tk-on-action);
+}
+.th-btn.big {
+  height: 44px;
+  padding: 0 18px;
+  border-radius: 13px;
+  font-size: 15px;
+}
+.th-btn.danger {
+  border-color: color-mix(in srgb, var(--tk-danger) 40%, var(--tk-line));
+  background: transparent;
+  color: var(--tk-danger);
+}
+.th-btn.danger-fill {
+  border-color: transparent;
+  background: var(--tk-danger);
+  color: #fff;
+}
+.th-link {
+  margin-top: 6px;
+  border: 0;
+  background: transparent;
+  color: var(--tk-muted);
+  text-decoration: underline;
+}
+
+/* ── 서랍(설정·기록) ── */
+.th-drawer,
+.th-history:not(.big) {
+  flex: none;
+  width: 420px;
+  max-width: 62%;
+  overflow-y: auto;
+  border-left: 1px solid var(--tk-line);
+  background: var(--tk-panel);
+  animation: th-drawer-in 0.22s ease-out;
+}
+@keyframes th-drawer-in {
+  from { transform: translateX(24px); opacity: 0; }
+}
+/* 좁은 창: 서랍이 온도계를 옆으로 밀면 칸이 100px대로 눌려 넘칩니다. 이때는 서랍이 온도계 위를 덮습니다. */
+@media (max-width: 720px) {
+  .th-body {
+    position: relative;
+  }
+  .th-drawer,
+  .th-history:not(.big) {
+    position: absolute;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 6;
+    width: min(420px, 100%);
+    max-width: none;
+    box-shadow: -14px 0 32px color-mix(in srgb, var(--tk-ink) 14%, transparent);
+  }
+}
+.th-drawer-head {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 10px 10px 16px;
+  border-bottom: 1px solid var(--tk-line);
+  background: var(--tk-panel);
+}
+.th-which {
+  display: flex;
+  gap: 6px;
+  padding: 10px 14px 0;
+}
+.th-which button {
+  display: inline-flex;
+  flex: 1;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-width: 0;
+  height: 34px;
+  border: 1.5px solid var(--tk-line);
+  border-radius: 10px;
+  background: var(--tk-panel);
+  color: var(--tk-muted);
+  font-weight: 800;
+}
+.th-which button span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.th-which button[aria-selected='true'][data-mood='positive'] {
+  border-color: #2f6fd1;
+  color: #2f6fd1;
+  background: #eaf4ff;
+}
+.th-which button[aria-selected='true'][data-mood='negative'] {
+  border-color: #d93f45;
+  color: #d93f45;
+  background: #fff0ee;
+}
+.th-tabs {
+  position: sticky;
+  top: 53px;
+  z-index: 1;
+  display: flex;
+  gap: 4px;
+  padding: 10px 14px 8px;
+  border-bottom: 1px solid color-mix(in srgb, var(--tk-line) 70%, transparent);
+  background: var(--tk-panel);
+}
+.th-tabs button {
+  flex: 1;
+  height: 32px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--tk-muted);
+  font-weight: 800;
+}
+.th-tabs button[aria-selected='true'] {
+  background: var(--tk-action);
+  color: var(--tk-on-action);
+}
+.th-drawer section,
+.th-history section {
+  padding: 12px 16px 14px;
+  border-bottom: 1px solid color-mix(in srgb, var(--tk-line) 70%, transparent);
+}
+.th-label {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin: 0 0 8px;
+  color: var(--tk-muted);
+  font-size: 13px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+.th-label small {
+  overflow: hidden;
+  font-weight: 400;
+  text-overflow: ellipsis;
+}
+.th-hint {
+  margin: 0 0 8px;
+  color: var(--tk-muted);
+  font-size: 12.5px;
+}
+.th-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 44px;
+}
+.th-row > span {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.th-row b {
+  font-size: 14px;
+  white-space: nowrap;
+}
+.th-row small {
+  overflow: hidden;
+  color: var(--tk-muted);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.th-volume input {
+  flex: 1;
+  accent-color: var(--tk-action);
+}
+.th-volume output {
+  width: 30px;
+  color: var(--tk-muted);
+  text-align: right;
+}
+.th-volume.off {
+  opacity: 0.5;
+}
+.th-field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin: 10px 0 0;
+  font-size: 13px;
+  font-weight: 800;
+}
+/* 입력칸 바로 뒤에 오는 소제목은 한 칸 띄워, 입력칸과 다음 항목이 한 덩어리로 보이지 않게 합니다. */
+.th-field + .th-label {
+  margin-top: 14px;
+}
+.th-field.inline {
+  flex-direction: row;
+  align-items: center;
+  gap: 10px;
+}
+.th-goal-setting {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin-top: 14px;
+  padding: 12px;
+  border: 1px solid var(--tk-line);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--tk-soft) 46%, var(--tk-panel));
+}
+.th-goal-kicker {
+  color: var(--tk-action);
+  font-size: 12px;
+  font-weight: 800;
+}
+.th-goal-setting .th-field {
+  margin: 0;
+  font-size: 14px;
+}
+.th-goal-input {
+  width: 100%;
+  min-width: 0;
+  height: 42px;
+  padding: 0 12px;
+  border: 1.5px solid var(--tk-line);
+  border-radius: 10px;
+  background: var(--tk-panel);
+  color: var(--tk-ink);
+  font-size: 15px;
+  font-weight: 800;
+  user-select: text;
+}
+.tk-root .th-goal-input:focus {
+  outline: none;
+  border-color: color-mix(in srgb, var(--tk-action) 48%, var(--tk-line));
+}
+.th-field input,
+.th-stage-list input,
+.th-stage-list select,
+.th-even select,
+.th-chip-editor input,
+.th-num,
+.th-date {
+  min-width: 0;
+  height: 36px;
+  padding: 0 10px;
+  border: 1px solid var(--tk-line);
+  border-radius: 10px;
+  background: var(--tk-panel);
+  color: var(--tk-ink);
+  font-size: 14px;
+  user-select: text;
+}
+.th-num {
+  width: 84px;
+}
+.th-chiprow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+.th-chiprow.wrap {
+  flex-wrap: wrap;
+}
+.th-chiprow button,
+.th-seg button {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 3px;
+  height: 34px;
+  padding: 0 12px;
+  border: 1px solid var(--tk-line);
+  border-radius: 999px;
+  background: var(--tk-panel);
+  color: var(--tk-ink);
+  font-weight: 800;
+}
+.th-chiprow button.on,
+.th-seg button[aria-checked='true'] {
+  border-color: transparent;
+  background: var(--tk-action);
+  color: var(--tk-on-action);
+}
+.th-chiprow button:disabled {
+  opacity: 0.4;
+}
+.th-seg {
+  display: inline-flex;
+  gap: 4px;
+  padding: 3px;
+  border-radius: 999px;
+  background: var(--tk-soft);
+}
+.th-seg button {
+  border: 0;
+  background: transparent;
+}
+.th-moods {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.th-moods button {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 12px;
+  border: 2px solid var(--tk-line);
+  border-radius: 14px;
+  background: var(--tk-panel);
+  color: var(--tk-ink);
+  text-align: left;
+}
+.th-moods button span {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.th-moods button small {
+  overflow: hidden;
+  color: var(--tk-muted);
+  text-overflow: ellipsis;
+}
+.th-moods button[aria-checked='true'][data-mood='positive'] {
+  border-color: #2f6fd1;
+  background: #eaf4ff;
+}
+.th-moods button[aria-checked='true'][data-mood='negative'] {
+  border-color: #d93f45;
+  background: #fff0ee;
+}
+.th-add {
+  background: color-mix(in srgb, var(--tk-soft) 60%, var(--tk-panel));
+}
+.th-presets {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+.th-presets button {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 10px 6px;
+  border: 1.5px solid var(--tk-line);
+  border-radius: 14px;
+  background: var(--tk-panel);
+  color: var(--tk-ink);
+}
+.th-presets button.suggest {
+  border-color: var(--tk-action);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--tk-action) 25%, transparent);
+}
+.th-presets small {
+  color: var(--tk-muted);
+  font-size: 11.5px;
+}
+.th-ruler {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(26px, 1fr));
+  gap: 4px;
+  padding: 6px 44px 6px 6px;
+  border-radius: 12px;
+  background: var(--tk-soft);
+}
+.th-ruler button {
+  display: grid;
+  place-items: center;
+  height: 34px;
+  border: 1.5px dashed color-mix(in srgb, var(--tk-muted) 45%, transparent);
+  border-radius: 9px;
+  background: var(--tk-panel);
+  color: var(--tk-muted);
+  font-size: 12.5px;
+  font-weight: 800;
+}
+.th-ruler button.on {
+  border: 0;
+  background: var(--tk-action);
+  color: var(--tk-on-action);
+}
+.th-ruler button:disabled {
+  opacity: 0.35;
+}
+.th-ruler-top {
+  position: absolute;
+  top: 50%;
+  right: 8px;
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: var(--tk-ink);
+  color: var(--tk-panel);
+  font-size: 12px;
+  font-weight: 900;
+  transform: translateY(-50%);
+}
+.th-even {
+  display: flex;
+  gap: 6px;
+  margin: 8px 0;
+}
+.th-warn {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin: 6px 0;
+  color: var(--tk-danger);
+  font-size: 12.5px;
+  font-weight: 700;
+}
+.th-stage-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.th-stage-list li {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.th-stage-list select {
+  width: 84px;
+}
+.th-stage-list input {
+  flex: 1;
+}
+.th-stage-list li.hidden-stage {
+  opacity: 0.6;
+}
+.th-empty-line {
+  padding: 8px 0;
+  color: var(--tk-muted);
+  font-size: 13px;
+}
+.th-radio-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.th-radio-list button {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border: 1.5px solid var(--tk-line);
+  border-radius: 12px;
+  background: var(--tk-panel);
+  color: var(--tk-ink);
+  text-align: left;
+}
+.th-radio-list button i {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  border: 2px solid var(--tk-line);
+  border-radius: 50%;
+}
+.th-radio-list button[aria-checked='true'] {
+  border-color: var(--tk-action);
+}
+.th-radio-list button[aria-checked='true'] i {
+  border: 5px solid var(--tk-action);
+}
+.th-radio-list button span {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.th-radio-list small {
+  overflow: hidden;
+  color: var(--tk-muted);
+  font-size: 12px;
+  text-overflow: ellipsis;
+}
+.th-chip-editor {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 6px;
+}
+.th-chip-editor input {
+  width: 92px;
+  border-radius: 999px;
+  text-align: center;
+}
+.th-danger {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.th-archived {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.th-archived li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+/* ── 기록·주간 그래프 ── */
+.th-history.big {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  padding: 10px 18px;
+  border-radius: 22px;
+  background: var(--tk-panel);
+}
+.th-week-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+  white-space: nowrap;
+}
+.th-week-total {
+  margin-left: auto;
+  font-size: 13px;
+}
+.th-week-total .up {
+  color: var(--th-accent);
+}
+.th-week-total .down {
+  color: var(--tk-muted);
+}
+.th-chart {
+  display: flex;
+  align-items: stretch;
+  justify-content: space-around;
+  gap: 8px;
+  height: 180px;
+  padding: 8px 4px 0;
+}
+.th-history.big .th-week {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  border: 0;
+}
+.th-history.big .th-chart {
+  flex: 1;
+  height: auto;
+}
+.th-bar {
+  position: relative;
+  flex: 1;
+  max-width: 80px;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+}
+.th-bar-up,
+.th-bar-down {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-height: 0;
+}
+.th-bar-up {
+  justify-content: flex-end;
+  border-bottom: 2px solid var(--tk-line);
+}
+.th-bar-up i {
+  width: 70%;
+  border-radius: 8px 8px 0 0;
+  background: var(--th-accent);
+  animation: th-grow-up 0.5s ease-out;
+}
+.th-bar-down i {
+  width: 70%;
+}
+.th-bar-down i.manual {
+  background: color-mix(in srgb, var(--tk-muted) 45%, transparent);
+}
+.th-bar-down i.auto {
+  border-radius: 0 0 8px 8px;
+  background: repeating-linear-gradient(45deg, color-mix(in srgb, var(--tk-muted) 45%, transparent) 0 4px, transparent 4px 8px);
+}
+.th-bar-num {
+  color: var(--tk-muted);
+  font-size: 12px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+.th-history.big .th-bar-num {
+  font-size: 18px;
+}
+.th-bar-label {
+  margin-top: 4px;
+  text-align: center;
+  color: var(--tk-muted);
+  font-weight: 800;
+}
+.th-bar.today .th-bar-label {
+  color: var(--th-accent);
+}
+.th-history.big .th-bar-label {
+  font-size: 20px;
+}
+@keyframes th-grow-up {
+  from { transform: scaleY(0); transform-origin: bottom; }
+}
+.th-legend {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  margin: 8px 0 0;
+  color: var(--tk-muted);
+  font-size: 12px;
+  white-space: nowrap;
+}
+.th-legend i {
+  width: 12px;
+  height: 12px;
+  margin-left: 8px;
+  border-radius: 3px;
+}
+.th-legend i.up {
+  background: var(--th-accent);
+}
+.th-legend i.down {
+  background: color-mix(in srgb, var(--tk-muted) 45%, transparent);
+}
+.th-legend i.auto {
+  background: repeating-linear-gradient(45deg, color-mix(in srgb, var(--tk-muted) 45%, transparent) 0 3px, transparent 3px 6px);
+}
+.th-log ul {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 10px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.th-log li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 32px;
+  padding: 0 6px;
+  border-radius: 8px;
+  white-space: nowrap;
+  font-size: 13px;
+}
+.th-log li:nth-child(odd) {
+  background: color-mix(in srgb, var(--tk-soft) 55%, transparent);
+}
+.th-log time {
+  flex: none;
+  width: 88px;
+  color: var(--tk-muted);
+  font-variant-numeric: tabular-nums;
+}
+.th-log b {
+  flex: none;
+  width: 46px;
+  font-variant-numeric: tabular-nums;
+}
+.th-log b.up {
+  color: var(--th-accent);
+}
+.th-log b.down {
+  color: var(--tk-muted);
+}
+.th-log-value {
+  flex: none;
+  color: var(--tk-muted);
+}
+.th-log-reason {
+  overflow: hidden;
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: var(--tk-soft);
+  font-weight: 700;
+  text-overflow: ellipsis;
+}
+.th-log small {
+  flex: none;
+  margin-left: auto;
+  color: var(--tk-muted);
+}
+.th-stamp-dates p:last-child {
+  margin: 0;
+  color: var(--tk-muted);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+/* ── 확인·알림 ── */
+.th-confirm {
+  position: absolute;
+  top: 58px;
+  right: 16px;
+  z-index: 30;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-width: min(360px, calc(100% - 32px));
+  padding: 14px 16px;
+  border: 1px solid var(--tk-line);
+  border-radius: 16px;
+  background: var(--tk-panel);
+  box-shadow: 0 16px 36px color-mix(in srgb, var(--tk-ink) 18%, transparent);
+  animation: th-pop 0.18s ease-out;
+}
+.th-confirm p {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+}
+.th-confirm small {
+  color: var(--tk-muted);
+}
+.th-confirm > div {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+.th-toast {
+  position: absolute;
+  bottom: 16px;
+  left: 16px;
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  max-width: calc(100% - 32px);
+  padding: 8px 8px 8px 16px;
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--tk-ink) 88%, transparent);
+  color: var(--tk-panel);
+  font-size: 14px;
+  font-weight: 700;
+  white-space: nowrap;
+  animation: th-pop 0.2s ease-out;
+}
+.th-toast span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.th-toast button {
+  height: 30px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--tk-panel) 22%, transparent);
+  color: var(--tk-panel);
+  font-weight: 800;
+}
+.th-toast .th-toast-x {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  padding: 0;
+  background: transparent;
+}
+.th-error {
+  position: absolute;
+  right: 16px;
+  bottom: 16px;
+  z-index: 31;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: calc(100% - 32px);
+  margin: 0;
+  padding: 8px 8px 8px 14px;
+  border-radius: 12px;
+  background: var(--tk-danger-soft);
+  color: var(--tk-danger);
+  font-size: 13.5px;
+  font-weight: 700;
+}
+.th-error button {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+}

@@ -87,11 +87,15 @@ export async function parseFile(file, signal, columns = null) {
       };
       signal?.addEventListener("abort", cancel, { once: true });
       try {
-        const result = await invoke("classroom_parse", {
-          extension,
-          bytes: Array.from(bytes),
-          columns,
-          requestId,
+        // 파일은 원본 바이트로, 나머지는 헤더로 보냅니다(tauri-plugin-fs의 writeFile과 같은 방식).
+        // 왜: 예전의 Array.from(bytes)는 JSON 숫자 배열(원래 크기의 약 3.6배)이 되어, 만드는 데 이 창이,
+        //   Rust가 메인 스레드에서 해석하는 동안 앱 전체가 멈췄습니다(5MB 파일 기준 만들기 약 0.16초 + 해석 약 0.2초).
+        const result = await invoke("classroom_parse", bytes, {
+          headers: {
+            extension,
+            "request-id": requestId,
+            columns: JSON.stringify(columns ?? null),
+          },
         });
         signal?.throwIfAborted();
         return /** @type {any[]} */ (result);

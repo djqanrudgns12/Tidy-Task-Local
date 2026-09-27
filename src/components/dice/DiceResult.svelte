@@ -71,33 +71,38 @@
   });
 </script>
 
+<!-- 결과는 패널 안에 한 줄로. 패널 폭·글자 크기는 DiceApp이 fitResultSize로 계산해 CSS 변수로 넘깁니다
+     (주사위 3개 + 두 자리 합계도 창 폭 안에서 잘리지 않게). -->
 <div class="dice-result" aria-hidden="true">
-  {#if phase === 'idle'}
-    <p class="dice-hint">던지기를 눌러 보세요</p>
-  {:else}
-    <div class="dice-equation" bind:this={equationEl} class:single={count === 1}>
-      {#if count > 1}
-        {#each Array.from({ length: count }, (_, i) => i) as i (i)}
-          {#if i > 0}<span class="dice-op">+</span>{/if}
-          {#key `${rollKey}:${i}:${filled[i]}`}
-            <span class="dice-chip" class:empty={!filled[i]} data-tone={tones[i]}
-              use:pop={{ on: !!filled[i] && !reduced }} use:fadeIn={!filled[i] && !reduced}>{filled[i] ? values[i] : ''}</span>
-          {/key}
-        {/each}
-        <span class="dice-op">=</span>
-      {/if}
-      <span class="dice-total-slot">
-        {#key `${rollKey}:${showTotal}`}
-          {#if showTotal}
-            <span class="dice-total" use:pop={{ on: !reduced, peak: 1.12, duration: 260 }}>{total}</span>
-          {:else}
-            <span class="dice-total pending" use:breathe={!reduced}>?</span>
-          {/if}
-        {/key}
-        {#if badge}
-          <span class="dice-badge" data-kind={badge} in:badgeIn out:badgeOut>{MATCH_LABELS[badge as 'double' | 'triple']}</span>
+  <div class="dice-panel" data-phase={phase}>
+    {#if phase === 'idle'}
+      <p class="dice-hint">던지기를 눌러 보세요</p>
+    {:else}
+      <div class="dice-equation" bind:this={equationEl}>
+        {#if count > 1}
+          {#each Array.from({ length: count }, (_, i) => i) as i (i)}
+            {#if i > 0}<span class="dice-op">+</span>{/if}
+            {#key `${rollKey}:${i}:${filled[i]}`}
+              <span class="dice-chip" class:empty={!filled[i]} data-tone={tones[i]}
+                use:pop={{ on: !!filled[i] && !reduced }} use:fadeIn={!filled[i] && !reduced}>{filled[i] ? values[i] : ''}</span>
+            {/key}
+          {/each}
+          <span class="dice-op">=</span>
         {/if}
-      </span>
-    </div>
-  {/if}
+        <span class="dice-total-slot">
+          {#key `${rollKey}:${showTotal}`}
+            {#if showTotal}
+              <span class="dice-total" use:pop={{ on: !reduced, peak: 1.12, duration: 260 }}>{total}</span>
+            {:else}
+              <span class="dice-total pending" use:breathe={!reduced}>?</span>
+            {/if}
+          {/key}
+        </span>
+      </div>
+    {/if}
+    <!-- 배지는 패널 오른쪽 위 모서리에 스티커처럼 붙어 수식을 밀거나 창 밖으로 나가지 않습니다. -->
+    {#if badge}
+      <span class="dice-badge" data-kind={badge} in:badgeIn out:badgeOut>{MATCH_LABELS[badge as 'double' | 'triple']}</span>
+    {/if}
+  </div>
 </div>

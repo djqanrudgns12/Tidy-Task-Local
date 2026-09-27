@@ -64,8 +64,8 @@
     focus = $state("all"),
     pinned = $state(false),
     sound = $state(true),
-    reduced = $state(false),
-    osReduced = $state(false);
+    // 움직임은 앱 안 "동작 줄이기" 스위치로만 줄입니다(Windows "애니메이션 효과" 설정은 따르지 않음).
+    reduced = $state(false);
   let viewport = $state<HTMLDivElement>(null!),
     confirmDialog: HTMLDialogElement;
   let confirmTitle = $state(""),
@@ -299,7 +299,7 @@
             ? width * zoom
             : (width * zoom) / 2 - viewport.clientWidth / 2,
       top: (height * zoom) / 2 - viewport.clientHeight / 2,
-      behavior: osReduced || reduced ? "instant" : "smooth",
+      behavior: reduced ? "instant" : "smooth",
     });
   }
   async function renameSlot(index: number, value: string) {
@@ -520,10 +520,6 @@
       if (saved !== null) sound = saved !== "false";
       reduced = localStorage.getItem("tidy-tournament-reduced") === "true";
     } catch {}
-    const media = matchMedia("(prefers-reduced-motion: reduce)");
-    osReduced = media.matches;
-    const changed = () => (osReduced = media.matches);
-    media.addEventListener("change", changed);
     void readLibrary()
       .then((value) => {
         if (!disposed) {
@@ -535,7 +531,6 @@
       .finally(() => (ready = true));
     return () => {
       disposed = true;
-      media.removeEventListener("change", changed);
       void audio.dispose();
     };
   });

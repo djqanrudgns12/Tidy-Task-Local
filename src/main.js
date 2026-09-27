@@ -13,6 +13,20 @@ const label = isTauri()
 async function start() {
   const target = document.getElementById("app");
   if (!target) throw new Error("Application root is missing");
+  if (!isTauri() && import.meta.env.DEV && new URLSearchParams(location.search).has('note-context-preview')) {
+    const { default: NoteContextPreview } = await import('./dev/NoteContextPreview.svelte');
+    return mount(NoteContextPreview, { target });
+  }
+  if (!isTauri() && import.meta.env.DEV && new URLSearchParams(location.search).has('context-menu-preview')) {
+    const params = new URLSearchParams(location.search);
+    const { default: ContextMenu } = await import('./components/ContextMenu.svelte');
+    return mount(ContextMenu, { target, props: { preview: true, previewType: params.get('context-menu-preview') || 'bar', previewDark: params.has('dark') } });
+  }
+  // 보조 메뉴는 노트의 저장/복원/포커스 초기화를 실행하지 않습니다.
+  if (label === 'ctx-menu') {
+    const { default: ContextMenu } = await import('./components/ContextMenu.svelte');
+    return mount(ContextMenu, { target, props: { isStandalone: true } });
+  }
   // 날짜 선택 창은 가장 먼저 분기합니다.
   // 왜: 메모 앱(App·appState)을 거치면 이 라벨로 저장소 초기화가 돌 수 있고, 뜨는 속도도 느려집니다.
   if (label === DATE_PICKER_LABEL) {
@@ -30,10 +44,13 @@ async function start() {
     const { default: InitialSetup } = await import('./components/InitialSetup.svelte');
     return mount(InitialSetup, { target, props: { preview: !isTauri() } });
   }
-  if (label === 'release-toolkit' || (!isTauri() && import.meta.env.DEV && new URLSearchParams(location.search).has('toolkit-release-preview'))) {
-    const { default: ToolkitReleaseNotice } = await import('./components/ToolkitReleaseNotice.svelte');
-    return mount(ToolkitReleaseNotice, { target, props: { preview: !isTauri() } });
+  if (['release-news', 'release-toolkit', 'update-notice'].includes(label || '') ||
+    (!isTauri() && import.meta.env.DEV && ['release-news-preview','notice-preview','toolkit-release-preview'].some(key => new URLSearchParams(location.search).has(key)))) {
+    const { default: ReleaseNews } = await import('./components/ReleaseNews.svelte');
+    return mount(ReleaseNews, { target, props: { preview: !isTauri() } });
   }
+  // 이미 열린 구버전 환영 창도 개발자의 말을 다시 표시하지 않습니다.
+  if (label === 'welcome') { await getCurrentWindow().close(); return; }
   const toolkitLabel = isTauri()
     ? label
     : import.meta.env.DEV
@@ -61,6 +78,15 @@ async function start() {
         "dice",
         "clock",
         "noticeboard",
+        "scoreboard-personal",
+        "scoreboard-group",
+        "scoreboard-custom",
+        "thermometer",
+        "vote",
+        "vote-teacher",
+        "seating",
+        "seating-teacher",
+        "seating-display",
       ].includes(toolkitLabel))
   ) {
     const { default: ToolkitApp } = await import(
@@ -74,22 +100,7 @@ async function start() {
     );
     return mount(MealApp, { target, props: { label: label || "meal" } });
   }
-  if (
-    !isTauri() &&
-    import.meta.env.DEV &&
-    new URLSearchParams(location.search).has("notice-preview")
-  ) {
-    const { default: UpdateNotice } = await import(
-      "./components/UpdateNotice.svelte"
-    );
-    return mount(UpdateNotice, {
-      target,
-      props: {
-        preview: true,
-        previewDark: new URLSearchParams(location.search).has("notice-dark"),
-      },
-    });
-  }
+
   if (
     !isTauri() &&
     import.meta.env.DEV &&

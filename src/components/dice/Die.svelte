@@ -1,128 +1,163 @@
 <script lang="ts">
-  import { onDestroy, tick } from 'svelte';
-  import {
-    FACE_ANGLES, FACE_PLACEMENT, PHASE, nextAngles, restTransform,
-    spinKeyframes, hopKeyframes, squashKeyframes, shadowKeyframes,
-  } from '../../lib/dice/motion.js';
-  import type { DiePlan } from '../../lib/dice/motion.js';
+  import { onMount } from 'svelte';
+  import { buildRoll, poseAt, restPose, restQuat, supportHeight } from '../../lib/dice/motion.js';
+  import type { DiePlan, DiePose, RollScript } from '../../lib/dice/motion.js';
+  import { createDieRenderer, BOX_PER_SIZE } from '../../lib/dice/renderer.js';
+  import type { DieRenderer } from '../../lib/dice/renderer.js';
+  import type { Quat } from '../../lib/dice/rotation.js';
 
-  // 3D 주사위 하나. 위치·크기는 부모(무대)가 정하고, 여기서는 굴리기와 얼굴만 맡습니다.
+  // 주사위 하나. 위치·크기는 부모(무대)가 정하고, 여기서는 굴리기와 얼굴만 맡습니다.
+  // 몸통은 WebGL로 그린 둥근 정육면체 한 덩어리라 어느 각도에서도 면 사이 틈·띠가 생기지 않습니다(renderer.js).
   let { size, tone, waiting = false } = $props<{ size: number; tone: string; waiting?: boolean }>();
 
-  const VALUES = [1, 2, 3, 4, 5, 6] as const;
-  // 3×3 격자의 표준 눈 자리(viewBox 100 기준). 1은 하트로 따로 그립니다.
-  const L = 27, C = 50, R = 73;
-  const PIPS: Record<number, [number, number][]> = {
-    2: [[L, L], [R, R]],
-    3: [[L, L], [C, C], [R, R]],
-    4: [[L, L], [R, L], [L, R], [R, R]],
-    5: [[L, L], [R, L], [C, C], [L, R], [R, R]],
-    6: [[L, L], [L, C], [L, R], [R, L], [R, C], [R, R]],
-  };
+  type Run = { script: RollScript; value: number; delay: number; started: number; frame: number; safety: number; done: () => void };
 
   let value = $state(1); // 지금 정면을 보는 눈
-  let yaw = $state(0); // 멈췄을 때 살짝 틀어진 각도(입체감)
   let squint = $state(false);
   let rolling = $state(false);
-  let hopEl = $state<HTMLElement>();
-  let squashEl = $state<HTMLElement>();
-  let spinEl = $state<HTMLElement>();
+  let ready = $state(false);
+  let dpr = $state(1);
+  let rootEl = $state<HTMLElement>();
+  let bodyEl = $state<HTMLElement>();
   let shadowEl = $state<HTMLElement>();
-  let running: Animation[] = [];
-  let squintTimer = 0;
+  let canvasEl = $state<HTMLCanvasElement>();
+  let renderer: DieRenderer | null = null;
+  let orientation: Quat = restQuat(1, 0);
+  let run: Run | null = null;
   // 기다릴 때는 웃는 얼굴, 던지는 순간에는 질끈 감은 얼굴. 그 밖에는 눈(결과)만 보여 읽기 쉽게 둡니다.
   const mood = $derived(squint ? 'squint' : waiting && !rolling ? 'smile' : null);
 
-  function stopMotion() {
-    clearTimeout(squintTimer);
+  // 4K 200% 모니터에서도 또렷하게, 그 이상은 그래픽 메모리만 늘고 차이가 안 보여 2.5배에서 멈춥니다.
+  const currentDpr = () => Math.min(2.5, Math.max(1, window.devicePixelRatio || 1));
+
+  function readPalette(el: HTMLElement) {
+    const style = getComputedStyle(el);
+    const read = (name: string, fallback: string) => style.getPropertyValue(name).trim() || fallback;
+    return {
+      face: read('--dice-face', '#ffb8a6'),
+      edge: read('--dice-edge', '#c96f5b'),
+      pip: read('--dice-pip', '#5b3a33'),
+      light: read('--dice-light', '#ffe2d9'),
+    };
+  }
+
+  /** 한 순간의 모습을 화면에 옮깁니다: 뜬 높이·좌우 이동은 DOM으로, 자세·찌그러짐은 WebGL로. */
+  function apply(pose: DiePose) {
+    if (!bodyEl || !shadowEl) return;
+    const lift = pose.y - 0.5;
+    const moved = Math.abs(lift) > 1e-4 || Math.abs(pose.x) > 1e-4;
+    bodyEl.style.transform = moved ? `translate3d(${(pose.x * size).toFixed(2)}px, ${(-lift * size).toFixed(2)}px, 0)` : '';
+    bodyEl.style.opacity = pose.opacity < 1 ? pose.opacity.toFixed(3) : '';
+    // 바닥 그림자: 높이 뜰수록 크고 옅게, 모서리로 서면 발자국이 넓어지는 만큼 조금 크게. 높이감의 절반을 그림자가 만듭니다.
+    const gap = Math.max(0, pose.y - supportHeight(pose.q) / 2);
+    const spread = (1 + 0.55 * gap) * (0.92 + 0.08 * supportHeight(pose.q));
+    const fade = 1 - 0.62 * Math.min(1, gap / 0.8);
+    const resting = !moved && gap < 1e-4;
+    shadowEl.style.transform = resting ? '' : `translate3d(${(pose.x * size).toFixed(2)}px, 0, 0) scale(${spread.toFixed(3)})`;
+    shadowEl.style.opacity = resting ? '' : (0.26 * fade * (pose.opacity < 1 ? pose.opacity : 1)).toFixed(3);
+    renderer?.render(pose);
+  }
+
+  function finishRun(current: Run) {
+    if (run !== current) return;
+    cancelAnimationFrame(current.frame);
+    clearTimeout(current.safety);
+    run = null;
+    orientation = current.script.final;
+    value = current.value;
     squint = false;
-    for (const animation of running) animation.cancel();
-    running = [];
     rolling = false;
+    apply(restPose(orientation));
+    current.done();
   }
 
   /** 정해진 눈(next)으로 착지하도록 굴립니다. 멈추면(또는 안전 시간이 지나면) 풀립니다. */
   export function roll(next: number, plan: DiePlan): Promise<void> {
-    stopMotion();
-    if (!hopEl || !squashEl || !spinEl || !shadowEl) {
+    if (run) finishRun(run);
+    const script = buildRoll(orientation, next, plan);
+    if (!renderer || !bodyEl) {
+      orientation = script.final;
       value = next;
       return Promise.resolve();
     }
-    const from = { ...FACE_ANGLES[value as 1], yaw };
-    const to = nextAngles(from, next, plan);
-    const timing: KeyframeAnimationOptions = { duration: plan.duration, delay: plan.delay, fill: 'both', easing: 'linear' };
     rolling = true;
-    if (!plan.reduced) {
-      squint = true;
-      squintTimer = window.setTimeout(() => (squint = false), plan.delay + plan.duration * PHASE.crouch);
-    }
-    const animations = [
-      spinEl.animate(spinKeyframes(from, to, plan), timing),
-      squashEl.animate(squashKeyframes(plan), timing),
-      ...(plan.reduced ? [] : [hopEl.animate(hopKeyframes(plan, size), timing), shadowEl.animate(shadowKeyframes(plan, size), timing)]),
-    ];
-    running = animations;
-    const finished = Promise.all(animations.map((a) => a.finished));
-    // 창이 가려져 애니메이션 시계가 멈춰도 결과는 반드시 확정되도록 안전 시간을 둡니다.
-    const safety = new Promise((resolve) => setTimeout(resolve, plan.delay + plan.duration + 400));
-    return Promise.race([finished, safety])
-      .catch(() => {})
-      .then(async () => {
-        if (running !== animations) return; // 새 굴림·정리로 이미 대체됨
-        clearTimeout(squintTimer);
-        squint = false;
-        value = next;
-        yaw = to.yaw;
-        // 왜 tick 뒤에 취소하는가: 멈춘 각도를 인라인 스타일로 먼저 그려 둬야, 애니메이션을 지울 때 한 프레임도 옛 면이 비치지 않습니다.
-        await tick();
-        for (const animation of animations) animation.cancel();
-        running = [];
-        rolling = false;
-      });
+    squint = !plan.reduced;
+    return new Promise((resolve) => {
+      const current: Run = { script, value: next, delay: plan.delay, started: performance.now(), frame: 0, safety: 0, done: resolve };
+      run = current;
+      const step = (now: number) => {
+        if (run !== current) return;
+        const t = now - current.started - current.delay;
+        const pose = poseAt(script, t);
+        if (!plan.reduced && squint !== pose.squint) squint = pose.squint;
+        apply(pose);
+        if (t >= script.total) finishRun(current);
+        else current.frame = requestAnimationFrame(step);
+      };
+      current.frame = requestAnimationFrame(step);
+      // 창이 가려져 화면 갱신이 멈춰도 결과는 반드시 확정되도록 안전 시간을 둡니다.
+      current.safety = window.setTimeout(() => finishRun(current), plan.delay + script.total + 400);
+    });
   }
 
   /** 남은 연출을 건너뛰고 끝 상태로 보냅니다(창이 숨겨졌을 때). */
   export function finish() {
-    for (const animation of running) {
-      try { animation.finish(); } catch {}
-    }
+    if (run) finishRun(run);
   }
 
-  onDestroy(stopMotion);
+  onMount(() => {
+    if (!canvasEl || !rootEl) return;
+    renderer = createDieRenderer(canvasEl, readPalette(rootEl));
+    dpr = currentDpr();
+    // 배율이 다른 모니터로 창을 옮기면(4K 200% ↔ FHD 100%) 캔버스 해상도를 다시 맞춥니다.
+    let media: MediaQueryList | null = null;
+    const onDpr = () => {
+      dpr = currentDpr();
+      watch();
+    };
+    const watch = () => {
+      media?.removeEventListener('change', onDpr);
+      media = window.matchMedia(`(resolution: ${window.devicePixelRatio || 1}dppx)`);
+      media.addEventListener('change', onDpr);
+    };
+    watch();
+    ready = true;
+    return () => {
+      media?.removeEventListener('change', onDpr);
+      if (run) {
+        const pending = run;
+        run = null;
+        cancelAnimationFrame(pending.frame);
+        clearTimeout(pending.safety);
+        pending.done(); // 기다리는 쪽(던지기)이 멈춰 서지 않게 풀어 줍니다.
+      }
+      renderer?.dispose();
+      renderer = null;
+    };
+  });
+
+  // 크기·배율이 바뀌면 캔버스 해상도를 맞추고 멈춘 모습을 다시 그립니다(굴리는 중에는 다음 장면이 그립니다).
+  $effect(() => {
+    const box = size * BOX_PER_SIZE;
+    const ratio = dpr;
+    if (!ready || !renderer) return;
+    renderer.resize(box, ratio, size);
+    if (!run) apply(restPose(orientation));
+  });
+
+  // 정면 눈·표정이 바뀌면 그 면 그림만 새로 올립니다.
+  $effect(() => {
+    const face = value;
+    const look = mood;
+    if (!ready || !renderer) return;
+    renderer.setArt(face, look);
+    if (!run) renderer.render(restPose(orientation));
+  });
 </script>
 
-<div class="dice-die" class:rolling data-tone={tone} style:--s={`${size}px`}>
+<div class="dice-die" class:rolling data-tone={tone} style:--s={`${size}px`} bind:this={rootEl}>
   <div class="dice-shadow" bind:this={shadowEl}></div>
-  <div class="dice-hop" bind:this={hopEl}>
-    <div class="dice-squash" bind:this={squashEl}>
-      <div class="dice-tilt">
-        <div class="dice-spin" bind:this={spinEl} style:transform={restTransform(value, yaw)}>
-          {#each VALUES as v (v)}<div class="dice-core" style:transform={FACE_PLACEMENT[v]}></div>{/each}
-          {#each VALUES as v (v)}
-            <div class="dice-face" class:front={v === value} style:transform={FACE_PLACEMENT[v]}>
-              <svg viewBox="0 0 100 100" aria-hidden="true">
-                {#if mood && v === value}
-                  <ellipse class="dice-blush" cx="24" cy="60" rx="8" ry="5" />
-                  <ellipse class="dice-blush" cx="76" cy="60" rx="8" ry="5" />
-                  {#if mood === 'smile'}
-                    <circle class="dice-ink" cx="36" cy="46" r="5.6" /><circle class="dice-ink" cx="64" cy="46" r="5.6" />
-                    <circle class="dice-glint" cx="37.8" cy="44" r="1.7" /><circle class="dice-glint" cx="65.8" cy="44" r="1.7" />
-                    <path class="dice-line" d="M42 58 Q50 66.5 58 58" />
-                  {:else}
-                    <path class="dice-line" d="M30 39.5 L39.5 46 L30 52.5" /><path class="dice-line" d="M70 39.5 L60.5 46 L70 52.5" />
-                    <ellipse class="dice-ink" cx="50" cy="61" rx="3.6" ry="3.2" />
-                  {/if}
-                {:else if v === 1}
-                  <path class="dice-heart" d="M50 67C46.6 64.2 33 55.4 33 44.4 33 38.2 37.6 34 42.9 34 46.2 34 48.7 35.9 50 38.4 51.3 35.9 53.8 34 57.1 34 62.4 34 67 38.2 67 44.4 67 55.4 53.4 64.2 50 67Z" />
-                  <ellipse class="dice-glint" cx="41.5" cy="41" rx="3.2" ry="2.2" transform="rotate(-30 41.5 41)" />
-                {:else}
-                  {#each PIPS[v] as [x, y]}<circle class="dice-pip" cx={x} cy={y} r="8.5" /><circle class="dice-glint" cx={x - 2.6} cy={y - 2.8} r="2" />{/each}
-                {/if}
-              </svg>
-            </div>
-          {/each}
-        </div>
-      </div>
-    </div>
+  <div class="dice-body" bind:this={bodyEl}>
+    <canvas class="dice-canvas" bind:this={canvasEl} aria-hidden="true"></canvas>
   </div>
 </div>

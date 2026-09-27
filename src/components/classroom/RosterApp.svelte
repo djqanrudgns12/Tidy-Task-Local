@@ -249,6 +249,35 @@
     question = null;
     resolveQuestion?.(value);
   }
+  // 다른 도구(개인 점수판 등)가 "할 일"과 함께 명단 창을 열었을 때 알맞은 칸에 초점을 둡니다.
+  let firstClassButton = $state<HTMLButtonElement>();
+  let highlightFirst = $state(false);
+  async function applyIntent(intent: any) {
+    if (!intent) return;
+    await tick();
+    if (intent.action === "add-students" && snapshot.classes.some((c: any) => c.id === intent.classId)) {
+      selectedClass = intent.classId;
+      tab = "students";
+      await tick();
+      nameInput?.focus();
+    } else if (intent.action === "create-class") {
+      if (!snapshot.classes.length) {
+        firstClassButton?.focus();
+        highlightFirst = true;
+        setTimeout(() => (highlightFirst = false), 1200);
+      } else if (!question) {
+        // 학급이 이미 있으면 [학급 추가]를 누른 것과 같게 이름 입력 창을 바로 엽니다(예: 자리 배치 드롭다운의 "학급 추가").
+        // 다른 확인 창이 떠 있으면 그 답을 덮어쓰지 않도록 건너뜁니다. 입력을 기다리므로 await하지 않습니다.
+        void createClass();
+      }
+    }
+  }
+  async function takeIntent() {
+    if (!native) return;
+    try {
+      await applyIntent(await invoke("classroom_take_intent"));
+    } catch {}
+  }
   async function createClass() {
     if (!(await flush())) return;
     const n = await ask("학급 추가", "학급 이름을 입력해 주세요.", "");
@@ -487,14 +516,14 @@
       const backup = JSON.parse(await file.text());
       if (
         backup.format !== "tidy-classroom" ||
-        backup.schemaVersion !== 1 ||
+        ![1, 2].includes(backup.schemaVersion) ||
         !Array.isArray(backup.data?.classes)
       )
         throw new Error("지원하지 않는 학급 백업이에요.");
       if (
         (await ask(
           "학급 데이터를 복원할까요?",
-          `현재 자료를 백업의 학급 ${backup.data.classes.length}개로 대체합니다.`,
+          `현재 학급과 자리 배치·지난 자리 기록을 백업의 학급 ${backup.data.classes.length}개로 대체합니다. 이전 형식 백업에는 자리 배치가 없습니다.`,
           null,
           true,
         )) === null
@@ -567,15 +596,18 @@
         newNumber = nextNumber(cl?.students || []);
         if (native) {
           const win = getCurrentWindow();
+          await takeIntent();
+          offs.push(await listen("roster-intent", () => void takeIntent()));
           offs.push(
-            await listen<string>("classroom-file-dropped", async (e) => {
+            await listen<{ token: string; name: string }>("classroom-file-dropped", async (e) => {
               try {
-                const file: any = await invoke("classroom_take_drop", {
-                  token: e.payload,
+                // 파일 내용은 원본 바이트(ArrayBuffer)로 옵니다(예비 통로 postMessage에서는 숫자 배열).
+                // 이름은 떨어뜨림 알림에 함께 옵니다.
+                const bytes = await invoke<ArrayBuffer | number[]>("classroom_take_drop", {
+                  token: e.payload.token,
                 });
-                await importFile(
-                  new File([new Uint8Array(file.bytes)], file.name),
-                );
+                const data = bytes instanceof ArrayBuffer ? new Uint8Array(bytes) : Uint8Array.from(bytes);
+                await importFile(new File([data], e.payload.name));
               } catch {
                 error =
                   "파일을 가져오지 못했어요. 파일 선택으로 다시 시도해 주세요.";
@@ -737,7 +769,7 @@
             학급을 만들고 명단을 등록하세요.<br />등록한 학생은 여러 툴킷
             도구에서 함께 사용할 수 있어요.
           </p>
-          <button class="primary" onclick={createClass}
+          <button class="primary" class:intent-highlight={highlightFirst} bind:this={firstClassButton} onclick={createClass}
             ><Plus size={18} /> 첫 학급 만들기</button
           >
         </div>{:else}
@@ -799,142 +831,152 @@
           >
         </div>
         {#if tab === "students"}
-          <div class="roster-tools">
-            <label class="search-box"
-              ><Search size={16} /><input
-                placeholder="이름 또는 번호 검색"
-                aria-label="학생 검색"
-                bind:value={search}
-                oninput={() => (selected = [])}
-              /></label
-            ><select
-              aria-label="학생 필터"
-              bind:value={filter}
-              onchange={() => (selected = [])}
-              ><option value="all">전체 학생</option><option value="unassigned"
-                >미배정</option
-              >{#each genders as g}<option value={g.value}>{g.label}</option
-                >{/each}</select
-            ><select aria-label="정렬" bind:value={sort}
-              ><option value="number">번호순</option><option value="name"
-                >이름순</option
-              ></select
-            ><button class="secondary" onclick={openImport}
-              ><Upload size={15} /> 파일 가져오기</button
-            >
-          </div>
-          {#if selected.length}<div class="selection-bar">
-              <strong>{selected.length}명 선택</strong><select
-                aria-label="배정할 모둠"
-                bind:value={assignTarget}
-                ><option value="">미배정</option>{#each cl.groups as g}<option
-                    value={g.id}>{g.name}</option
+          <section class="roster-sheet" aria-label="학생 명단 관리">
+            <div class="roster-tools">
+              <label class="search-box"
+                ><Search size={16} /><input
+                  placeholder="이름 또는 번호 검색"
+                  aria-label="학생 검색"
+                  bind:value={search}
+                  oninput={() => (selected = [])}
+                /></label
+              ><select
+                aria-label="학생 필터"
+                bind:value={filter}
+                onchange={() => (selected = [])}
+                ><option value="all">전체 학생</option><option value="unassigned"
+                  >미배정</option
+                >{#each genders as g}<option value={g.value}>{g.label}</option
                   >{/each}</select
-              ><button onclick={() => assign(assignTarget || null)}
-                >모둠 이동</button
-              ><button class="danger-text" onclick={() => remove(selected)}
-                >삭제</button
-              ><button onclick={() => (selected = [])}>선택 해제</button>
-            </div>{/if}
-          <div class="student-scroll">
-            <table class="student-table">
-              <thead
-                ><tr
-                  ><th class="check-cell"
-                    ><input
-                      type="checkbox"
-                      aria-label="검색 결과 전체 선택"
-                      checked={visible.length > 0 &&
-                        visible.every((p: any) => selected.includes(p.id))}
-                      onchange={(e) =>
-                        (selected = e.currentTarget.checked
-                          ? visible.map((p: any) => p.id)
-                          : [])}
-                    /></th
-                  ><th class="number-cell">번호</th><th>이름</th><th
-                    class="gender-cell">성별 <small>선택</small></th
-                  ><th class="row-action"></th></tr
-                ></thead
-              ><tbody
-                >{#each visible as p (p.id)}<tr
-                    class:row-selected={selected.includes(p.id)}
-                    ><td
+              ><select aria-label="정렬" bind:value={sort}
+                ><option value="number">번호순</option><option value="name"
+                  >이름순</option
+                ></select
+              ><button class="secondary" onclick={openImport}
+                ><Upload size={15} /> 파일 가져오기</button
+              >
+            </div>
+            {#if selected.length}<div class="selection-bar">
+                <strong>{selected.length}명 선택</strong><select
+                  aria-label="배정할 모둠"
+                  bind:value={assignTarget}
+                  ><option value="">미배정</option>{#each cl.groups as g}<option
+                      value={g.id}>{g.name}</option
+                    >{/each}</select
+                ><button onclick={() => assign(assignTarget || null)}
+                  >모둠 이동</button
+                ><button class="danger-text" onclick={() => remove(selected)}
+                  >삭제</button
+                ><button onclick={() => (selected = [])}>선택 해제</button>
+              </div>{/if}
+            <div class="student-scroll" role="region" aria-label="학생 명단 표">
+              <table class="student-table" aria-label="학생 명단">
+                <thead
+                  ><tr
+                    ><th class="check-cell"
                       ><input
                         type="checkbox"
-                        aria-label={`${p.number}번 ${p.name} 선택`}
-                        checked={selected.includes(p.id)}
-                        onchange={(e) => choose(p.id, e.currentTarget.checked)}
-                      /></td
-                    ><td
-                      ><input
-                        class="student-number"
-                        aria-label={`${p.name} 번호`}
-                        type="number"
-                        min="1"
-                        max="9999"
-                        value={drafts[p.id]?.number ?? p.number}
-                        oninput={(e) =>
-                          edit(p, "number", Number(e.currentTarget.value))}
-                        onfocus={() => beginEdit(p.id)}
-                        onblur={() => endEdit(p.id)}
-                        onkeydown={(e) => rowKey(e, p.id)}
-                      /></td
-                    ><td
-                      ><input
-                        class="student-name"
-                        aria-label={`${p.number}번 이름`}
-                        value={drafts[p.id]?.name ?? p.name}
-                        oninput={(e) => {
-                          if (!("isComposing" in e && e.isComposing))
-                            edit(p, "name", e.currentTarget.value);
-                        }}
-                        oncompositionend={(e) =>
-                          edit(p, "name", e.currentTarget.value)}
-                        onfocus={() => beginEdit(p.id)}
-                        onblur={() => endEdit(p.id)}
-                        onkeydown={(e) => rowKey(e, p.id)}
-                      /></td
-                    ><td
-                      ><div
-                        class="gender-options"
-                        aria-label={`${p.name} 성별`}
-                      >
-                        {#each genders as g}<button
-                            class:chosen={(drafts[p.id]?.gender ?? p.gender) ===
-                              g.value}
-                            aria-pressed={(drafts[p.id]?.gender ?? p.gender) ===
-                              g.value}
-                            onclick={() => {
-                              edit(p, "gender", g.value);
-                              void saveRow(p.id);
-                            }}>{g.label}</button
-                          >{/each}
-                      </div></td
-                    ><td
-                      ><button
-                        class="icon delete-student"
-                        aria-label={`${p.name} 삭제`}
-                        onclick={() => remove([p.id])}
-                        ><Trash2 size={15} /></button
-                      ></td
-                    ></tr
-                  >{/each}</tbody
-              >
-            </table>
-            {#if !visible.length}<div class="table-empty">
-                <UsersRound size={26} />
-                <p>
-                  {cl.students.length
-                    ? "검색 결과가 없어요."
-                    : "첫 학생의 이름을 아래에 입력해 주세요."}
-                </p>
-                {#if !cl.students.length}<button onclick={openImport}
-                    >명렬표 파일로 한 번에 등록하기 <ArrowRight
-                      size={14}
-                    /></button
-                  >{/if}
-              </div>{/if}
-          </div>
+                        aria-label="검색 결과 전체 선택"
+                        checked={visible.length > 0 &&
+                          visible.every((p: any) => selected.includes(p.id))}
+                        onchange={(e) =>
+                          (selected = e.currentTarget.checked
+                            ? visible.map((p: any) => p.id)
+                            : [])}
+                      /></th
+                    ><th class="number-cell" scope="col">번호</th><th scope="col">이름</th><th
+                      class="gender-cell" scope="col">성별 <small>선택 사항</small></th
+                    ><th class="row-action" scope="col"><span class="roster-sr-only">삭제</span></th></tr
+                  ></thead
+                ><tbody
+                  >{#each visible as p (p.id)}<tr
+                      class:row-selected={selected.includes(p.id)}
+                      ><td
+                        ><input
+                          type="checkbox"
+                          aria-label={`${p.number}번 ${p.name} 선택`}
+                          checked={selected.includes(p.id)}
+                          onchange={(e) => choose(p.id, e.currentTarget.checked)}
+                        /></td
+                      ><td
+                        ><input
+                          class="student-number"
+                          aria-label={`${p.name} 번호`}
+                          type="number"
+                          min="1"
+                          max="9999"
+                          value={drafts[p.id]?.number ?? p.number}
+                          oninput={(e) =>
+                            edit(p, "number", Number(e.currentTarget.value))}
+                          onfocus={() => beginEdit(p.id)}
+                          onblur={() => endEdit(p.id)}
+                          onkeydown={(e) => rowKey(e, p.id)}
+                        /></td
+                      ><td
+                        ><input
+                          class="student-name"
+                          aria-label={`${p.number}번 이름`}
+                          value={drafts[p.id]?.name ?? p.name}
+                          oninput={(e) => {
+                            if (!("isComposing" in e && e.isComposing))
+                              edit(p, "name", e.currentTarget.value);
+                          }}
+                          oncompositionend={(e) =>
+                            edit(p, "name", e.currentTarget.value)}
+                          onfocus={() => beginEdit(p.id)}
+                          onblur={() => endEdit(p.id)}
+                          onkeydown={(e) => rowKey(e, p.id)}
+                        /></td
+                      ><td
+                        ><div
+                          class="gender-options"
+                          role="group"
+                          aria-label={`${p.name} 성별`}
+                        >
+                          {#each genders as g}<button
+                              class:chosen={(drafts[p.id]?.gender ?? p.gender) ===
+                                g.value}
+                              class:unspecified={g.value === "unspecified"}
+                              aria-pressed={(drafts[p.id]?.gender ?? p.gender) ===
+                                g.value}
+                              onclick={() => {
+                                edit(p, "gender", g.value);
+                                void saveRow(p.id);
+                              }}>{g.label}</button
+                            >{/each}
+                        </div></td
+                      ><td
+                        ><button
+                          class="icon delete-student"
+                          aria-label={`${p.name} 삭제`}
+                          onclick={() => remove([p.id])}
+                          ><Trash2 size={15} /></button
+                        ></td
+                      ></tr
+                    >{/each}</tbody
+                >
+              </table>
+              {#if !visible.length}<div class="table-empty">
+                  <UsersRound size={26} />
+                  <p>
+                    {cl.students.length
+                      ? "검색 결과가 없어요."
+                      : "첫 학생의 이름을 아래에 입력해 주세요."}
+                  </p>
+                  {#if !cl.students.length}<button onclick={openImport}
+                      >명렬표 파일로 한 번에 등록하기 <ArrowRight
+                        size={14}
+                      /></button
+                    >{/if}
+                </div>{/if}
+            </div>
+            <div class="table-foot">
+              <span
+                >전체 <strong>{cl.students.length}명</strong>{#if search || filter !== "all"}
+                  · 표시 <strong>{visible.length}명</strong>{/if}</span
+              ><span>이름·번호를 누르면 바로 수정</span>
+            </div>
+          </section>
           <form
             class="new-student"
             onsubmit={(e) => {
@@ -942,35 +984,44 @@
               void addStudent();
             }}
           >
-            <span class="new-plus"><Plus size={18} /></span><input
-              aria-label="새 학생 번호"
-              type="number"
-              min="1"
-              max="9999"
-              bind:value={newNumber}
-            /><input
-              bind:this={nameInput}
-              aria-label="새 학생 이름"
-              placeholder="이름 입력 후 Enter"
-              bind:value={newName}
-              onkeydown={(e) => {
-                if (e.isComposing && e.key === "Enter") e.preventDefault();
-              }}
-            /><select aria-label="새 학생 성별" bind:value={newGender}
-              >{#each genders as g}<option value={g.value}>{g.label}</option
-                >{/each}</select
-            ><button
-              class="primary"
-              type="submit"
-              disabled={!newName.trim() || !!busy}>추가</button
-            >
+            <div class="new-student-heading">
+              <strong><Plus size={18} /> 학생 추가</strong>
+              <span>Enter로 연속 등록</span>
+            </div>
+            <div class="new-student-fields">
+              <label class="new-number-field">
+                <span>번호</span>
+                <input
+                  aria-label="새 학생 번호"
+                  type="number"
+                  min="1"
+                  max="9999"
+                  bind:value={newNumber}
+                />
+              </label>
+              <label class="new-name-field">
+                <span>이름</span>
+                <input
+                  bind:this={nameInput}
+                  aria-label="새 학생 이름"
+                  placeholder="이름 입력 후 Enter"
+                  bind:value={newName}
+                  onkeydown={(e) => {
+                    if (e.isComposing && e.key === "Enter") e.preventDefault();
+                  }}
+                />
+              </label>
+              <label class="new-gender-field">
+                <span>성별 <small>선택 사항</small></span>
+                <select aria-label="새 학생 성별" bind:value={newGender}>
+                  {#each genders as g}<option value={g.value}>{g.label}</option>{/each}
+                </select>
+              </label>
+              <button class="primary" type="submit" disabled={!newName.trim() || !!busy}>
+                명단에 추가
+              </button>
+            </div>
           </form>
-          <div class="table-foot">
-            <span
-              >전체 {cl.students.length}명{#if search || filter !== "all"}
-                · 표시 {visible.length}명{/if}</span
-            ><span>Enter 다음 이름 · Tab 다음 칸</span>
-          </div>
         {:else}
           <div class="group-tools">
             <p>학생을 선택하고 모둠으로 이동하세요.</p>

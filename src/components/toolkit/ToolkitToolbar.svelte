@@ -1,10 +1,13 @@
 <script lang="ts">
   import { onMount, tick } from 'svelte';
+  import { flip } from 'svelte/animate';
+  import { cubicOut } from 'svelte/easing';
   import ToolIcon from './ToolIcon.svelte';
   import {
     native,
     readSettings,
     subscribeSettings,
+    subscribeToolOrderPreview,
     patchSettings,
   } from '../../lib/toolkit/store.js';
   import { TOOL_REGISTRY, PLATFORM_TOOLS } from '../../lib/toolkit/registry.js';
@@ -26,10 +29,15 @@
   let config = $state(defaults().toolkit),
     ready = $state(false),
     error = $state(''),
-    previewMenu = $state<'' | 'timer' | 'external' | 'context'>('');
+    previewMenu = $state<'' | 'timer' | 'scoreboard' | 'external' | 'context'>('');
   const visiblePlatforms = $derived(
     PLATFORM_TOOLS.filter((tool) => config.externalToolsEnabled && !config.hiddenPlatformIds.includes(tool.id)),
   );
+  const toolsById: Record<string, (typeof TOOL_REGISTRY)[number]> = Object.fromEntries(TOOL_REGISTRY.map((tool) => [tool.id, tool]));
+  let previewOrder = $state<string[] | null>(null);
+  const orderedVisibleIds = $derived((previewOrder ?? config.toolOrderIds).filter((id) =>
+    id === 'external' ? visiblePlatforms.length > 0 : config.visibleToolIds.includes(id),
+  ));
   let bar = $state<HTMLDivElement>();
   let fittedSize = '';
   let fitQueue = Promise.resolve();
@@ -85,14 +93,16 @@
       error = '설정을 저장하지 못했어요.';
     }
   }
-  async function menu(trigger: HTMLButtonElement, kind: 'timer' | 'external') {
+  async function menu(trigger: HTMLButtonElement, kind: 'timer' | 'scoreboard' | 'external') {
     try {
       if (!(await showToolkitMenu(trigger, kind, kind === 'external' ? visiblePlatforms.length : undefined)))
         previewMenu = previewMenu === kind ? '' : kind;
     } catch {
-      error = `${kind === 'timer' ? '타이머' : '외부 툴'} 메뉴를 열지 못했어요.`;
+      error = `${kind === 'timer' ? '타이머' : kind === 'scoreboard' ? '점수판' : '외부 툴'} 메뉴를 열지 못했어요.`;
     }
   }
+  // 항목이 여럿인 도구(타이머·점수판)는 드롭다운을 열고, 나머지는 바로 창을 엽니다.
+  const menuKind = (id: string) => (id === 'timer' || id === 'scoreboard' ? id : null);
   // 아이콘·패널 어디서 우클릭해도 WebView 기본 메뉴(뒤로·새로 고침·검사) 대신 툴킷 메뉴를 띄웁니다.
   async function contextMenu(e: MouseEvent) {
     e.preventDefault();
@@ -116,6 +126,11 @@
     let saveTimer: ReturnType<typeof setTimeout>;
     void (async () => {
       try {
+        const offPreview = await subscribeToolOrderPreview((ids) => {
+          if (!disposed) previewOrder = ids;
+        });
+        if (disposed) { offPreview(); return; }
+        offs.push(offPreview);
         const off = await subscribeSettings((s) => {
           if (!disposed) {
             config = s.toolkit;
@@ -129,7 +144,15 @@
         offs.push(off);
         if (native) {
           // 이미 떠 있던 툴바를 트레이로 불렀을 때 Rust(open_from_tray)가 보내는 신호입니다.
-          const offSummon = await listen('toolkit-summoned', () => void signalArrival());
+          const offSummon = await listen('toolkit-summoned', async () => {
+            try {
+              config = (await readSettings()).toolkit;
+              config = { ...config, collapsed: false };
+              await fit();
+              await centerToolbarIfRequested();
+              await signalArrival();
+            } catch { error = '툴킷을 펼치지 못했어요.'; }
+          });
           if (disposed) {
             offSummon();
             return;
@@ -217,25 +240,17 @@
         ></button
       >
       {#if !config.collapsed}<div class="toolkit-crescent">
-        {#each TOOL_REGISTRY.filter( (tool) => config.visibleToolIds.includes(tool.id) && tool.id !== 'roster', ) as tool}<button
+        {#each orderedVisibleIds as id (id)}
+          <button
             class="toolkit-tool"
-            class:menu-open={tool.id === 'timer' && previewMenu === 'timer'}
-            onclick={(e) => tool.id !== 'timer' ? openTool(tool.id).catch(() => error = '도구를 열지 못했어요.') : menu(e.currentTarget, 'timer')}
-            aria-haspopup={tool.id === 'timer' ? 'menu' : undefined}
-            aria-expanded={tool.id === 'timer' ? previewMenu === 'timer' : undefined}
-            ><span class="toolkit-tool-icon"><ToolIcon kind={tool.id} /></span
-            ><span class="toolkit-tool-copy"><strong>{tool.label}</strong></span></button
-          >{/each}
-        {#if visiblePlatforms.length}<button
-            class="toolkit-tool"
-            class:menu-open={previewMenu === 'external'}
-            onclick={(e) => menu(e.currentTarget, 'external')}
-            aria-haspopup="menu"
-            aria-expanded={previewMenu === 'external'}
-            ><span class="toolkit-tool-icon"><ToolIcon kind="external" /></span
-            ><span class="toolkit-tool-copy"><strong>외부 툴</strong></span></button
-          >{/if}
-        {#if config.visibleToolIds.includes('roster')}<button class="toolkit-tool" onclick={() => { previewMenu = ''; void openTool('roster').catch(() => error = '학급 명단을 열지 못했어요.'); }}><span class="toolkit-tool-icon"><ToolIcon kind="roster" /></span><span class="toolkit-tool-copy"><strong>학급 명단</strong></span></button>{/if}
+            animate:flip={{ duration: 180, easing: cubicOut }}
+            class:menu-open={(id === 'external' || menuKind(id) !== null) && previewMenu === id}
+            onclick={(e) => { const kind = id === 'external' ? 'external' : menuKind(id); if (kind) void menu(e.currentTarget, kind); else openTool(id).catch(() => error = '도구를 열지 못했어요.'); }}
+            aria-haspopup={id === 'external' || menuKind(id) ? 'menu' : undefined}
+            aria-expanded={id === 'external' || menuKind(id) ? previewMenu === id : undefined}
+            ><span class="toolkit-tool-icon"><ToolIcon kind={id} /></span
+            ><span class="toolkit-tool-copy"><strong>{id === 'external' ? '외부 툴' : toolsById[id].label}</strong></span></button>
+        {/each}
         <button
           class="toolkit-settings"
           aria-label="툴킷 설정"

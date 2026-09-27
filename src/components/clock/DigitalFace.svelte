@@ -1,94 +1,72 @@
 <script lang="ts">
-  // 몽글 세그먼트 숫자판.
-  // 왜 글꼴이 아니라 SVG로 그리는가: 사용자가 고른 글꼴마다 숫자 폭이 달라 초가 바뀔 때마다 줄이 흔들리고,
-  // 창 크기에 맞춰 키울 때도 글꼴 측정이 필요합니다. 도형으로 그리면 어떤 크기·글꼴에서도 똑같이 또렷합니다.
   type Digit = number | null;
-  let { hourDigits, minuteDigits, secondDigits, meridiem, second } = $props<{
+  let { hourDigits, minuteDigits, secondDigits, meridiem, monthDay, weekday, weekend } = $props<{
     hourDigits: [Digit, number];
     minuteDigits: [number, number];
     secondDigits: [number, number] | null;
     meridiem: string | null;
-    /** 콜론이 초마다 한 번 숨쉬도록 초 값을 받습니다. */
-    second: number;
+    monthDay: string;
+    weekday: string;
+    weekend: string | null;
   }>();
 
-  // 숫자 하나의 크기(시·분 기준). 획은 끝이 둥근 알약 모양입니다.
-  const W = 56, H = 100, T = 12, G = 4, R = T / 2;
-  const ADVANCE = 70, COLON = 26, SIDE_GAP = 22, SMALL = 0.56;
-  const SEGMENTS: Record<string, { x: number; y: number; w: number; h: number }> = {
-    a: { x: R + G, y: 0, w: W - T - 2 * G, h: T },
-    g: { x: R + G, y: H / 2 - R, w: W - T - 2 * G, h: T },
-    d: { x: R + G, y: H - T, w: W - T - 2 * G, h: T },
-    f: { x: 0, y: R + G, w: T, h: H / 2 - R - 2 * G },
-    b: { x: W - T, y: R + G, w: T, h: H / 2 - R - 2 * G },
-    e: { x: 0, y: H / 2 + G, w: T, h: H / 2 - R - 2 * G },
-    c: { x: W - T, y: H / 2 + G, w: T, h: H / 2 - R - 2 * G },
+  // 꺼진 획을 그리지 않아 멀리서도 실제 숫자만 보이게 합니다.
+  const SEGMENTS: Record<string, string> = {
+    a: 'M13 0 H47 L54 6 L47 12 H13 L6 6 Z',
+    b: 'M60 12 L54 6 L48 12 V49 L54 55 L60 49 Z',
+    c: 'M60 63 L54 57 L48 63 V100 L54 106 L60 100 Z',
+    d: 'M13 100 H47 L54 106 L47 112 H13 L6 106 Z',
+    e: 'M0 63 L6 57 L12 63 V100 L6 106 L0 100 Z',
+    f: 'M0 12 L6 6 L12 12 V49 L6 55 L0 49 Z',
+    g: 'M13 50 H47 L54 56 L47 62 H13 L6 56 Z',
   };
   const LIT = ['abcdef', 'bc', 'abged', 'abgcd', 'fgbc', 'afgcd', 'afgedc', 'abc', 'abcdefg', 'abcdfg'];
   const ORDER = ['a', 'b', 'c', 'd', 'e', 'f', 'g'];
-
-  // 시(두 자리) · 콜론 · 분(두 자리). 콜론 칸은 두 숫자 사이 한가운데에 둡니다.
-  const MINUTE_X = ADVANCE * 2 + COLON;
-  const mainWidth = MINUTE_X + ADVANCE + W;
-  const colonX = (ADVANCE + W + MINUTE_X) / 2;
-  const smallWidth = ADVANCE * SMALL + W * SMALL;
-  const hasSide = $derived(Boolean(secondDigits || meridiem));
-  const sideX = mainWidth + SIDE_GAP;
-  const width = $derived(hasSide ? sideX + smallWidth : mainWidth);
-  // 초가 있으면 오전·오후 배지는 위, 초는 아래. 초가 없으면 배지를 숫자 밑줄에 맞춥니다.
-  const badgeY = $derived(secondDigits ? 0 : H - 30);
-  const isAfternoon = $derived(meridiem === '오후');
+  const ADVANCE = 72;
+  const DIGIT_WIDTH = 60;
+  const SMALL = 0.52;
+  const hourCount = $derived(hourDigits[0] == null ? 1 : 2);
+  const minuteX = $derived(hourCount * ADVANCE + 24);
+  const mainWidth = $derived(minuteX + ADVANCE + DIGIT_WIDTH);
+  const width = $derived(secondDigits ? mainWidth + 24 + (ADVANCE + DIGIT_WIDTH) * SMALL : mainWidth);
 </script>
 
 {#snippet digit(value: Digit, x: number, y: number, scale: number)}
-  <g transform="translate({x} {y}) scale({scale})">
-    {#each ORDER as key}
-      {@const s = SEGMENTS[key]}
-      <rect
-        class="clk-seg"
-        class:on={value != null && LIT[value].includes(key)}
-        x={s.x}
-        y={s.y}
-        width={s.w}
-        height={s.h}
-        rx={R}
-      />
-    {/each}
-  </g>
-{/snippet}
-
-<svg
-  class="clk-digital"
-  viewBox="-6 -6 {width + 12} {H + 12}"
-  preserveAspectRatio="xMidYMid meet"
-  aria-hidden="true"
->
-  {@render digit(hourDigits[0], 0, 0, 1)}
-  {@render digit(hourDigits[1], ADVANCE, 0, 1)}
-  <g class="clk-colon" data-phase={second % 2}>
-    <circle cx={colonX} cy={H * 0.3} r="6.5" />
-    <circle cx={colonX} cy={H * 0.7} r="6.5" />
-  </g>
-  {@render digit(minuteDigits[0], MINUTE_X, 0, 1)}
-  {@render digit(minuteDigits[1], MINUTE_X + ADVANCE, 0, 1)}
-  {#if meridiem}
-    <g class="clk-meridiem" transform="translate({sideX} {badgeY})">
-      <rect width={smallWidth} height="30" rx="15" />
-      <g transform="translate(15 15)">
-        {#if isAfternoon}
-          <path class="clk-moon" d="M3.5-7.2A7.6 7.6 0 1 0 7.4 4.1 6.1 6.1 0 1 1 3.5-7.2Z" />
-        {:else}
-          <circle class="clk-sun" r="4.2" />
-          {#each [0, 45, 90, 135, 180, 225, 270, 315] as angle}
-            <line class="clk-ray" x1="0" y1="-6.6" x2="0" y2="-8.4" transform="rotate({angle})" />
-          {/each}
+  {#if value !== null}
+    <g transform="translate({x} {y}) scale({scale})">
+      {#each ORDER as key}
+        {#if LIT[value].includes(key)}
+          <path d={SEGMENTS[key]} />
         {/if}
-      </g>
-      <text x={smallWidth - 8} y="15.5" text-anchor="end" dominant-baseline="central" textLength="36" lengthAdjust="spacingAndGlyphs">{meridiem}</text>
+      {/each}
     </g>
   {/if}
-  {#if secondDigits}
-    {@render digit(secondDigits[0], sideX, H - H * SMALL, SMALL)}
-    {@render digit(secondDigits[1], sideX + ADVANCE * SMALL, H - H * SMALL, SMALL)}
-  {/if}
-</svg>
+{/snippet}
+
+<div class="clk-digital" aria-hidden="true">
+  <div class="clk-readout">
+    {#if meridiem}<span class="clk-period">{meridiem}</span>{/if}
+    <svg class="clk-led" viewBox="0 0 {width} 112" preserveAspectRatio="xMidYMid meet">
+      {#if hourDigits[0] !== null}
+        {@render digit(hourDigits[0], 0, 0, 1)}
+      {/if}
+      {@render digit(hourDigits[1], hourDigits[0] === null ? 0 : ADVANCE, 0, 1)}
+      <circle cx={hourCount * ADVANCE + 12} cy="38" r="5" />
+      <circle cx={hourCount * ADVANCE + 12} cy="74" r="5" />
+      {@render digit(minuteDigits[0], minuteX, 0, 1)}
+      {@render digit(minuteDigits[1], minuteX + ADVANCE, 0, 1)}
+      {#if secondDigits}
+        <g class="clk-led-seconds">
+          <circle cx={mainWidth + 12} cy="78" r="3" />
+          <circle cx={mainWidth + 12} cy="99" r="3" />
+          {@render digit(secondDigits[0], mainWidth + 24, 112 * (1 - SMALL), SMALL)}
+          {@render digit(secondDigits[1], mainWidth + 24 + ADVANCE * SMALL, 112 * (1 - SMALL), SMALL)}
+        </g>
+      {/if}
+    </svg>
+  </div>
+  <div class="clk-digital-date">
+    <span class="clk-digital-day">{monthDay}</span>
+    <span class="clk-digital-weekday" data-weekend={weekend}>{weekday}</span>
+  </div>
+</div>

@@ -14,6 +14,7 @@ mod noticeboard_quit;
 mod classroom;
 mod app_update;
 mod clock_time;
+mod scores;
 
 // 모든 창이 함께 쓰는 저장 파일과 그 백업 파일 이름
 const STORE_FILE: &str = "tidy-task-config.json";
@@ -34,27 +35,63 @@ const MIN_GRAB_WIDTH: f64 = 80.0;
 const MIN_GRAB_HEIGHT: f64 = 24.0;
 const TITLE_STRIP_HEIGHT: f64 = 32.0;
 
-#[tauri::command]
-fn save_custom_font(app: tauri::AppHandle, name: String, bytes: Vec<u8>) -> Result<String, String> {
-    // 파일 이름에서 경로 부분을 모두 떼어 냅니다.
-    // 왜: "..\\..\\x.ttf" 같은 이름이 들어오면 앱 폴더 밖에 파일이 써질 수 있기 때문입니다.
-    let file_name = Path::new(&name)
+/// invoke 요청 본문의 바이트. 보통은 원본 바이트(Raw)이고, 예비 통로(postMessage)로 오면 JSON 숫자 배열입니다.
+/// tauri-plugin-fs의 writeFile과 같은 처리입니다(claude.md 5번 IPC 규칙).
+pub(crate) fn invoke_body_bytes(body: &tauri::ipc::InvokeBody) -> Option<Vec<u8>> {
+    match body {
+        tauri::ipc::InvokeBody::Raw(data) => Some(data.clone()),
+        tauri::ipc::InvokeBody::Json(serde_json::Value::Array(data)) => {
+            Some(data.iter().flat_map(|v| v.as_u64().map(|v| v as u8)).collect())
+        }
+        _ => None,
+    }
+}
+
+/// 파일 이름에서 경로 부분을 모두 떼어 냅니다.
+/// 왜: "..\\..\\x.ttf" 같은 이름이 들어오면 앱 폴더 밖에 파일이 써질 수 있기 때문입니다.
+fn font_file_name(name: &str) -> Result<String, String> {
+    Path::new(name)
         .file_name()
         .and_then(|n| n.to_str())
         .filter(|n| !n.is_empty() && *n != "." && *n != "..")
-        .ok_or_else(|| "올바르지 않은 폰트 파일 이름입니다.".to_string())?
-        .to_string();
+        .map(str::to_owned)
+        .ok_or_else(|| "올바르지 않은 폰트 파일 이름입니다.".to_string())
+}
 
+/// 헤더 값(JS encodeURIComponent)을 원래 글자로 되돌립니다. 헤더에는 ASCII만 넣을 수 있어 한글 이름을 이렇게 보냅니다.
+fn decode_header_component(value: &str) -> Option<String> {
+    percent_encoding::percent_decode_str(value)
+        .decode_utf8()
+        .ok()
+        .map(|text| text.into_owned())
+}
+
+/// 글꼴 파일은 요청 본문에 원본 바이트로, 파일 이름은 "name" 헤더로 받습니다.
+/// 왜: 예전에는 JSON 숫자 배열(원래 크기의 약 3.6배)로 받아 Tauri가 그 본문을 메인(UI) 스레드에서 해석했고,
+///   이 명령도 메인 스레드에서 파일을 써서, 몇 MB짜리 한글 글꼴을 등록하는 동안 모든 창이 멈췄습니다
+///   (5MB 기준 JS 변환 약 0.16초 + 메인 스레드 해석 약 0.2초). 이제 파일 쓰기도 작업 스레드에서 합니다.
+#[tauri::command]
+async fn save_custom_font(app: tauri::AppHandle, request: tauri::ipc::Request<'_>) -> Result<String, String> {
+    let name = request
+        .headers()
+        .get("name")
+        .and_then(|v| v.to_str().ok())
+        .and_then(decode_header_component)
+        .ok_or_else(|| "올바르지 않은 폰트 파일 이름입니다.".to_string())?;
+    let file_name = font_file_name(&name)?;
+    let bytes = invoke_body_bytes(request.body()).ok_or_else(|| "폰트 파일을 읽지 못했습니다.".to_string())?;
     let app_data_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
 
-    if !app_data_dir.exists() {
-        fs::create_dir_all(&app_data_dir).map_err(|e| e.to_string())?;
-    }
-
-    let font_path = app_data_dir.join(&file_name);
-    fs::write(&font_path, bytes).map_err(|e| e.to_string())?;
-
-    Ok(font_path.to_string_lossy().into_owned())
+    tauri::async_runtime::spawn_blocking(move || {
+        if !app_data_dir.exists() {
+            fs::create_dir_all(&app_data_dir).map_err(|e| e.to_string())?;
+        }
+        let font_path = app_data_dir.join(&file_name);
+        fs::write(&font_path, bytes).map_err(|e| e.to_string())?;
+        Ok(font_path.to_string_lossy().into_owned())
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
 
 // 파일을 읽어 "JSON 객체"로 해석되면 그 내용을 돌려줍니다. (읽기·해석 실패 시 None)
@@ -102,6 +139,8 @@ fn rotate_backups(dir: &Path) {
 //   이미 설치 직전 상태가 남아 있지 않습니다. 이 사본은 다음 업데이트 전까지 그대로 남습니다.
 // 왜 임시 파일을 거쳐 이름을 바꾸는가: 쓰는 도중에 앱이 끝나도 이전 사본이 반쯤 잘린 파일로 바뀌지 않게 합니다.
 pub(crate) fn snapshot_before_update(dir: &Path) {
+    // 점수판·온도계 파일도 같은 시점의 사본을 남깁니다(메모 파일이 없어도 따로 동작).
+    scores::snapshot_before_update(dir);
     let main = dir.join(STORE_FILE);
     let Ok(current) = fs::read(&main) else { return };
     // 손상된 파일로 멀쩡한 이전 사본을 덮지 않습니다.
@@ -280,7 +319,8 @@ pub fn run() {
             if window.label() == "roster" {
                 if let tauri::WindowEvent::DragDrop(tauri::DragDropEvent::Drop { paths, .. }) = event {
                     if paths.len() == 1 {
-                        if let Some(token) = classroom::import::register_drop(&paths[0]) { let _ = window.emit("classroom-file-dropped", token); }
+                        // 알림 내용: { token, name } — 파일 내용은 명단 창이 classroom_take_drop으로 원본 바이트로 가져갑니다.
+                        if let Some(notice) = classroom::import::register_drop(&paths[0]) { let _ = window.emit("classroom-file-dropped", notice); }
                     }
                 }
             }
@@ -332,7 +372,7 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         // 앱 안 자동 업데이트 (진행 순서는 app_update.rs가 쥡니다)
         .plugin(tauri_plugin_updater::Builder::new().build())
-        .invoke_handler(tauri::generate_handler![app_update::update_install, app_update::update_cancel, app_update::update_prepare_ack, tournament::tournament_read, tournament::tournament_write, picker::picker_read, picker::picker_write, noticeboard::noticeboard_execute, noticeboard_quit::noticeboard_quit_reply, noticeboard_quit::noticeboard_cancel_quit, save_custom_font, store_health, neis::neis_search_schools, neis::neis_meals, neis::neis_schedule, neis::meal_take_launch_token, analytics::analytics_track, classroom::classroom_quit_reply, classroom::classroom_read, classroom::classroom_execute, classroom::classroom_clear_history, classroom::import::classroom_take_drop, classroom::import::classroom_parse, classroom::import::classroom_cancel_parse, classroom::import::classroom_project, toolkit::toolkit_read, toolkit::toolkit_patch, toolkit::toolkit_open, toolkit::toolkit_set_enabled, toolkit::toolkit_center_if_requested, clock_time::clock_time_offset, clock_time::clock_wall_skew, tray::tray_request_done, tray::tray_take_pending_request])
+        .invoke_handler(tauri::generate_handler![app_update::update_install, app_update::update_cancel, app_update::update_prepare_ack, tournament::tournament_read, tournament::tournament_write, picker::picker_read, picker::picker_write, noticeboard::noticeboard_execute, noticeboard_quit::noticeboard_quit_reply, noticeboard_quit::noticeboard_cancel_quit, save_custom_font, store_health, neis::neis_search_schools, neis::neis_meals, neis::neis_schedule, neis::meal_take_launch_token, analytics::analytics_track, classroom::classroom_quit_reply, classroom::seating::seating_context, classroom::seating::seating_public, classroom::classroom_read, classroom::classroom_execute, classroom::classroom_clear_history, classroom::import::classroom_take_drop, classroom::import::classroom_parse, classroom::import::classroom_cancel_parse, classroom::import::classroom_project, toolkit::toolkit_read, toolkit::toolkit_patch, toolkit::toolkit_open, toolkit::toolkit_set_enabled, toolkit::toolkit_center_if_requested, clock_time::clock_time_offset, clock_time::clock_wall_skew, tray::tray_request_done, tray::tray_take_pending_request, scores::scores_read, scores::scores_write, classroom::intent::classroom_set_intent, classroom::intent::classroom_take_intent])
         .setup(|app| {
             // 어떤 창보다 먼저 저장 파일을 점검·백업합니다.
             protect_store_file(app.handle());
@@ -383,6 +423,33 @@ pub fn run() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn font_name_header_round_trips_korean_and_strips_paths() {
+        // JS encodeURIComponent("메이플스토리 Bold.ttf")가 보낸 값
+        let encoded = "%EB%A9%94%EC%9D%B4%ED%94%8C%EC%8A%A4%ED%86%A0%EB%A6%AC%20Bold.ttf";
+        assert_eq!(decode_header_component(encoded).as_deref(), Some("메이플스토리 Bold.ttf"));
+        assert_eq!(decode_header_component("100%25.ttf").as_deref(), Some("100%.ttf"));
+        // UTF-8이 아닌 값은 거절합니다.
+        assert!(decode_header_component("%FF").is_none());
+        // 경로를 떼어 내는 규칙은 예전과 같습니다.
+        assert_eq!(font_file_name("메이플스토리 Bold.ttf").unwrap(), "메이플스토리 Bold.ttf");
+        if cfg!(windows) {
+            assert_eq!(font_file_name("..\\..\\x.ttf").unwrap(), "x.ttf");
+        }
+        assert_eq!(font_file_name("a/b/c.otf").unwrap(), "c.otf");
+        assert!(font_file_name("..").is_err());
+        assert!(font_file_name("").is_err());
+    }
+
+    #[test]
+    fn invoke_body_accepts_raw_bytes_and_number_array() {
+        let raw = tauri::ipc::InvokeBody::Raw(vec![0, 7, 128, 255]);
+        assert_eq!(invoke_body_bytes(&raw), Some(vec![0, 7, 128, 255]));
+        let json = tauri::ipc::InvokeBody::Json(serde_json::json!([0, 7, 128, 255]));
+        assert_eq!(invoke_body_bytes(&json), Some(vec![0, 7, 128, 255]));
+        assert_eq!(invoke_body_bytes(&tauri::ipc::InvokeBody::Json(serde_json::json!({ "bytes": [1] }))), None);
+    }
 
     // 실제 사용자 환경: 4K 주 모니터(배율 2) + FHD 보조 모니터(배율 1), 물리 픽셀 작업영역
     const PRIMARY_WORK: PixelRect = (0, 0, 3840, 2064);

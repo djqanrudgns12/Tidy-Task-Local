@@ -1,5 +1,7 @@
 pub mod import;
+pub mod intent;
 pub mod model;
+pub mod seating;
 use model::*;
 use rusqlite::{params, Connection};
 use serde_json::{json, Value};
@@ -51,7 +53,7 @@ fn init(c: &Connection) -> Result<(), String> {
     let version: i64 = c
         .query_row("PRAGMA user_version", [], |r| r.get(0))
         .map_err(storage)?;
-    if version > 1 {
+    if version > 2 {
         return Err("UNSUPPORTED_SCHEMA: 더 최신 버전에서 만든 학급 자료예요.".into());
     }
     c.execute_batch("PRAGMA foreign_keys=ON; PRAGMA journal_mode=DELETE; PRAGMA synchronous=FULL;")
@@ -65,6 +67,9 @@ fn init(c: &Connection) -> Result<(), String> {
  INSERT INTO state VALUES(1,0,NULL);
  CREATE TABLE operations(id TEXT PRIMARY KEY,revision INTEGER NOT NULL,created INTEGER NOT NULL DEFAULT(unixepoch()));
  PRAGMA user_version=1; COMMIT;").map_err(storage)?;
+    }
+    if version < 2 {
+        c.execute_batch("BEGIN IMMEDIATE; CREATE TABLE IF NOT EXISTS seating_documents(class_id TEXT PRIMARY KEY REFERENCES classes(id) ON DELETE CASCADE, document TEXT NOT NULL); PRAGMA user_version=2; COMMIT;").map_err(storage)?;
     }
     Ok(())
 }
@@ -96,6 +101,7 @@ fn read(c: &Connection) -> Result<Snapshot, String> {
         revision,
         default_class_id,
         classes,
+        seating: Default::default(),
     };
     for cl in &mut out.classes {
         let mut p=c.prepare("SELECT id,number,name,gender,group_id FROM students WHERE class_id=? ORDER BY number").map_err(storage)?;
@@ -126,6 +132,10 @@ fn read(c: &Connection) -> Result<Snapshot, String> {
             .collect::<Result<_, _>>()
             .map_err(storage)?;
     }
+    let mut stmt = c.prepare("SELECT class_id,document FROM seating_documents").map_err(storage)?;
+    let rows = stmt.query_map([], |r| Ok((r.get::<_,String>(0)?, r.get::<_,String>(1)?))).map_err(storage)?;
+    for row in rows { let (id, doc) = row.map_err(storage)?; out.seating.insert(id, serde_json::from_str(&doc).map_err(storage)?); }
+    seating::validate_all(&out)?;
     validate(&out)?;
     Ok(out)
 }
@@ -169,6 +179,10 @@ fn persist(c: &Connection, old: &Snapshot, s: &Snapshot) -> Result<(), String> {
                 .map_err(storage)?;
         }
     }
+    for (class_id, document) in &s.seating {
+        c.execute("INSERT INTO seating_documents VALUES(?1,?2) ON CONFLICT(class_id) DO UPDATE SET document=excluded.document", params![class_id, document.to_string()]).map_err(storage)?;
+    }
+    for class_id in old.seating.keys() { if !s.seating.contains_key(class_id) { c.execute("DELETE FROM seating_documents WHERE class_id=?", [class_id]).map_err(storage)?; } }
     c.execute(
         "UPDATE state SET revision=?1,default_class_id=?2 WHERE id=1",
         params![s.revision, s.default_class_id],
@@ -271,7 +285,8 @@ fn transact(
     Ok(next)
 }
 #[tauri::command]
-pub async fn classroom_read(app: tauri::AppHandle) -> Result<Snapshot, String> {
+pub async fn classroom_read(app: tauri::AppHandle, window: tauri::WebviewWindow) -> Result<Snapshot, String> {
+    if window.label() == "seating-display" { return Err("공개 화면에서는 학급 원본을 읽을 수 없어요.".into()); }
     tauri::async_runtime::spawn_blocking(move || {
         let _l = LOCK.lock().map_err(storage)?;
         read(&connect(&app)?)
@@ -282,10 +297,12 @@ pub async fn classroom_read(app: tauri::AppHandle) -> Result<Snapshot, String> {
 #[tauri::command]
 pub async fn classroom_execute(
     app: tauri::AppHandle,
+    window: tauri::WebviewWindow,
     operation_id: String,
     expected_revision: u64,
     command: Command,
 ) -> Result<Value, String> {
+    if window.label() == "seating-display" { return Err("공개 화면에서는 편집할 수 없어요.".into()); }
     tauri::async_runtime::spawn_blocking(move || {
         let _l = LOCK.lock().map_err(storage)?;
         let mut h = HISTORY.lock().map_err(storage)?;
@@ -324,7 +341,7 @@ pub async fn classroom_execute(
     .map_err(storage)?
 }
 fn recover_file(path: &std::path::Path, backup: Backup, revision: u64) -> Result<Snapshot, String> {
-    if backup.format != "tidy-classroom" || backup.schema_version != 1 {
+    if backup.format != "tidy-classroom" || ![1, 2].contains(&backup.schema_version) {
         return Err("UNSUPPORTED_SCHEMA: 지원하지 않는 백업이에요.".into());
     }
     validate(&backup.data)?;

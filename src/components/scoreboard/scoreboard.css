@@ -1,0 +1,1231 @@
+/* 점수판 전용 스타일. 공통 .tk-* 규칙은 건드리지 않고 .sb-* 접두어만 씁니다.
+   모든 글자 요소는 한 줄(nowrap) — 좁아지면 줄바꿈 대신 도구줄 접기·말줄임을 씁니다(PRD 4.4).
+   light-dark()는 쓰지 않습니다(배포 빌드 압축기가 값을 비우는 문제). 다크 모드는 테마 변수(--tk-*)가 이미 바꿔 줍니다. */
+
+.sb-app {
+  position: relative;
+  height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--tk-panel);
+  color: var(--tk-ink);
+  border: 1px solid var(--tk-line);
+  border-radius: 18px;
+  user-select: none;
+}
+.sb-app button {
+  white-space: nowrap;
+}
+
+/* ── 제목줄 ── */
+.sb-titlebar {
+  flex: none;
+  height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 0 10px 0 14px;
+  border-bottom: 1px solid var(--tk-line);
+}
+.sb-brand {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-width: 0;
+  white-space: nowrap;
+}
+.sb-brand strong {
+  flex: none;
+  font-size: 14px;
+}
+.sb-divider {
+  flex: none;
+  width: 1px;
+  height: 18px;
+  background: var(--tk-line);
+}
+.sb-context {
+  overflow: hidden;
+  max-width: 260px;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--tk-muted);
+  text-overflow: ellipsis;
+}
+.sb-window-actions {
+  display: flex;
+  flex: none;
+  gap: 4px;
+}
+.sb-window-actions button,
+.sb-icon-btn {
+  display: grid;
+  place-items: center;
+  width: 33px;
+  height: 33px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--tk-muted);
+}
+.sb-window-actions button:hover,
+.sb-icon-btn:hover:not(:disabled) {
+  background: var(--tk-bg);
+}
+.sb-window-actions button.active {
+  color: var(--tk-accent);
+  background: var(--tk-soft);
+}
+
+/* ── 도구줄 ── */
+.sb-toolbar {
+  flex: none;
+  height: 56px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 14px;
+  border-bottom: 1px solid color-mix(in srgb, var(--tk-line) 70%, transparent);
+  white-space: nowrap;
+  transition: margin-top 0.25s ease, opacity 0.2s ease;
+}
+/* 전체화면에서 마우스가 멈추면 도구줄을 숨겨 카드 판을 키웁니다. */
+.sb-app.idle .sb-toolbar,
+.sb-app.idle .sb-group-chips {
+  margin-top: -57px;
+  opacity: 0;
+  pointer-events: none;
+}
+.sb-steps {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 3px;
+  padding: 3px;
+  border-radius: 999px;
+  background: var(--tk-soft);
+}
+.sb-steps-label {
+  padding: 0 6px 0 8px;
+  color: var(--tk-muted);
+  font-size: 12.5px;
+  font-weight: 700;
+}
+.sb-steps button {
+  min-width: 36px;
+  height: 32px;
+  padding: 0 9px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--tk-ink);
+  font-size: 15px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+.sb-steps button:hover:not(.active) {
+  background: color-mix(in srgb, var(--tk-panel) 70%, transparent);
+}
+.sb-steps button.active {
+  background: var(--tk-action);
+  color: var(--tk-on-action);
+  box-shadow: 0 2px 6px color-mix(in srgb, var(--tk-action) 35%, transparent);
+}
+.sb-steps .sb-step-edit {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--tk-muted);
+  font-size: 12.5px;
+}
+.sb-step-input {
+  width: 58px;
+  height: 32px;
+  padding: 0 8px;
+  border: 2px solid var(--tk-accent);
+  border-radius: 999px;
+  background: var(--tk-panel);
+  color: var(--tk-ink);
+  font-weight: 800;
+  text-align: center;
+}
+.sb-center {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-width: 0;
+}
+.sb-right {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 6px;
+}
+.sb-sep {
+  width: 1px;
+  height: 24px;
+  margin: 0 2px;
+  background: var(--tk-line);
+}
+.sb-tool-btn {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 36px;
+  padding: 0 12px;
+  border: 1px solid var(--tk-line);
+  border-radius: 11px;
+  background: var(--tk-panel);
+  color: var(--tk-ink);
+  font-size: 13.5px;
+  font-weight: 700;
+}
+.sb-tool-btn:hover:not(:disabled) {
+  background: var(--tk-bg);
+}
+.sb-tool-btn:disabled {
+  opacity: 0.45;
+}
+.sb-tool-btn.icon {
+  width: 36px;
+  padding: 0;
+}
+.sb-tool-btn.active {
+  border-color: var(--tk-accent);
+  color: var(--tk-accent);
+  background: var(--tk-soft);
+}
+.sb-tool-btn.primary {
+  border-color: transparent;
+  background: var(--tk-action);
+  color: var(--tk-on-action);
+}
+.sb-tool-btn.primary:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--tk-action) 88%, #000);
+}
+.sb-tool-btn.ghost {
+  border-color: transparent;
+  background: transparent;
+  color: var(--tk-muted);
+}
+.sb-tool-btn.big {
+  height: 46px;
+  padding: 0 20px;
+  border-radius: 14px;
+  font-size: 15.5px;
+}
+.sb-tool-btn.big small {
+  margin-left: 4px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: color-mix(in srgb, #fff 22%, transparent);
+  font-size: 12px;
+}
+/* 되돌리기(자주)와 초기화(위험)는 모양부터 다르게 — 초기화는 윤곽선만 있는 빨간 글자 */
+.sb-tool-btn.outline-danger,
+.sb-tool-btn.danger {
+  border-color: color-mix(in srgb, var(--tk-danger) 45%, var(--tk-line));
+  color: var(--tk-danger);
+  background: transparent;
+}
+.sb-tool-btn.danger-fill {
+  border-color: transparent;
+  background: var(--tk-danger);
+  color: #fff;
+}
+.sb-count {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 4px 3px 12px;
+  border-radius: 999px;
+  background: var(--tk-soft);
+  font-weight: 700;
+}
+.sb-count b {
+  min-width: 28px;
+  font-size: 20px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+.sb-round {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border: 1px solid var(--tk-line);
+  border-radius: 50%;
+  background: var(--tk-panel);
+  color: var(--tk-ink);
+}
+.sb-round:disabled {
+  opacity: 0.4;
+}
+.sb-selectbar {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.sb-count-label {
+  padding: 0 6px;
+  color: var(--tk-muted);
+  font-weight: 700;
+}
+.sb-count-label b {
+  color: var(--tk-accent);
+  font-size: 18px;
+}
+.sb-group-chips {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 14px;
+  overflow-x: auto;
+  scrollbar-width: thin;
+  border-bottom: 1px solid color-mix(in srgb, var(--tk-line) 70%, transparent);
+  white-space: nowrap;
+  transition: margin-top 0.25s ease, opacity 0.2s ease;
+}
+.sb-group-chips > span {
+  flex: none;
+  color: var(--tk-muted);
+  font-size: 12.5px;
+  font-weight: 700;
+}
+.sb-chip {
+  flex: none;
+  height: 30px;
+  padding: 0 12px;
+  border: 1px solid var(--tk-line);
+  border-radius: 999px;
+  background: var(--tk-panel);
+  color: var(--tk-ink);
+  font-size: 13px;
+  font-weight: 700;
+}
+.sb-chip.on {
+  border-color: transparent;
+  background: var(--tk-action);
+  color: var(--tk-on-action);
+}
+.sb-chip.mini {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  padding: 0;
+}
+
+/* ── 펼침 메뉴 ── */
+.sb-menu {
+  position: relative;
+  display: inline-flex;
+  min-width: 0;
+}
+.sb-menu-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+.sb-menu-trigger.sb-board-trigger {
+  height: 32px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--tk-muted);
+}
+.sb-menu-trigger.sb-board-trigger:hover {
+  background: var(--tk-bg);
+}
+.sb-menu-list {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 40;
+  min-width: 220px;
+  max-height: 60dvh;
+  padding: 6px;
+  overflow-y: auto;
+  border: 1px solid var(--tk-line);
+  border-radius: 14px;
+  background: var(--tk-panel);
+  box-shadow: 0 14px 34px color-mix(in srgb, var(--tk-ink) 16%, transparent);
+}
+.sb-menu-list.right {
+  right: 0;
+  left: auto;
+}
+.sb-menu-list button {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  min-height: 38px;
+  padding: 6px 10px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--tk-ink);
+  font-size: 14px;
+  text-align: left;
+}
+.sb-menu-list button:hover:not(:disabled),
+.sb-menu-list button:focus-visible {
+  background: var(--tk-bg);
+}
+.sb-menu-list button:disabled {
+  opacity: 0.45;
+}
+.sb-menu-list button.checked {
+  font-weight: 800;
+  color: var(--tk-accent);
+}
+.sb-menu-list button.danger {
+  color: var(--tk-danger);
+}
+.sb-menu-list small {
+  color: var(--tk-muted);
+  font-size: 12px;
+}
+.sb-menu-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.sb-menu-list hr {
+  height: 1px;
+  margin: 5px 4px;
+  border: 0;
+  background: var(--tk-line);
+}
+
+/* ── 카드 판 ── */
+.sb-body-wrap {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+}
+.sb-board {
+  flex: 1;
+  min-width: 0;
+  position: relative;
+  padding: 14px;
+  overflow: hidden;
+  background-color: var(--tk-soft);
+  background-image: radial-gradient(color-mix(in srgb, var(--tk-line) 55%, transparent) 1.1px, transparent 1.6px);
+  background-size: 20px 20px;
+}
+.sb-board.scroll {
+  overflow-y: auto;
+}
+.sb-grid {
+  display: grid;
+  grid-template-columns: repeat(var(--cols), var(--cw));
+  grid-auto-rows: var(--ch);
+  gap: 12px;
+  justify-content: center;
+  align-content: center;
+  min-height: 100%;
+}
+.sb-cell {
+  min-width: 0;
+  min-height: 0;
+}
+.sb-clusters {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 12px;
+  min-height: 100%;
+}
+.sb-cluster {
+  display: flex;
+  align-items: stretch;
+  gap: 12px;
+}
+.sb-cluster .sb-grid {
+  min-height: 0;
+  justify-content: start;
+}
+.sb-cluster-name {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 84px;
+  padding: 6px;
+  overflow: hidden;
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--tk-panel) 70%, transparent);
+  color: var(--tk-muted);
+  font-weight: 800;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ── 카드 ── */
+.sb-card {
+  --pc: var(--tk-accent);
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap);
+  width: 100%;
+  height: 100%;
+  padding: calc(var(--pad) + 4px) var(--pad) var(--pad);
+  overflow: hidden;
+  border: 1.5px solid color-mix(in srgb, var(--pc) 40%, var(--tk-line));
+  border-radius: 18px;
+  background: color-mix(in srgb, var(--pc) 15%, var(--tk-panel));
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, #fff 55%, transparent),
+    0 2px 0 color-mix(in srgb, var(--pc) 30%, var(--tk-line)),
+    0 8px 18px color-mix(in srgb, var(--tk-ink) 7%, transparent);
+  transform-origin: 50% 60%;
+  outline: none;
+}
+/* 카드 윗변 색 띠 — 멀리서도 색으로 카드를 구분합니다. */
+.sb-card::before {
+  content: '';
+  position: absolute;
+  inset: 0 0 auto;
+  height: 6px;
+  background: var(--pc);
+  opacity: 0.85;
+}
+.sb-card[data-density='wide']::before {
+  height: 9px;
+}
+.sb-card:not(.colorize) {
+  --pc: var(--tk-accent);
+  background: var(--tk-panel);
+}
+.sb-app[data-kind='group'] .sb-card.colorize {
+  background: color-mix(in srgb, var(--pc) 22%, var(--tk-panel));
+}
+.sb-app[data-kind='group'] .sb-card.colorize::before {
+  height: 12px;
+}
+.sb-card:focus-visible {
+  box-shadow: 0 0 0 3px var(--tk-accent), 0 8px 18px color-mix(in srgb, var(--tk-ink) 10%, transparent);
+}
+.sb-card.flash {
+  box-shadow: 0 0 0 3px var(--pc);
+}
+.sb-card.select-mode {
+  cursor: pointer;
+}
+.sb-card.selected {
+  box-shadow: 0 0 0 3px var(--tk-action), 0 8px 18px color-mix(in srgb, var(--tk-action) 22%, transparent);
+  background: color-mix(in srgb, var(--tk-action) 12%, var(--tk-panel));
+}
+.sb-card-head {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  height: calc(var(--name-size) * 1.3);
+  white-space: nowrap;
+}
+.sb-name {
+  min-width: 0;
+  overflow: hidden;
+  font-size: var(--name-size);
+  font-weight: 800;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sb-num {
+  flex: none;
+  color: var(--tk-muted);
+  font-size: calc(var(--name-size) * 0.72);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.sb-name-input,
+.sb-score-input {
+  min-width: 0;
+  width: 100%;
+  border: 2px solid var(--tk-accent);
+  border-radius: 9px;
+  background: var(--tk-panel);
+  color: var(--tk-ink);
+  font-weight: 800;
+  user-select: text;
+}
+.sb-name-input {
+  height: calc(var(--name-size) * 1.3);
+  padding: 0 6px;
+  font-size: calc(var(--name-size) * 0.85);
+}
+.sb-score-input {
+  max-width: 90%;
+  height: 1.15em;
+  font-size: calc(var(--score-size) * 0.7);
+  text-align: center;
+}
+.sb-key {
+  flex: none;
+  margin-left: auto;
+  padding: 1px 6px;
+  border: 1px solid var(--tk-line);
+  border-radius: 6px;
+  background: var(--tk-panel);
+  color: var(--tk-muted);
+  font-size: 12px;
+  font-family: inherit;
+}
+.sb-check {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  margin-left: auto;
+  border: 2px solid color-mix(in srgb, var(--tk-action) 60%, var(--tk-line));
+  border-radius: 8px;
+  background: var(--tk-panel);
+  color: var(--tk-on-action);
+}
+.sb-card.selected .sb-check {
+  border-color: var(--tk-action);
+  background: var(--tk-action);
+}
+.sb-sub {
+  align-self: flex-start;
+  flex: none;
+  max-width: 100%;
+  padding: 1px 8px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--pc) 22%, var(--tk-panel));
+  color: var(--tk-muted);
+  font-size: 12px;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sb-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  align-items: stretch;
+  gap: var(--gap);
+}
+.sb-score {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  display: grid;
+  place-items: center;
+  color: var(--tk-ink);
+  font-size: var(--score-size);
+  font-weight: 900;
+  letter-spacing: -0.02em;
+  line-height: 1;
+}
+.sb-score.negative {
+  color: color-mix(in srgb, var(--tk-ink) 78%, #3563c9);
+}
+/* "+5" 칩: 오를 때 위로 떠오르고, 내릴 때 아래로 떨어지며 사라집니다. */
+.sb-float {
+  position: absolute;
+  top: 8%;
+  right: 6%;
+  padding: 0.05em 0.35em;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--pc) 40%, var(--tk-panel));
+  color: var(--tk-ink);
+  font-size: max(14px, calc(var(--score-size) * 0.22));
+  font-weight: 900;
+  letter-spacing: 0;
+  pointer-events: none;
+  animation: sb-float-up 700ms ease-out forwards;
+}
+.sb-float.down {
+  top: auto;
+  bottom: 8%;
+  background: color-mix(in srgb, var(--tk-muted) 20%, var(--tk-panel));
+  color: var(--tk-muted);
+  animation-name: sb-float-down;
+}
+@keyframes sb-float-up {
+  0% { transform: translateY(40%) scale(0.7); opacity: 0; }
+  25% { transform: translateY(0) scale(1.05); opacity: 1; }
+  100% { transform: translateY(-120%) scale(1); opacity: 0; }
+}
+@keyframes sb-float-down {
+  0% { transform: translateY(-40%) scale(0.7); opacity: 0; }
+  25% { transform: translateY(0) scale(1); opacity: 1; }
+  100% { transform: translateY(110%); opacity: 0; }
+}
+.sb-app.reduced .sb-float {
+  display: none;
+}
+/* 버튼: 아래 한 줄(넓은 카드) 또는 점수 양옆(좁은 카드). +는 더 크게·색을 채워 손이 먼저 가게 합니다. */
+.sb-card-actions {
+  flex: none;
+  display: flex;
+  gap: var(--gap);
+  height: var(--btn-h);
+}
+.sb-card-actions .sb-minus {
+  flex: 2;
+}
+.sb-card-actions .sb-plus {
+  flex: 3;
+}
+.sb-body .sb-minus,
+.sb-body .sb-plus {
+  flex: none;
+  width: var(--btn-w);
+}
+.sb-minus,
+.sb-plus {
+  min-width: 0;
+  padding: 0 4px;
+  border-radius: 12px;
+  font-size: clamp(13px, calc(var(--btn-h) * 0.42), 22px);
+  font-weight: 900;
+  font-variant-numeric: tabular-nums;
+  overflow: hidden;
+  text-overflow: clip;
+}
+.sb-minus {
+  border: 1px solid color-mix(in srgb, var(--pc) 35%, var(--tk-line));
+  background: color-mix(in srgb, var(--tk-panel) 75%, transparent);
+  color: var(--tk-muted);
+}
+.sb-plus {
+  border: 1px solid color-mix(in srgb, var(--pc) 60%, transparent);
+  background: color-mix(in srgb, var(--pc) 52%, var(--tk-panel));
+  color: var(--tk-ink);
+  box-shadow: inset 0 -2px 0 color-mix(in srgb, var(--pc) 45%, #000 8%);
+}
+.sb-minus:hover {
+  background: var(--tk-panel);
+}
+.sb-plus:hover {
+  background: color-mix(in srgb, var(--pc) 64%, var(--tk-panel));
+}
+.sb-minus:active,
+.sb-plus:active {
+  transform: translateY(1px);
+}
+
+/* ── 설정 서랍 ── */
+.sb-drawer {
+  flex: none;
+  width: 340px;
+  max-width: 60%;
+  overflow-y: auto;
+  border-left: 1px solid var(--tk-line);
+  background: var(--tk-panel);
+  animation: sb-drawer-in 0.22s ease-out;
+}
+@keyframes sb-drawer-in {
+  from { transform: translateX(24px); opacity: 0; }
+}
+.sb-drawer-head {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 10px 10px 16px;
+  border-bottom: 1px solid var(--tk-line);
+  background: var(--tk-panel);
+}
+.sb-drawer section {
+  padding: 12px 16px 14px;
+  border-bottom: 1px solid color-mix(in srgb, var(--tk-line) 70%, transparent);
+}
+.sb-drawer h3 {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin: 0 0 8px;
+  font-size: 13px;
+  color: var(--tk-muted);
+  white-space: nowrap;
+}
+.sb-drawer h3 small {
+  overflow: hidden;
+  font-weight: 400;
+  text-overflow: ellipsis;
+}
+.sb-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 44px;
+}
+.sb-row > span {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.sb-row b {
+  font-size: 14px;
+  white-space: nowrap;
+}
+.sb-row small {
+  overflow: hidden;
+  color: var(--tk-muted);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sb-volume input {
+  flex: 1;
+  accent-color: var(--tk-action);
+}
+.sb-volume output {
+  width: 30px;
+  color: var(--tk-muted);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+.sb-volume.off {
+  opacity: 0.5;
+}
+.sb-field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin-bottom: 10px;
+  font-size: 13px;
+  font-weight: 700;
+}
+.sb-field > span small {
+  color: var(--tk-muted);
+  font-weight: 400;
+}
+.sb-field.inline {
+  flex-direction: row;
+  align-items: center;
+  gap: 10px;
+}
+.sb-field input,
+.sb-field textarea,
+.sb-edit-row input,
+.sb-add-row input {
+  min-width: 0;
+  padding: 8px 10px;
+  border: 1px solid var(--tk-line);
+  border-radius: 10px;
+  background: var(--tk-panel);
+  color: var(--tk-ink);
+  font-size: 14px;
+  user-select: text;
+}
+.sb-field small {
+  color: var(--tk-muted);
+  font-size: 12px;
+  font-weight: 400;
+}
+.sb-num-input {
+  width: 110px;
+}
+.sb-edit-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.sb-edit-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.sb-edit-row input {
+  flex: 1;
+}
+.sb-grip {
+  display: grid;
+  place-items: center;
+  color: var(--tk-muted);
+  cursor: grab;
+}
+.sb-swatch-btn {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border: 1px solid var(--tk-line);
+  border-radius: 10px;
+  background: var(--tk-panel);
+}
+.sb-swatch-btn.dot {
+  width: 26px;
+  height: 26px;
+  border: 2px solid var(--tk-panel);
+  border-radius: 50%;
+  background: var(--sw);
+  box-shadow: 0 0 0 1px var(--tk-line);
+}
+.sb-picker {
+  margin: 6px 0 4px;
+  padding: 8px;
+  border-radius: 12px;
+  background: var(--tk-soft);
+}
+.sb-swatches,
+.sb-symbols {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 6px;
+}
+.sb-symbols {
+  margin-top: 8px;
+}
+.sb-swatches button {
+  aspect-ratio: 1;
+  border: 2px solid var(--tk-panel);
+  border-radius: 50%;
+  background: var(--sw);
+  box-shadow: 0 0 0 1px var(--tk-line);
+}
+.sb-symbols button {
+  display: grid;
+  place-items: center;
+  aspect-ratio: 1;
+  border: 1px solid var(--tk-line);
+  border-radius: 10px;
+  background: var(--tk-panel);
+}
+.sb-swatches button[aria-checked='true'],
+.sb-symbols button[aria-checked='true'] {
+  box-shadow: 0 0 0 3px var(--tk-action);
+}
+.sb-add-row {
+  display: flex;
+  gap: 6px;
+  margin-top: 8px;
+}
+.sb-add-row input {
+  flex: 1;
+}
+.sb-danger-zone {
+  display: flex;
+  gap: 8px;
+}
+
+/* ── 빈 화면·안내 ── */
+.sb-loading {
+  margin: 0;
+  padding: 40px;
+  color: var(--tk-muted);
+  text-align: center;
+}
+.sb-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  height: 100%;
+  padding: 20px;
+  color: var(--tk-ink);
+  text-align: center;
+}
+.sb-empty h2 {
+  margin: 4px 0 0;
+  font-size: 22px;
+}
+.sb-empty p {
+  margin: 0;
+  color: var(--tk-muted);
+}
+.sb-empty-art {
+  display: grid;
+  place-items: center;
+  width: 96px;
+  height: 96px;
+  border-radius: 30px;
+  background: var(--tk-panel);
+  box-shadow: 0 8px 22px color-mix(in srgb, var(--tk-ink) 8%, transparent);
+}
+.sb-empty-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+}
+.sb-steps-guide {
+  display: flex;
+  gap: 8px;
+  margin: 6px 0 0;
+  padding: 0;
+  list-style: none;
+  white-space: nowrap;
+}
+.sb-steps-guide li {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px 6px 6px;
+  border-radius: 999px;
+  background: var(--tk-panel);
+  font-size: 13.5px;
+  font-weight: 700;
+}
+.sb-steps-guide b {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--tk-action);
+  color: var(--tk-on-action);
+  font-size: 12px;
+}
+.sb-link {
+  margin-top: 4px;
+  border: 0;
+  background: transparent;
+  color: var(--tk-muted);
+  font-size: 13px;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+/* ── 커스텀 만들기 ── */
+.sb-create {
+  display: grid;
+  grid-template-columns: minmax(300px, 1fr) minmax(220px, 1fr);
+  gap: 18px;
+  height: 100%;
+  min-height: 0;
+}
+.sb-create-form,
+.sb-create-preview {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  padding: 18px;
+  border-radius: 20px;
+  background: var(--tk-panel);
+  box-shadow: 0 8px 22px color-mix(in srgb, var(--tk-ink) 7%, transparent);
+}
+.sb-create-form {
+  overflow-y: auto;
+}
+.sb-create-form h2 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 14px;
+  font-size: 19px;
+}
+.sb-field.grow {
+  flex: 1;
+  min-height: 150px;
+}
+.sb-field.grow textarea {
+  flex: 1;
+  min-height: 120px;
+  resize: none;
+  line-height: 1.55;
+}
+.sb-templates {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+.sb-templates > span:first-child {
+  color: var(--tk-muted);
+  font-size: 12.5px;
+  font-weight: 700;
+}
+.sb-chip-group {
+  display: inline-flex;
+  gap: 2px;
+}
+.sb-inline-confirm {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 0 10px;
+  font-size: 13px;
+}
+.sb-issue {
+  margin: 0 0 6px;
+  color: var(--tk-muted);
+  font-size: 12.5px;
+}
+.sb-issue.error {
+  color: var(--tk-danger);
+  font-weight: 700;
+}
+.sb-create-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: auto;
+  padding-top: 10px;
+}
+.sb-preview-title {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin: 0 0 10px;
+  font-weight: 800;
+}
+.sb-preview-title small {
+  color: var(--tk-muted);
+  font-weight: 400;
+}
+.sb-preview-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+  gap: 8px;
+  overflow-y: auto;
+}
+.sb-preview-card {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 10px;
+  border-top: 5px solid var(--pc);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--pc) 15%, var(--tk-panel));
+  animation: sb-pop-in 0.22s ease-out;
+}
+.sb-preview-card span {
+  overflow: hidden;
+  font-size: 13px;
+  font-weight: 800;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sb-preview-card b {
+  font-size: 26px;
+  font-variant-numeric: tabular-nums;
+}
+@keyframes sb-pop-in {
+  from { transform: scale(0.85); opacity: 0; }
+}
+
+/* ── 확인·알림 ── */
+.sb-confirm {
+  position: absolute;
+  top: 112px;
+  right: 16px;
+  z-index: 30;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-width: min(360px, calc(100% - 32px));
+  padding: 14px 16px;
+  border: 1px solid var(--tk-line);
+  border-radius: 16px;
+  background: var(--tk-panel);
+  box-shadow: 0 16px 36px color-mix(in srgb, var(--tk-ink) 18%, transparent);
+  animation: sb-pop-in 0.18s ease-out;
+}
+.sb-confirm p {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+}
+.sb-confirm small {
+  color: var(--tk-muted);
+}
+.sb-confirm > div {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+.sb-toast {
+  position: absolute;
+  bottom: 16px;
+  left: 16px;
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  max-width: calc(100% - 32px);
+  padding: 8px 8px 8px 16px;
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--tk-ink) 88%, transparent);
+  color: var(--tk-panel);
+  font-size: 14px;
+  font-weight: 700;
+  white-space: nowrap;
+  box-shadow: 0 10px 26px color-mix(in srgb, var(--tk-ink) 25%, transparent);
+  animation: sb-pop-in 0.2s ease-out;
+}
+.sb-toast span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.sb-toast button {
+  height: 30px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--tk-panel) 22%, transparent);
+  color: var(--tk-panel);
+  font-weight: 800;
+}
+.sb-toast .sb-toast-x {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  padding: 0;
+  background: transparent;
+}
+.sb-error {
+  position: absolute;
+  bottom: 16px;
+  right: 16px;
+  z-index: 31;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: calc(100% - 32px);
+  margin: 0;
+  padding: 8px 8px 8px 14px;
+  border-radius: 12px;
+  background: var(--tk-danger-soft);
+  color: var(--tk-danger);
+  font-size: 13.5px;
+  font-weight: 700;
+}
+.sb-error button {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: inherit;
+}
+
+@media (max-width: 760px) {
+  .sb-create {
+    grid-template-columns: 1fr;
+  }
+  .sb-create-preview {
+    display: none;
+  }
+}

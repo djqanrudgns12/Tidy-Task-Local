@@ -3,14 +3,16 @@ import { openUrl } from '@tauri-apps/plugin-opener';
 import { PLATFORM_TOOLS } from './registry.js';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { WebviewWindow } from '@tauri-apps/api/webviewWindow';
-import { PhysicalPosition, LogicalSize } from '@tauri-apps/api/dpi';
+import { PhysicalPosition, PhysicalSize, LogicalSize } from '@tauri-apps/api/dpi';
 import { native } from './store.js';
-import { getMonitorGeometries } from '../windows/windowRegistry.js';
+import { getMonitorGeometries, ensureWindowOnScreen } from '../windows/windowRegistry.js';
+import { menuPlacement } from './menuPlacement.js';
 import { fitToolbarPosition, centerToolbarPosition } from './toolbarPlacement.js';
 /** @param {string} role */
 export async function openTool(role) {
   if (native) return invoke('toolkit_open', { role });
-  window.open(`/?toolkit-preview=${role}`, '_blank', role === 'picker' ? 'width=1440,height=920' : role === 'dice' ? 'width=960,height=720' : 'width=960,height=680');
+  const size = role === 'picker' || role === 'vote' || role.startsWith('scoreboard-') ? 'width=1440,height=888' : role === 'vote-teacher' ? 'width=440,height=760' : role === 'thermometer' ? 'width=880,height=888' : role === 'dice' ? 'width=960,height=720' : 'width=960,height=680';
+  window.open(`/?toolkit-preview=${role}`, '_blank', size);
 }
 /** @param {string} id */
 export async function openPlatform(id) {
@@ -25,11 +27,13 @@ export async function closeWindow() {
 }
 const MENU_WINDOWS = {
   timer: { label: 'toolkit-menu', width: 244, height: 250 },
+  // 점수판 드롭다운 — 항목 3개(아이콘·이름·한 줄 설명). 크기는 Rust toolkit.rs와 같습니다.
+  scoreboard: { label: 'toolkit-scoreboard-menu', width: 264, height: 222 },
   external: { label: 'toolkit-external-menu', width: 244, height: 162 },
   // 우클릭 메뉴 — 높이는 ToolkitMenu의 context 항목 높이(CSS)와 맞춘 값입니다.
-  context: { label: 'toolkit-context-menu', width: 224, height: 226 },
+  context: { label: 'toolkit-context-menu', width: 340, height: 640 },
 };
-/** @param {'timer'|'external'|'context'} [kind] */
+/** @param {'timer'|'scoreboard'|'external'|'context'} [kind] */
 export async function dismissMenu(kind) {
   if (native) {
     const menus = kind
@@ -45,7 +49,7 @@ export async function dismissMenu(kind) {
 }
 /**
  * @param {HTMLElement} trigger
- * @param {'timer'|'external'} kind
+ * @param {'timer'|'scoreboard'|'external'} kind
  * @param {number} [entryCount]
  */
 export async function showToolkitMenu(trigger, kind, entryCount) {
@@ -89,28 +93,43 @@ async function placeMenu(definition, logicalHeight, anchorRect, logicalGap) {
     scale = await host.scaleFactor();
   const monitors = await getMonitorGeometries();
   const anchor = { x: pos.x + anchorRect.left * scale, y: pos.y + anchorRect.bottom * scale };
-  const m =
-    monitors.find(
-      (m) =>
-        anchor.x >= m.work.x &&
-        anchor.x < m.work.x + m.work.width &&
-        anchor.y >= m.work.y &&
-        anchor.y <= m.work.y + m.work.height,
-    ) || monitors[0];
-  if (menu && m) {
-    const w = definition.width * scale,
-      h = logicalHeight * scale,
-      gap = logicalGap * scale;
-    const x = Math.max(m.work.x, Math.min(anchor.x, m.work.x + m.work.width - w));
-    const y =
-      anchor.y + gap + h <= m.work.y + m.work.height
-        ? anchor.y + gap
-        : pos.y + anchorRect.top * scale - h - gap;
-    await menu.setSize(new LogicalSize(definition.width, logicalHeight));
-    await menu.setPosition(new PhysicalPosition(Math.round(x), Math.round(Math.max(m.work.y, y))));
+  const placement = menuPlacement({
+    point: anchor, top: pos.y + anchorRect.top * scale,
+    size: { width: definition.width, height: logicalHeight }, monitors, gap: logicalGap,
+  });
+  if (menu && placement) {
+    await applyMenuPlacement(menu, placement);
     await menu.show();
     await menu.setFocus();
   }
+
+}
+/** 크기 제한을 풀고 목적지의 물리 크기를 적용합니다. DPI 변경 후에도 같은 작업영역 안에 맞춥니다.
+ * @param {import('@tauri-apps/api/window').Window} menu
+ * @param {NonNullable<ReturnType<typeof menuPlacement>>} placement */
+export async function applyMenuPlacement(menu, placement) {
+  await menu.setMinSize(null);
+  // 다른 배율 화면으로 이동하면 OS가 창 크기를 다시 계산하므로, 이동 후 크기를 한 번 더 적용합니다.
+  for (let pass = 0; pass < 2; pass++) {
+    await menu.setPosition(new PhysicalPosition(placement.x, placement.y));
+    await menu.setSize(new PhysicalSize(placement.width, placement.height));
+  }
+}
+/** 관리 패널을 이동한 화면의 크기와 배율로 다시 맞춥니다.
+ * @param {{point?:{x:number,y:number}, position?:{x:number,y:number}, size?:{width:number,height:number}}} [options] */
+export async function fitContextPanel(options = {}) {
+  if (!native) return null;
+  const win = getCurrentWindow();
+  const [pos, size, monitors] = await Promise.all([win.outerPosition(), win.outerSize(), getMonitorGeometries()]);
+  const placement = menuPlacement({
+    point: options.point ?? { x: pos.x + size.width / 2, y: pos.y + Math.min(size.height / 2, 24) },
+    position: options.position ?? { x: pos.x, y: pos.y },
+    size: options.size ?? MENU_WINDOWS.context, monitors,
+  });
+  if (placement && (pos.x !== placement.x || pos.y !== placement.y || size.width !== placement.width || size.height !== placement.height)) {
+    await applyMenuPlacement(win, placement);
+  }
+  return placement;
 }
 /** 우클릭 메뉴 "좌표 초기화". 새 위치 저장은 툴바 창의 onMoved 처리기가 맡습니다. */
 export async function centerToolbar() {
@@ -130,10 +149,34 @@ export async function centerToolbarIfRequested() {
   if (!native) return false;
   return Boolean(await invoke('toolkit_center_if_requested'));
 }
+/** 도구 창을 최소 폭까지 넓힙니다(온도계를 두 개로 늘릴 때). 이미 넓으면 그대로 둡니다.
+ * 작업 영역 안으로 제한한 뒤 화면 밖으로 나가지 않게 보정합니다.
+ * @param {number} minLogicalWidth */
+export async function growToolWindow(minLogicalWidth) {
+  if (!native) return;
+  const win = getCurrentWindow();
+  const [size, scale, position, monitors] = await Promise.all([
+    win.innerSize(), win.scaleFactor(), win.outerPosition(), getMonitorGeometries(),
+  ]);
+  const width = size.width / scale;
+  if (width >= minLogicalWidth) return;
+  const monitor = monitors.find((m) => position.x >= m.work.x && position.x < m.work.x + m.work.width) || monitors[0];
+  const room = monitor ? monitor.work.width / scale - 32 : minLogicalWidth;
+  await win.setSize(new LogicalSize(Math.min(minLogicalWidth, room), size.height / scale));
+  await ensureWindowOnScreen(win);
+}
+/** 창을 연 뒤 내용이 바뀌어 최소 크기가 달라질 때(온도계 1개 ↔ 2개) 씁니다.
+ * 왜: 창을 만들 때 정한 최소 크기는 그대로 남아, 두 번째 온도계를 더한 뒤에도 창을 좁게 줄일 수 있었습니다.
+ * @param {number} minLogicalWidth @param {number} minLogicalHeight */
+export async function setToolMinSize(minLogicalWidth, minLogicalHeight) {
+  if (!native) return;
+  await getCurrentWindow().setMinSize(new LogicalSize(minLogicalWidth, minLogicalHeight));
+}
 /** @param {number} width @param {number} height */
 export async function resizeToolbar(width, height) {
   if (!native) return;
-  await dismissMenu();
+  // 도구 관리 중 툴바 폭이 바뀌어도 우클릭 패널은 유지합니다.
+  await Promise.all(['timer', 'scoreboard', 'external'].map(kind => dismissMenu(/** @type {any} */ (kind))));
   const win = getCurrentWindow();
   await win.setSize(new LogicalSize(Math.ceil(width), Math.ceil(height)));
   const [position, size, monitors] = await Promise.all([

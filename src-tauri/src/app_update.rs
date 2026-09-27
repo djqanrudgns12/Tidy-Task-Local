@@ -406,12 +406,13 @@ fn prepare_and_install(app: &tauri::AppHandle, update: Update, bytes: Vec<u8>) -
         crate::snapshot_before_update(&dir);
     }
 
-    // 5) 파일을 쓰는 다른 작업(툴킷 설정·뽑기·토너먼트)이 끝나기를 기다린 뒤 새로 시작하지 못하게 잡아 둡니다.
+    // 5) 파일을 쓰는 다른 작업(툴킷 설정·뽑기·토너먼트·점수판·온도계)이 끝나기를 기다린 뒤 새로 시작하지 못하게 잡아 둡니다.
     //    왜: 다음 단계에서 앱이 곧바로 끝나므로, 쓰던 도중에 끊긴 파일이 남으면 안 됩니다.
     //    설치에 성공하면 앱이 끝나며 함께 풀리고, 실패하면 이 함수를 나가며 풀립니다.
     let _toolkit_writes = crate::toolkit::STORE_LOCK.lock().unwrap_or_else(|e| e.into_inner());
     let _picker_writes = crate::picker::LOCK.lock().unwrap_or_else(|e| e.into_inner());
     let _tournament_writes = crate::tournament::LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let _score_writes = crate::scores::LOCK.lock().unwrap_or_else(|e| e.into_inner());
     crate::toolkit::QUITTING.store(true, Ordering::SeqCst);
 
     emit_status(app, "installing", &version, 0, None, None);

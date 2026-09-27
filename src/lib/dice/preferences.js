@@ -5,7 +5,8 @@ import { DEFAULT_COUNT, clampCount } from './engine.js';
 
 export const STORAGE_KEY = 'tidy-dice-settings-v1';
 
-/** reduced가 null이면 OS의 "동작 줄이기" 설정을 따릅니다. 사용자가 스위치를 한 번 누르면 그 선택을 기억합니다.
+/** reduced가 null이면 아직 고른 적이 없다는 뜻이고, 움직임을 켠 상태로 씁니다(Windows 설정은 따르지 않음).
+ * 사용자가 스위치를 한 번 누르면 그 선택을 기억합니다.
  * @typedef {{count:number,sound:boolean,reduced:boolean|null}} DicePrefs */
 
 /** @returns {DicePrefs} */

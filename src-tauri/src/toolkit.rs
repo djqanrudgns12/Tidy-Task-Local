@@ -17,6 +17,15 @@ pub static QUITTING: AtomicBool = AtomicBool::new(false);
 const KINDS: [&str; 4] = ["digital", "analog", "hourglass", "stopwatch"];
 // 시계 제목 최대 글자 수. JS src/lib/clock/clockPreferences.js의 CLOCK_TITLE_MAX와 같아야 합니다(코드포인트로 셈).
 const CLOCK_TITLE_MAX: usize = 30;
+// 툴킷 UI 글꼴 이름 최대 글자 수. JS src/lib/toolkit/preferences.js의 UI_FONT_NAME_MAX와 같아야 합니다(코드포인트로 셈).
+const UI_FONT_NAME_MAX: usize = 60;
+// 툴바에 보일 수 있는 도구 id. JS src/lib/toolkit/preferences.js의 허용 목록과 같아야 합니다.
+const TOOL_IDS: [&str; 12] = ["timer", "clock", "picker", "noticeboard", "tournament", "focus-bell", "dice", "scoreboard", "thermometer", "vote", "seating", "roster"];
+const DEFAULT_VISIBLE_TOOL_IDS: [&str; 6] = ["timer", "picker", "noticeboard", "vote", "seating", "roster"];
+const TOOL_ORDER_IDS: [&str; 13] = ["timer", "picker", "noticeboard", "vote", "seating", "roster", "external", "focus-bell", "clock", "scoreboard", "dice", "thermometer", "tournament"];
+const LEGACY_TOOL_ORDER_IDS: [&str; 13] = ["timer", "clock", "picker", "noticeboard", "tournament", "focus-bell", "dice", "scoreboard", "thermometer", "vote", "seating", "external", "roster"];
+// 점수판 3종의 창 이름(드롭다운 항목). JS registry.js의 SCOREBOARD_TOOLS와 같습니다.
+const SCOREBOARD_ROLES: [&str; 3] = ["scoreboard-personal", "scoreboard-group", "scoreboard-custom"];
 
 fn defaults() -> Value {
     let sound = json!({"tickEnabled":true,"warningEnabled":true,"endEnabled":true,"warningLeadSeconds":5,"warningDurationSeconds":null});
@@ -25,8 +34,25 @@ fn defaults() -> Value {
     let mut hourglass = sound.clone();
     hourglass["showRemainingTime"] = json!(true);
     let clock = json!({"face":"digital","showSeconds":true,"hour12":true,"title":"","titleHidden":false,"standardTimeSync":true,"analogCaption":true,"analogMinuteNumbers":false});
-    json!({"schemaVersion":8,"revision":0,"toolkit":{"theme":"sage","darkMode":false,"enabled":false,"orientation":"horizontal","toolbarSize":2,"collapsed":false,"visibleToolIds":["timer","clock","picker","noticeboard","tournament","focus-bell","dice","roster"],"hiddenPlatformIds":[],"externalToolsEnabled":true,"position":null},
+    json!({"schemaVersion":12,"revision":0,"toolkit":{"theme":"sage","darkMode":false,"uiFontFamily":"메이플스토리 L","enabled":false,"orientation":"horizontal","toolbarSize":2,"collapsed":false,"visibleToolIds":DEFAULT_VISIBLE_TOOL_IDS,"toolOrderIds":TOOL_ORDER_IDS,"hiddenPlatformIds":[],"externalToolsEnabled":true,"position":null},
         "preferences":{"digital":sound,"analog":analog,"hourglass":hourglass,"stopwatch":{"tickEnabled":true},"clock":clock}})
+}
+fn tool_enabled(toolkit: &Value, id: &Value) -> bool {
+    if id == "external" {
+        toolkit["externalToolsEnabled"].as_bool().unwrap_or(true)
+    } else {
+        toolkit["visibleToolIds"].as_array().is_some_and(|ids| ids.contains(id))
+    }
+}
+// 영역 안의 사용자 정렬을 유지하며, 비활성화한 도구를 목록 아래에 모읍니다(JS와 같은 규칙).
+fn group_tool_order(value: &mut Value) {
+    let toolkit = &value["toolkit"];
+    let mut ids = toolkit["toolOrderIds"].as_array().cloned().unwrap_or_default();
+    for id in TOOL_ORDER_IDS {
+        if !ids.iter().any(|item| item == id) { ids.push(json!(id)); }
+    }
+    ids.sort_by_key(|id| !tool_enabled(toolkit, id));
+    value["toolkit"]["toolOrderIds"] = json!(ids);
 }
 fn field_valid(scope: &str, key: &str, value: &Value) -> bool {
     if scope == "toolkit" {
@@ -34,11 +60,19 @@ fn field_valid(scope: &str, key: &str, value: &Value) -> bool {
             "enabled" | "collapsed" | "externalToolsEnabled" | "darkMode" => value.is_boolean(),
             "theme" => matches!(value.as_str(), Some("sage" | "ocean" | "lavender" | "rose" | "amber" | "slate")),
             "toolbarSize" => value.as_u64().is_some_and(|n| n <= 4),
+            // 툴킷 전용 글꼴 이름(Tidy Task 글꼴과 따로 저장). 등록 글꼴 목록은 다른 저장소에 있어 이름 모양만 봅니다.
+            "uiFontFamily" => value.as_str().is_some_and(|s| {
+                !s.trim().is_empty() && s.chars().count() <= UI_FONT_NAME_MAX && !s.chars().any(char::is_control)
+            }),
             "orientation" => matches!(value.as_str(), Some("horizontal" | "vertical")),
             "visibleToolIds" => value
                 .as_array()
                 // 도구가 하나 늘 때마다 길이 상한도 함께 올려야 "모두 보이기" 설정의 저장이 거부되지 않습니다.
-                .is_some_and(|a| a.len() <= 8 && a.iter().all(|v| v == "timer" || v == "clock" || v == "roster" || v == "noticeboard" || v == "picker" || v == "tournament" || v == "focus-bell" || v == "dice")),
+                // 같은 도구가 두 번 들어간 목록은 버튼이 두 번 그려지므로 거부합니다.
+                .is_some_and(|a| a.len() <= TOOL_IDS.len()
+                    && a.iter().enumerate().all(|(i, v)| v.as_str().is_some_and(|id| TOOL_IDS.contains(&id)) && !a[..i].contains(v))),
+            "toolOrderIds" => value.as_array().is_some_and(|a| a.len() <= TOOL_ORDER_IDS.len()
+                && a.iter().enumerate().all(|(i, v)| v.as_str().is_some_and(|id| TOOL_ORDER_IDS.contains(&id)) && !a[..i].contains(v))),
             "hiddenPlatformIds" => value.as_array().is_some_and(|a|
                 a.len() <= 2 && a.iter().all(|v| v == "clanner" || v == "rollinthunder")),
             "position" => {
@@ -102,7 +136,7 @@ fn field_valid(scope: &str, key: &str, value: &Value) -> bool {
 fn normalized(raw: Option<Value>) -> Result<Value, String> {
     let mut result = defaults();
     let Some(raw) = raw else { return Ok(result) };
-    if !matches!(raw["schemaVersion"].as_u64(), Some(1..=8)) {
+    if !matches!(raw["schemaVersion"].as_u64(), Some(1..=12)) {
         return Err("지원하지 않는 툴킷 설정 버전입니다. 원본을 보존합니다.".into());
     }
     result["revision"] = json!(raw["revision"].as_u64().unwrap_or(0));
@@ -161,6 +195,35 @@ fn normalized(raw: Option<Value>) -> Result<Value, String> {
             if !ids.iter().any(|id| id == "clock") { ids.push(json!("clock")); }
         }
     }
+    // 스키마 9에서 점수판·학급 온도계가 새로 생겼습니다. 규칙은 주사위와 같습니다(JS preferences.js와 같은 규칙).
+    if matches!(raw["schemaVersion"].as_u64(), Some(1..=8)) {
+        if let Some(ids) = result["toolkit"]["visibleToolIds"].as_array_mut() {
+            for id in ["scoreboard", "thermometer"] {
+                if !ids.iter().any(|v| v == id) { ids.push(json!(id)); }
+            }
+        }
+    }
+    // 스키마 10에서 학급 투표가 새로 생겼습니다. 규칙은 주사위와 같습니다(JS preferences.js와 같은 규칙).
+    if matches!(raw["schemaVersion"].as_u64(), Some(1..=9)) {
+        if let Some(ids) = result["toolkit"]["visibleToolIds"].as_array_mut() {
+            if !ids.iter().any(|id| id == "vote") { ids.push(json!("vote")); }
+        }
+    }
+    if matches!(raw["schemaVersion"].as_u64(), Some(1..=10)) {
+        if let Some(ids) = result["toolkit"]["visibleToolIds"].as_array_mut() {
+            if !ids.iter().any(|id| id == "seating") { ids.push(json!("seating")); }
+        }
+    }
+    // 이전 기본값인 항목만 새 기본값으로 바꾸고, 선생님의 표시·정렬 선택은 유지합니다.
+    if matches!(raw["schemaVersion"].as_u64(), Some(1..=11)) {
+        if result["toolkit"]["visibleToolIds"].as_array().is_some_and(|ids| ids.len() == TOOL_IDS.len()) {
+            result["toolkit"]["visibleToolIds"] = json!(DEFAULT_VISIBLE_TOOL_IDS);
+        }
+        if raw["toolkit"]["toolOrderIds"] == json!(LEGACY_TOOL_ORDER_IDS) {
+            result["toolkit"]["toolOrderIds"] = json!(TOOL_ORDER_IDS);
+        }
+    }
+    group_tool_order(&mut result);
     Ok(result)
 }
 fn merge(mut value: Value, scope: &str, patch: Value) -> Result<Value, String> {
@@ -168,12 +231,22 @@ fn merge(mut value: Value, scope: &str, patch: Value) -> Result<Value, String> {
     if fields.is_empty() || fields.iter().any(|(k, v)| !field_valid(scope, k, v)) {
         return Err("저장할 수 없는 설정입니다.".into());
     }
+    let before = value["toolkit"].clone();
     for (key, field) in fields {
         if scope == "toolkit" {
             value[scope][key] = field.clone();
         } else {
             value["preferences"][scope][key] = field.clone();
         }
+    }
+    if scope == "toolkit" {
+        if !fields.contains_key("toolOrderIds") {
+            let order = before["toolOrderIds"].as_array().cloned().unwrap_or_default();
+            let (unchanged, changed): (Vec<_>, Vec<_>) = order.into_iter().partition(|id|
+                tool_enabled(&before, id) == tool_enabled(&value["toolkit"], id));
+            value["toolkit"]["toolOrderIds"] = json!(unchanged.into_iter().chain(changed).collect::<Vec<_>>());
+        }
+        group_tool_order(&mut value);
     }
     value["revision"] = json!(value["revision"].as_u64().unwrap_or(0) + 1);
     Ok(value)
@@ -243,7 +316,13 @@ pub fn is_timer(label: &str) -> bool {
         .any(|kind| label.starts_with(&format!("timer-{kind}-")))
 }
 pub fn is_work_window(label: &str) -> bool {
-    label == "toolkit" || label == "roster" || label == "noticeboard" || label == "picker" || label == "tournament" || label == "focus-bell" || label == "dice" || label == "clock" || is_timer(label)
+    label == "toolkit" || is_tool_role(label) || is_timer(label)
+}
+/// 툴바에서 여는 "작업 창"(타이머 제외). 크기 조절·작업표시줄 표시·항상 위 기본 꺼짐을 함께 따릅니다.
+/// 왜 한 곳에 모으는가: 예전에는 창 만들기의 세 설정이 목록을 따로 들고 있어, 새 도구를 한 곳만 빠뜨리는 실수가 쉬웠습니다.
+fn is_tool_role(role: &str) -> bool {
+    matches!(role, "roster" | "noticeboard" | "picker" | "tournament" | "focus-bell" | "dice" | "clock" | "thermometer" | "vote" | "vote-teacher" | "seating" | "seating-teacher" | "seating-display")
+        || SCOREBOARD_ROLES.contains(&role)
 }
 
 /// 교실 도구 창의 첫 크기 규칙(모두 논리 px).
@@ -265,6 +344,7 @@ fn work_window_size(role: &str) -> Option<WorkWindowSize> {
     // 뽑기·토너먼트·알림장·명단은 내용이 넓어 더 크게 엽니다.
     const FOCUS: (f64, f64) = (0.75, 0.86);
     const WIDE: (f64, f64) = (0.82, 0.88);
+    const TALL: (f64, f64) = (0.46, 0.86);
     let (base, min, ratio, max) = match role {
         kind if KINDS.contains(&kind) => ((960.0, 680.0), (380.0, 520.0), FOCUS, (1480.0, 960.0)),
         "focus-bell" => ((960.0, 720.0), (640.0, 480.0), FOCUS, (1480.0, 960.0)),
@@ -275,9 +355,25 @@ fn work_window_size(role: &str) -> Option<WorkWindowSize> {
         "tournament" => ((1180.0, 800.0), (640.0, 520.0), WIDE, (1680.0, 1040.0)),
         "picker" => ((1440.0, 920.0), (640.0, 520.0), WIDE, (1680.0, 1040.0)),
         "roster" | "noticeboard" => ((1040.0, 720.0), (640.0, 480.0), WIDE, (1680.0, 1040.0)),
+        // 점수판은 교실 뒤에서 숫자를 읽어야 해서 넓게 엽니다. 개인은 30명 카드가 들어가도록 최소 폭을 조금 더 둡니다.
+        "scoreboard-personal" => ((1280.0, 820.0), (720.0, 520.0), WIDE, (1680.0, 1040.0)),
+        "scoreboard-group" | "scoreboard-custom" => ((1180.0, 800.0), (640.0, 480.0), WIDE, (1680.0, 1040.0)),
+        // 온도계는 화면 한쪽에 세워 두는 도구라 세로형입니다. 두 개일 때는 create_window가 thermometer_pair_size()를 씁니다.
+        "thermometer" => ((760.0, 820.0), (380.0, 520.0), TALL, (1120.0, 1040.0)),
+        // 투표판은 뒷자리에서 후보 이름을 읽어야 해서 넓게 엽니다(후보 9명 3×3이 760×560까지 들어감).
+        "seating" | "seating-display" => ((1280.0, 840.0), (800.0, 600.0), WIDE, (1680.0, 1040.0)),
+        "seating-teacher" => ((1120.0, 800.0), (800.0, 600.0), WIDE, (1600.0, 1000.0)),
+        "vote" => ((1280.0, 820.0), (760.0, 560.0), WIDE, (1680.0, 1040.0)),
+        // 선생님 창은 두 번째 모니터에 띄우는 작은 조종실이라 화면 비율과 상관없이 고정 크기입니다(비율 0 → 하한 = 상한).
+        "vote-teacher" => ((440.0, 760.0), (380.0, 560.0), (0.0, 0.0), (440.0, 760.0)),
         _ => return None,
     };
     Some(WorkWindowSize { base, min, ratio, max })
+}
+
+/// 온도계를 두 개 나란히 쓰는 학급이면 넓게 엽니다(PRD 5.3).
+fn thermometer_pair_size() -> WorkWindowSize {
+    WorkWindowSize { base: (1180.0, 820.0), min: (760.0, 520.0), ratio: (0.74, 0.86), max: (1560.0, 1040.0) }
 }
 
 /// 작업 영역(논리 px) 안에서 도구 창의 첫 크기를 정합니다.
@@ -309,7 +405,7 @@ fn create_window(app: &tauri::AppHandle, role: &str) -> Result<String, String> {
     }
     let _guard = WINDOW_LOCK.lock().map_err(|_| "창 잠금 오류")?;
     let timer = KINDS.contains(&role);
-    if !timer && !["toolkit", "toolkit-menu", "toolkit-external-menu", "toolkit-context-menu", "toolkit-settings", "roster", "noticeboard", "picker", "tournament", "focus-bell", "dice", "clock"].contains(&role) {
+    if !timer && !is_tool_role(role) && !["toolkit", "toolkit-menu", "toolkit-scoreboard-menu", "toolkit-external-menu", "toolkit-context-menu", "toolkit-settings"].contains(&role) {
         return Err("알 수 없는 도구입니다.".into());
     }
     let id = NEXT_WINDOW.fetch_add(1, Ordering::SeqCst);
@@ -326,7 +422,11 @@ fn create_window(app: &tauri::AppHandle, role: &str) -> Result<String, String> {
         }
         return Ok(label);
     }
-    let work_size = work_window_size(role);
+    let work_size = if role == "thermometer" && crate::scores::last_thermometer_count(app) >= 2 {
+        Some(thermometer_pair_size())
+    } else {
+        work_window_size(role)
+    };
     let (width, height, min_w, min_h) = if let Some(rule) = &work_size {
         // 모니터를 알기 전의 임시 크기입니다. 아래에서 작업 영역에 맞춰 다시 정합니다.
         (rule.base.0, rule.base.1, rule.min.0, rule.min.1)
@@ -334,11 +434,14 @@ fn create_window(app: &tauri::AppHandle, role: &str) -> Result<String, String> {
         (380.0, 480.0, 340.0, 400.0)
     } else if role == "toolkit-menu" {
         (244.0, 250.0, 244.0, 250.0)
+    } else if role == "toolkit-scoreboard-menu" {
+        // 점수판 드롭다운 — JS windows.js의 MENU_WINDOWS.scoreboard와 같은 크기
+        (264.0, 222.0, 264.0, 222.0)
     } else if role == "toolkit-external-menu" {
         (244.0, 162.0, 244.0, 114.0)
     } else if role == "toolkit-context-menu" {
         // 우클릭 메뉴 — JS windows.js의 MENU_WINDOWS.context와 같은 크기
-        (224.0, 226.0, 224.0, 226.0)
+        (340.0, 640.0, 320.0, 240.0)
     } else {
         (194.0, 66.0, 60.0, 60.0)
     };
@@ -349,6 +452,15 @@ fn create_window(app: &tauri::AppHandle, role: &str) -> Result<String, String> {
         "focus-bell" => "집중벨",
         "dice" => "주사위",
         "clock" => "시계",
+        "scoreboard-personal" => "개인 점수판",
+        "scoreboard-group" => "모둠 점수판",
+        "scoreboard-custom" => "커스텀 점수판",
+        "thermometer" => "학급 온도계",
+        "seating" => "자리 배치",
+        "seating-teacher" => "자리 배치 · 선생님 설정",
+        "seating-display" => "우리 반 자리",
+        "vote" => "학급 투표",
+        "vote-teacher" => "학급 투표 · 선생님",
         "noticeboard" => "알림장",
         "digital" => "전광판 타이머",
         "analog" => "아날로그 타이머",
@@ -365,9 +477,9 @@ fn create_window(app: &tauri::AppHandle, role: &str) -> Result<String, String> {
             .decorations(false)
             .transparent(true)
             .shadow(false)
-            .resizable(timer || role == "toolkit-settings" || role == "roster" || role == "noticeboard" || role == "picker" || role == "tournament" || role == "focus-bell" || role == "dice" || role == "clock")
-            .always_on_top(!timer && role != "roster" && role != "noticeboard" && role != "picker" && role != "tournament" && role != "focus-bell" && role != "dice" && role != "clock")
-            .skip_taskbar(!timer && role != "roster" && role != "noticeboard" && role != "picker" && role != "tournament" && role != "focus-bell" && role != "dice" && role != "clock")
+            .resizable(timer || role == "toolkit-settings" || is_tool_role(role))
+            .always_on_top(!timer && !is_tool_role(role))
+            .skip_taskbar(!timer && !is_tool_role(role))
             .visible(false)
             .build()
             .map_err(|e| e.to_string())?;
@@ -402,6 +514,10 @@ fn create_window(app: &tauri::AppHandle, role: &str) -> Result<String, String> {
 }
 #[tauri::command]
 pub async fn toolkit_open(app: tauri::AppHandle, role: String) -> Result<String, String> {
+    if role == "toolkit-summon" {
+        open_from_tray(&app);
+        return Ok("toolkit".into());
+    }
     create_window(&app, &role)
 }
 #[tauri::command]
@@ -410,7 +526,7 @@ pub async fn toolkit_set_enabled(app: tauri::AppHandle, enabled: bool) -> Result
     if enabled {
         create_window(&app, "toolkit")?;
     } else {
-        for label in ["toolkit-menu", "toolkit-external-menu", "toolkit-context-menu", "toolkit-settings", "toolkit"] {
+        for label in ["toolkit-menu", "toolkit-scoreboard-menu", "toolkit-external-menu", "toolkit-context-menu", "toolkit-settings", "toolkit"] {
             if let Some(win) = app.get_webview_window(label) {
                 let _ = win.destroy();
             }
@@ -419,7 +535,7 @@ pub async fn toolkit_set_enabled(app: tauri::AppHandle, enabled: bool) -> Result
     Ok(next)
 }
 /// 트레이 "Tidy 툴킷 열기" — 떠 있으면 앞으로 가져오고, 없으면 만들어 띄웁니다.
-/// 어느 쪽이든 트레이를 누른 화면의 작업영역 한가운데에 놓습니다.
+/// 어느 쪽이든 툴킷을 펼치고, 펼친 크기로 요청한 화면의 작업영역 한가운데에 놓습니다.
 /// 왜 가운데인가: 툴바는 작고 항상 위에 떠 있어, 모니터 가장자리·다른 화면에 붙어 있으면
 ///   "열었는데 안 보인다"가 됩니다. 트레이로 연다 = 지금 찾고 있다는 뜻이므로 눈앞에 가져옵니다.
 /// 왜 설정을 함께 켜는가: 사용자가 설정에서 툴킷을 꺼 두었다면 창만 띄워도 다음 실행 때 다시 사라져
@@ -431,6 +547,10 @@ pub fn open_from_tray(app: &tauri::AppHandle) {
     let anchor = app.cursor_position().ok();
     // 설정 저장(파일 쓰기)과 창 생성이 트레이 메뉴 클릭을 붙잡지 않도록 뒤로 넘깁니다.
     tauri::async_runtime::spawn(async move {
+        request_center(anchor);
+        if let Err(e) = toolkit_patch(app.clone(), "toolkit".into(), json!({"enabled": true, "collapsed": false})) {
+            log::warn!("툴킷 펼침 설정을 저장하지 못했습니다: {e}");
+        }
         if let Some(win) = app.get_webview_window("toolkit") {
             let _ = win.unminimize();
             // 아직 화면(JS)이 뜨는 중인 창이면 곧 저장 위치 복원·크기 맞춤이 지금 옮긴 자리를 덮어쓰므로,
@@ -445,10 +565,6 @@ pub fn open_from_tray(app: &tauri::AppHandle) {
             // 툴바 화면(JS)에 "불려 왔다"고 알려 잠깐 깜빡이게 합니다. 이 이벤트는 툴바 창만 듣습니다.
             let _ = app.emit("toolkit-summoned", ());
             return;
-        }
-        // 설정 저장이 실패하더라도(예: 알 수 없는 설정 버전) 창은 열어 줍니다.
-        if let Err(e) = toolkit_patch(app.clone(), "toolkit".into(), json!({"enabled": true})) {
-            log::warn!("툴킷 설정을 켜지 못했습니다: {e}");
         }
         // 새 창은 화면(JS)이 저장 위치를 복원하고 툴바 크기를 맞춘 뒤에야 실제 크기를 알 수 있으므로,
         // 가운데 배치는 그때(toolkit_center_if_requested) 합니다.
@@ -540,6 +656,52 @@ mod tests {
             assert_eq!(normalized(Some(json!({"schemaVersion":6,"toolkit":{"toolbarSize":invalid}}))).unwrap()["toolkit"]["toolbarSize"], json!(2));
         }
     }
+    #[test]
+    fn tool_order_survives_reload_and_hidden_tools_move_to_the_end() {
+        use super::*;
+        let order = json!(["roster", "external", "timer", "clock", "picker", "noticeboard", "tournament", "focus-bell", "dice", "scoreboard", "thermometer", "vote", "seating"]);
+        let saved = merge(defaults(), "toolkit", json!({"toolOrderIds": order})).unwrap();
+        let hidden = merge(saved, "toolkit", json!({"visibleToolIds": ["timer"]})).unwrap();
+        assert_eq!(hidden["toolkit"]["toolOrderIds"][0], "external");
+        assert_eq!(hidden["toolkit"]["toolOrderIds"][1], "timer");
+        assert_eq!(normalized(Some(hidden.clone())).unwrap()["toolkit"]["toolOrderIds"], hidden["toolkit"]["toolOrderIds"]);
+        assert!(merge(defaults(), "toolkit", json!({"toolOrderIds": ["timer", "timer"]})).is_err());
+        let old = normalized(Some(json!({"schemaVersion": 11, "toolkit": {}}))).unwrap();
+        assert_eq!(old["toolkit"]["toolOrderIds"], json!(TOOL_ORDER_IDS));
+    }
+    #[test]
+    fn new_defaults_migrate_only_untouched_legacy_fields() {
+        let legacy = normalized(Some(json!({"schemaVersion":11,"toolkit":{
+            "visibleToolIds":TOOL_IDS,"toolOrderIds":LEGACY_TOOL_ORDER_IDS
+        }}))).unwrap();
+        assert_eq!(legacy["schemaVersion"], 12);
+        assert_eq!(legacy["toolkit"]["visibleToolIds"], json!(DEFAULT_VISIBLE_TOOL_IDS));
+        assert_eq!(legacy["toolkit"]["toolOrderIds"], json!(TOOL_ORDER_IDS));
+        let all = merge(legacy, "toolkit", json!({"visibleToolIds":TOOL_IDS})).unwrap();
+        assert_eq!(normalized(Some(all)).unwrap()["toolkit"]["visibleToolIds"], json!(TOOL_IDS));
+        let custom = normalized(Some(json!({"schemaVersion":11,"toolkit":{
+            "visibleToolIds":["roster","timer","clock"],"externalToolsEnabled":false,
+            "hiddenPlatformIds":["clanner"],"toolOrderIds":["roster","dice","clock","timer","external"]
+        }}))).unwrap();
+        assert_eq!(custom["toolkit"]["visibleToolIds"], json!(["roster","timer","clock"]));
+        assert_eq!(&custom["toolkit"]["toolOrderIds"].as_array().unwrap()[..5], &json!(["roster","clock","timer","dice","external"]).as_array().unwrap()[..]);
+        assert_eq!(custom["toolkit"]["hiddenPlatformIds"], json!(["clanner"]));
+        assert_eq!(normalized(Some(custom.clone())).unwrap(), custom);
+    }
+    #[test]
+    fn visibility_changes_append_in_sequence_and_reenable_above_disabled_tools() {
+        let mut value = defaults();
+        for id in ["picker", "timer", "vote"] {
+            let ids: Vec<_> = value["toolkit"]["visibleToolIds"].as_array().unwrap().iter().filter(|item| *item != id).cloned().collect();
+            value = merge(value, "toolkit", json!({"visibleToolIds":ids})).unwrap();
+            assert_eq!(value["toolkit"]["toolOrderIds"].as_array().unwrap().last().unwrap(), id);
+        }
+        value = merge(value, "toolkit", json!({"externalToolsEnabled":false})).unwrap();
+        assert_eq!(value["toolkit"]["toolOrderIds"].as_array().unwrap().last().unwrap(), "external");
+        value = merge(value, "toolkit", json!({"visibleToolIds":["noticeboard","seating","roster","timer"]})).unwrap();
+        assert_eq!(&value["toolkit"]["toolOrderIds"].as_array().unwrap()[..4], &json!(["noticeboard","seating","roster","timer"]).as_array().unwrap()[..]);
+        assert_eq!(normalized(Some(value.clone())).unwrap(), value);
+    }
     use super::*;
     #[test]
     fn appearance_is_validated_and_survives_reload() {
@@ -555,6 +717,25 @@ mod tests {
         let old = normalized(Some(json!({"schemaVersion":6,"toolkit":{}}))).unwrap();
         assert_eq!(old["toolkit"]["theme"], "sage");
         assert_eq!(old["toolkit"]["darkMode"], false);
+    }
+    #[test]
+    fn ui_font_is_validated_and_survives_reload() {
+        // 예전 설정에는 글꼴이 없으므로 툴킷 기본 글꼴로 시작합니다(Tidy Task 글꼴을 따라가지 않음).
+        let old = normalized(Some(json!({"schemaVersion":11,"toolkit":{}}))).unwrap();
+        assert_eq!(old["toolkit"]["uiFontFamily"], "메이플스토리 L");
+        let longest = "가".repeat(UI_FONT_NAME_MAX);
+        for font in ["배달의민족 주아", "내가 등록한 글꼴", longest.as_str()] {
+            let saved = merge(old.clone(), "toolkit", json!({"uiFontFamily":font})).unwrap();
+            assert_eq!(normalized(Some(saved)).unwrap()["toolkit"]["uiFontFamily"], font);
+        }
+        let too_long = "가".repeat(UI_FONT_NAME_MAX + 1);
+        for invalid in [json!(""), json!("   "), json!("줄\n바꿈"), json!(too_long), json!(3), Value::Null] {
+            assert!(merge(old.clone(), "toolkit", json!({"uiFontFamily":invalid})).is_err());
+            assert_eq!(
+                normalized(Some(json!({"schemaVersion":11,"toolkit":{"uiFontFamily":invalid}}))).unwrap()["toolkit"]["uiFontFamily"],
+                "메이플스토리 L"
+            );
+        }
     }
     #[test]
     fn patches_preserve_other_fields_and_kinds() {
@@ -583,6 +764,12 @@ mod tests {
         assert!(is_work_window("picker"));
         assert!(is_work_window("dice"));
         assert!(is_work_window("clock"));
+        for role in ["scoreboard-personal", "scoreboard-group", "scoreboard-custom", "thermometer", "vote", "vote-teacher"] {
+            assert!(is_work_window(role), "{role}");
+            assert!(is_tool_role(role), "{role}");
+        }
+        assert!(!is_work_window("scoreboard"));
+        assert!(!is_work_window("toolkit-scoreboard-menu"));
         assert!(!is_work_window("toolkit-menu"));
         assert!(!is_work_window("toolkit-external-menu"));
         assert!(!is_work_window("toolkit-context-menu"));
@@ -590,37 +777,44 @@ mod tests {
     #[test]
     fn notice_migration_preserves_hidden_existing_tools() {
         let value=normalized(Some(json!({"schemaVersion":2,"toolkit":{"visibleToolIds":[],"hiddenPlatformIds":["clanner"]}}))).unwrap();
-        assert_eq!(value["toolkit"]["visibleToolIds"],json!(["noticeboard","picker","tournament","focus-bell","dice","clock"]));
+        assert_eq!(value["toolkit"]["visibleToolIds"],json!(["noticeboard","picker","tournament","focus-bell","dice","clock","scoreboard","thermometer","vote","seating"]));
         assert_eq!(value["toolkit"]["hiddenPlatformIds"],json!(["clanner"]));
         let value=normalized(Some(json!({"schemaVersion":8,"toolkit":{"visibleToolIds":[]}}))).unwrap();
+        assert_eq!(value["toolkit"]["visibleToolIds"],json!(["scoreboard","thermometer","vote","seating"]));
+        let value=normalized(Some(json!({"schemaVersion":9,"toolkit":{"visibleToolIds":[]}}))).unwrap();
+        assert_eq!(value["toolkit"]["visibleToolIds"],json!(["vote","seating"]));
+        // 스키마 10에서 숨긴 투표는 다시 읽어도 되살아나지 않습니다.
+        let value=normalized(Some(json!({"schemaVersion":11,"toolkit":{"visibleToolIds":[]}}))).unwrap();
         assert_eq!(value["toolkit"]["visibleToolIds"],json!([]));
     }
     #[test]
     fn focus_migration_preserves_hidden_tools_and_can_be_hidden() {
         let migrated = normalized(Some(json!({"schemaVersion":5,"toolkit":{"visibleToolIds":["roster"]}}))).unwrap();
-        assert_eq!(migrated["toolkit"]["visibleToolIds"], json!(["roster","focus-bell","dice","clock"]));
+        assert_eq!(migrated["toolkit"]["visibleToolIds"], json!(["roster","focus-bell","dice","clock","scoreboard","thermometer","vote","seating"]));
         let hidden = merge(migrated, "toolkit", json!({"visibleToolIds":["roster"]})).unwrap();
         assert_eq!(normalized(Some(hidden)).unwrap()["toolkit"]["visibleToolIds"], json!(["roster"]));
     }
     #[test]
-    fn dice_migration_adds_once_and_all_seven_tools_can_be_saved() {
-        let all_six = json!(["timer","picker","noticeboard","tournament","focus-bell","roster"]);
-        let migrated = normalized(Some(json!({"schemaVersion":6,"toolkit":{"visibleToolIds":all_six}}))).unwrap();
-        assert_eq!(migrated["schemaVersion"], 8);
-        assert_eq!(migrated["toolkit"]["visibleToolIds"], json!(["timer","picker","noticeboard","tournament","focus-bell","roster","dice","clock"]));
-        // 모든 도구(시계 포함 8개)를 켠 설정은 저장되고, 숨긴 주사위는 다시 읽어도 되살아나지 않습니다.
-        let saved = merge(migrated.clone(), "toolkit", json!({"visibleToolIds":defaults()["toolkit"]["visibleToolIds"].clone()})).unwrap();
-        assert_eq!(saved["toolkit"]["visibleToolIds"].as_array().unwrap().len(), 8);
+    fn dice_migration_preserves_custom_visibility_and_all_tools_can_be_saved() {
+        // 토너먼트를 숨긴 기존 선택은 이전 기본값으로 취급하지 않습니다.
+        let existing = json!(["timer","picker","noticeboard","focus-bell","roster"]);
+        let migrated = normalized(Some(json!({"schemaVersion":6,"toolkit":{"visibleToolIds":existing}}))).unwrap();
+        assert_eq!(migrated["schemaVersion"], 12);
+        assert_eq!(migrated["toolkit"]["visibleToolIds"], json!(["timer","picker","noticeboard","focus-bell","roster","dice","clock","scoreboard","thermometer","vote","seating"]));
+        // 모든 도구를 켠 설정은 저장되고, 숨긴 주사위는 다시 읽어도 되살아나지 않습니다.
+        let saved = merge(migrated.clone(), "toolkit", json!({"visibleToolIds":TOOL_IDS})).unwrap();
+        assert_eq!(saved["toolkit"]["visibleToolIds"].as_array().unwrap().len(), 12);
         let hidden = merge(saved, "toolkit", json!({"visibleToolIds":["timer","roster"]})).unwrap();
         assert_eq!(normalized(Some(hidden)).unwrap()["toolkit"]["visibleToolIds"], json!(["timer","roster"]));
         assert!(merge(migrated, "toolkit", json!({"visibleToolIds":["timer","clock","picker","noticeboard","tournament","focus-bell","dice","roster","dice"]})).is_err());
-        assert!(normalized(Some(json!({"schemaVersion":9}))).is_err());
+        assert!(merge(defaults(), "toolkit", json!({"visibleToolIds":["scoreboard-personal"]})).is_err());
+        assert!(normalized(Some(json!({"schemaVersion":13}))).is_err());
     }
     #[test]
     fn clock_migration_adds_once_and_preferences_are_validated() {
         // 스키마 7(주사위까지 있던 설정)에 시계가 한 번만 들어가고, 이후 숨김은 지켜집니다.
         let migrated = normalized(Some(json!({"schemaVersion":7,"toolkit":{"visibleToolIds":["timer","dice"]}}))).unwrap();
-        assert_eq!(migrated["toolkit"]["visibleToolIds"], json!(["timer","dice","clock"]));
+        assert_eq!(migrated["toolkit"]["visibleToolIds"], json!(["timer","dice","clock","scoreboard","thermometer","vote","seating"]));
         assert_eq!(migrated["preferences"]["clock"]["standardTimeSync"], json!(true));
         let hidden = merge(migrated, "toolkit", json!({"visibleToolIds":["timer","dice"]})).unwrap();
         assert_eq!(normalized(Some(hidden.clone())).unwrap()["toolkit"]["visibleToolIds"], json!(["timer","dice"]));
@@ -653,11 +847,32 @@ mod tests {
         // 뽑기는 예전부터 높이가 넉넉해(920) 높이는 그대로, 너비만 넓어집니다.
         assert_eq!(initial_work_size(&picker, 1920.0, 1032.0), (1574.0, 920.0));
         // 모든 도구가 예전 고정 크기보다 작아지지 않고, 너비는 모두 커집니다.
-        for role in ["digital", "analog", "hourglass", "stopwatch", "focus-bell", "dice", "clock", "tournament", "picker", "roster", "noticeboard"] {
+        for role in ["digital", "analog", "hourglass", "stopwatch", "focus-bell", "dice", "clock", "tournament", "picker", "roster", "noticeboard", "scoreboard-personal", "scoreboard-group", "scoreboard-custom", "thermometer", "vote"] {
             let rule = work_window_size(role).unwrap();
             let (w, h) = initial_work_size(&rule, 1920.0, 1032.0);
             assert!(w > rule.base.0 && h >= rule.base.1, "{role}: {w}×{h}");
         }
+    }
+    #[test]
+    fn vote_board_opens_wide_and_teacher_window_stays_small() {
+        let board = work_window_size("vote").unwrap();
+        // 1920×1080: 넓은 도구 규칙(82%×88%). 후보 9명이 3×3으로 들어가는 최소 크기는 760×560입니다.
+        assert_eq!(initial_work_size(&board, 1920.0, 1032.0), (1574.0, 908.0));
+        assert_eq!(board.min, (760.0, 560.0));
+        // 선생님 창은 화면이 커도 440×760, 작업 영역이 낮으면 그 안(여백 16×2 제외)으로 줄어듭니다.
+        let teacher = work_window_size("vote-teacher").unwrap();
+        assert_eq!(initial_work_size(&teacher, 3840.0, 2112.0), (440.0, 760.0));
+        assert_eq!(initial_work_size(&teacher, 1366.0, 728.0), (440.0, 696.0));
+    }
+    #[test]
+    fn thermometer_opens_tall_and_wider_for_two() {
+        // 1920×1080: 온도계 1개는 세로형(46%), 2개는 나란히 들어가게 74%로 엽니다.
+        let one = work_window_size("thermometer").unwrap();
+        assert_eq!(initial_work_size(&one, 1920.0, 1032.0), (883.0, 888.0));
+        assert_eq!(initial_work_size(&thermometer_pair_size(), 1920.0, 1032.0), (1421.0, 888.0));
+        // 1440×888 창 기준 점수판 6모둠·30명 검수 크기가 나오는지(개인 점수판 최소 폭 720)
+        let personal = work_window_size("scoreboard-personal").unwrap();
+        assert_eq!(personal.min, (720.0, 520.0));
     }
     #[test]
     fn work_window_size_respects_small_and_huge_screens() {

@@ -13,7 +13,7 @@
   import { ensureWindowOnScreen, getMonitorGeometries } from "./lib/windows/windowRegistry.js";
   import { resolveSavedPosition } from "./lib/windows/windowPlacement.js";
   import { UPDATE_NOTICE_WINDOW_LABEL } from "./lib/updateNotice.js";
-  import { startStartupNotices } from "./lib/startupNotices.js";
+  import { startStartupNotices, captureStartupProfile } from "./lib/startupNotices.js";
 
   import Titlebar from "./components/Titlebar.svelte";
   import MainToolbar from "./components/MainToolbar.svelte";
@@ -22,17 +22,15 @@
   import NoteEditor from "./components/NoteEditor.svelte";
   import SettingsModal from "./components/SettingsModal.svelte";
   import FloatingRTE from "./components/FloatingRTE.svelte";
-  import ContextMenu from "./components/ContextMenu.svelte";
-  import WelcomeWindow from "./components/WelcomeWindow.svelte";
   import ReminderPopup from "./components/ReminderPopup.svelte";
   import StickerWindow from "./components/StickerWindow.svelte";
   import ArchiveWindow from "./components/ArchiveWindow.svelte";
   import UpdateBanner from "./components/UpdateBanner.svelte";
   import UpdateGuide from "./components/UpdateGuide.svelte";
-  import UpdateNotice from "./components/UpdateNotice.svelte";
   import UpdateInstallOverlay from "./components/UpdateInstallOverlay.svelte";
 
-  import { convertFileSrc } from "@tauri-apps/api/core";
+  import { openMeal } from './lib/meal/mealWindows.js';
+  import { convertFileSrc, invoke } from "@tauri-apps/api/core";
   import { getCurrentWindow } from "@tauri-apps/api/window";
   import { enable, isEnabled } from "@tauri-apps/plugin-autostart";
   import { listen, emit, emitTo } from "@tauri-apps/api/event";
@@ -79,24 +77,28 @@
   let isFirstLoad = true;
   let showDeleteModal = $state(false);
 
-  let ctxWin = null;
+  import { captureEditorContext, runEditorContextAction } from './lib/windows/editorContext.js';
+  let contextEditor = null;
+  import { showNoteContextMenu } from './lib/windows/noteContextMenu.js';
 
   async function handleBarContextMenu(e) {
-    if (getCurrentWindow().label === "settings" || getCurrentWindow().label === "ctx-menu") return;
+    if (!isDataWindow(getCurrentWindow().label)) return;
 
     e.preventDefault();
-    let isText = e.target.closest('.note-wrapper') || e.target.closest('[contenteditable]') || e.target.tagName === 'INPUT';
-    const type = isText ? 'text' : 'bar';
+    contextEditor = captureEditorContext(e.target);
+    const isTiny = getCurrentWindow().label.startsWith('tinynote-');
+    const type = isTiny ? 'tiny' : contextEditor ? 'text' : 'bar';
 
     // 메뉴를 띄울 화면 좌표를 "물리 픽셀"로 계산합니다.
     // 왜: 배율이 다른 모니터에서는 논리 좌표의 기준이 창마다 달라, 메뉴가 엉뚱한 곳(화면 밖)에 떴습니다.
     const scaleFactor = await getCurrentWindow().scaleFactor();
     const pos = await getCurrentWindow().innerPosition();
-    const screenX = Math.round(pos.x + e.clientX * scaleFactor);
-    const screenY = Math.round(pos.y + e.clientY * scaleFactor);
+    const anchor = !e.clientX && !e.clientY && e.target instanceof Element ? e.target.getBoundingClientRect() : null;
+    const screenX = Math.round(pos.x + (anchor ? anchor.left + 8 : e.clientX) * scaleFactor);
+    const screenY = Math.round(pos.y + (anchor ? anchor.top + 24 : e.clientY) * scaleFactor);
 
-    if (ctxWin) {
-      await emitTo('ctx-menu', 'show-ctx-menu', {
+    try {
+      await showNoteContextMenu({
         x: screenX,
         y: screenY,
         type: type,
@@ -109,9 +111,16 @@
           showArchived: appState.showArchived,
           showNotes: appState.showNotes,
           isEditMode: appState.isEditMode,
+          isPinned: appState.isPinned,
+          isRolledUp: appState.isRolledUp,
+          isFullscreen: appState.isFullscreen,
+          hasEditor: !!contextEditor,
+          hasSelection: !!contextEditor?.hasSelection,
         },
         requester: getCurrentWindow().label
       });
+    } catch (error) {
+      console.error('[ContextMenu] 메뉴를 열지 못했습니다:', error);
     }
   }
 
@@ -528,6 +537,13 @@
       }, 4000);
     }
 
+    // 메모 기본값을 저장하기 전에 기존 설치인지 판정합니다.
+    const startupProfile = _label === 'main'
+      ? await captureStartupProfile().catch(error => {
+          console.warn('첫 실행 상태를 읽지 못했습니다:', error);
+          return null;
+        })
+      : null;
     await appState.init();
     applyCSSVars();
 
@@ -540,7 +556,7 @@
 
     // 공지 대기는 메인 창 복원과 분리해 앱 사용을 막지 않습니다.
     if (currentWindow.label === "main" && appState._hydrated) {
-      void startStartupNotices(!appState.hideWelcomeMessage);
+      void startStartupNotices(startupProfile);
     }
 
     const isValidPos = (val) =>
@@ -1017,29 +1033,23 @@
     // (appState.setupManagerListeners 참고 — main이 닫혀 있어도 동작하도록 옮겼습니다)
 
     if (currentWindow.label !== "ctx-menu") {
-      ctxWin = await WebviewWindow.getByLabel('ctx-menu');
-      if (!ctxWin) {
-        ctxWin = new WebviewWindow('ctx-menu', {
-          url: 'index.html',
-          title: 'ContextMenu',
-          width: 250,
-          height: 600,
-          decorations: false,
-          transparent: true,
-          alwaysOnTop: true,
-          skipTaskbar: true,
-          visible: false,
-          resizable: false,
-          shadow: false
-        });
-      }
-
       currentWindow.listen('ctx-action', async (ev) => {
         const action = ev.payload;
-        if (action === 'undo') appState.undo();
+        if (action.startsWith('tiny-')) {
+          window.dispatchEvent(new CustomEvent('tiny-context-action', { detail: action }));
+        }
+        else if (contextEditor && ['undo', 'redo', 'cut', 'copy', 'paste', 'select-all'].includes(action)) {
+          await currentWindow.setFocus();
+          try { await runEditorContextAction(contextEditor, action); }
+          catch (error) { console.warn('[ContextMenu] 편집 실행 실패:', error); }
+        }
+        else if (action === 'undo') appState.undo();
         else if (action === 'redo') appState.redo();
         else if (action === 'toggle-edit') appState.toggleEditMode();
         else if (action === 'spawn-window') appState.spawnNewWindow();
+        else if (action === 'spawn-tiny') appState.spawnTinyNote();
+        else if (action === 'open-meal') await openMeal();
+        else if (action === 'open-toolkit') await invoke('toolkit_open', { role: 'toolkit-summon' });
         else if (action === 'toggle-archived') { appState.showArchived = !appState.showArchived; appState.save(); }
         else if (action === 'toggle-notes') { appState.showNotes = !appState.showNotes; appState.save(); }
         else if (action === 'cut') document.execCommand('cut');
@@ -1309,18 +1319,12 @@
   }
 </script>
 
-<svelte:window onkeydown={handleGlobalKeydown} onpaste={handleGlobalPaste} />
+<svelte:window onkeydown={handleGlobalKeydown} onpaste={handleGlobalPaste} oncontextmenu={handleBarContextMenu} />
 
 {#if getCurrentWindow().label === "settings"}
   <div class="h-screen w-screen bg-transparent overflow-hidden">
     <SettingsModal />
   </div>
-{:else if getCurrentWindow().label === "ctx-menu"}
-  <ContextMenu isStandalone={true} />
-{:else if getCurrentWindow().label === "welcome"}
-  <WelcomeWindow />
-{:else if getCurrentWindow().label === UPDATE_NOTICE_WINDOW_LABEL}
-  <UpdateNotice />
 {:else if getCurrentWindow().label === "reminder"}
   <ReminderPopup />
 {:else if appState.storageError && isDataWindow(getCurrentWindow().label)}
@@ -1346,7 +1350,6 @@
       font-family: var(--ui-font-family);
       font-size: var(--ui-font-size);
     "
-    oncontextmenu={handleBarContextMenu}
     role="presentation"
   >
     <!-- ✨ [세로 스냅] 위쪽 테두리 더블클릭 감지 영역 (4px 투명) -->

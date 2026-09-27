@@ -1,0 +1,80 @@
+{
+  "deviceScaleFactor": 2,
+  "source": "Actual application components in isolated browser preview; fictional demonstration data. Not native Tauri screenshots.",
+  "captures": [
+    {
+      "name": "toolbar",
+      "width": 1432,
+      "height": 104,
+      "source": "http://127.0.0.1:5196/?toolkit-preview=toolkit"
+    },
+    {
+      "name": "vote",
+      "width": 2800,
+      "height": 1800,
+      "source": "http://127.0.0.1:5196/?toolkit-preview=vote"
+    },
+    {
+      "name": "seating",
+      "width": 2800,
+      "height": 1800,
+      "source": "http://127.0.0.1:5196/?toolkit-preview=seating"
+    },
+    {
+      "name": "scoreboard",
+      "width": 2400,
+      "height": 1520,
+      "source": "http://127.0.0.1:5196/?toolkit-preview=scoreboard-group"
+    },
+    {
+      "name": "thermometer",
+      "width": 2000,
+      "height": 1680,
+      "source": "http://127.0.0.1:5196/?toolkit-preview=thermometer"
+    },
+    {
+      "name": "clock",
+      "width": 2000,
+      "height": 1320,
+      "source": "http://127.0.0.1:5196/?toolkit-preview=clock"
+    },
+    {
+      "name": "dice",
+      "width": 2000,
+      "height": 1320,
+      "source": "http://127.0.0.1:5196/?toolkit-preview=dice"
+    },
+    {
+      "name": "settings",
+      "width": 1040,
+      "height": 1800,
+      "source": "http://127.0.0.1:5196/?toolkit-preview=toolkit-settings"
+    },
+    {
+      "name": "picker",
+      "width": 2400,
+      "height": 1700,
+      "source": "http://127.0.0.1:5196/?toolkit-preview=picker"
+    },
+    {
+      "name": "noticeboard",
+      "width": 2400,
+      "height": 1600,
+      "source": "http://127.0.0.1:5196/?toolkit-preview=noticeboard"
+    },
+    {
+      "name": "calendar",
+      "width": 1152,
+      "height": 1356,
+      "source": "http://127.0.0.1:5196/?date-picker-preview&today=2026-09-28&value=2026-09-30&size=14",
+      "deviceScaleFactor": 4
+    },
+    {
+      "name": "meal",
+      "width": 920,
+      "height": 1000,
+      "source": "http://127.0.0.1:5196/?meal-preview=meal"
+    }
+  ],
+  "errors": []
+}

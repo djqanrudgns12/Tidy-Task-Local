@@ -1,0 +1,14 @@
+<!doctype html><html lang="ko"><meta charset="utf-8"><title>음성 준비 취소 회귀 검사</title><h1>저장소 조회 중 준비 취소 검사</h1><button id="run">취소 검사 실행</button><pre id="status">대기</pre><script type="module">
+import {createLocalSpeech} from '/src/lib/vote/speech/local.js';
+import {normalizeConfig} from '/src/lib/vote/model.js';
+document.querySelector('#run').onclick=async()=>{
+ const button=document.querySelector('#run'),status=document.querySelector('#status');button.disabled=true;
+ let created=0;
+ const local=createLocalSpeech({createWorker:()=>{created++;throw new Error('취소한 뒤 worker를 만들면 안 됩니다.');}});
+ const config=normalizeConfig({type:'candidate',title:'준비 취소 검사',items:[{id:'qa-cancel-1',number:1,name:'가나다'},{id:'qa-cancel-2',number:2,name:'라마바'}],speechContent:{readDynamic:true}});
+ const pending=local.prepare(config,'female','normal');local.cancel();
+ try{await pending;status.textContent='FAIL: 취소를 성공으로 처리했습니다.';}
+ catch(e){status.textContent=created===0 && /취소/.test(e.message)?'PASS: 캐시 조회 중 취소 뒤 worker 생성 0회':'FAIL: '+e.message+' / worker='+created;}
+ finally{local.dispose();button.disabled=false;}
+};
+</script></html>

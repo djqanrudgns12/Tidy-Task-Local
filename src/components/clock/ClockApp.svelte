@@ -7,14 +7,11 @@
     Minimize,
     X,
     SlidersHorizontal,
-    Tag,
-    ChevronUp,
     RefreshCw,
     Clock3,
     Hash,
   } from 'lucide-svelte';
   import { invoke } from '@tauri-apps/api/core';
-  import { listen } from '@tauri-apps/api/event';
   import { getCurrentWindow } from '@tauri-apps/api/window';
   import { native, readSettings, patchSettings } from '../../lib/toolkit/store.js';
   import { closeWindow } from '../../lib/toolkit/windows.js';
@@ -22,12 +19,7 @@
   import { clockParts, displayTime, displayDate, handAngles } from '../../lib/clock/clockTime.js';
   import { createTicker } from '../../lib/clock/ticker.js';
   import { createTimeSync, describeSync, type SyncState } from '../../lib/clock/timeSync.js';
-  import {
-    normalizeClockPreferences,
-    sanitizeTitle,
-    CLOCK_TITLE_MAX,
-    type ClockPreferences,
-  } from '../../lib/clock/clockPreferences.js';
+  import { normalizeClockPreferences, type ClockPreferences } from '../../lib/clock/clockPreferences.js';
   import ToolkitSwitch from '../toolkit/ToolkitSwitch.svelte';
   import DigitalFace from './DigitalFace.svelte';
   import AnalogFace from './AnalogFace.svelte';
@@ -36,12 +28,8 @@
   // ── 설정 ──
   let prefs = $state<ClockPreferences>(normalizeClockPreferences());
   let loaded = $state(false);
-  let titleDraft = $state('');
-  let titleFocused = $state(false);
   let message = $state('');
   let messageTimer: ReturnType<typeof setTimeout> | undefined;
-  let titleTimer: ReturnType<typeof setTimeout> | undefined;
-  let savedTitle = '';
 
   // ── 창 ──
   let pinned = $state(false);
@@ -102,9 +90,6 @@
       ? describeSync(syncState, now)
       : { tone: 'busy', label: '표준시 확인 중', detail: '설정을 읽고 있어요.' },
   );
-  const titleShown = $derived(!prefs.titleHidden);
-  // 제목 글자 수에 맞춰 글자 크기를 줄입니다(자르지 않음). 한글 한 글자 ≈ 1em.
-  const titleChars = $derived(Math.max(8, [...(titleDraft || '제목을 입력해 보세요')].length));
 
   function say(text: string) {
     message = text;
@@ -119,34 +104,6 @@
       await patchSettings('clock', patch);
     } catch {
       say('이 창에는 적용했지만 설정을 저장하지 못했어요.');
-    }
-  }
-
-  // 제목은 치는 동안 매 글자 저장하지 않고, 멈추고 0.4초 뒤·칸을 떠날 때·창을 닫을 때 저장합니다.
-  function saveTitleNow() {
-    clearTimeout(titleTimer);
-    titleTimer = undefined;
-    const title = sanitizeTitle(titleDraft);
-    if (title === savedTitle) return Promise.resolve();
-    savedTitle = title;
-    return change({ title });
-  }
-  function onTitleInput(event: Event) {
-    const input = event.currentTarget as HTMLInputElement;
-    // 한글 조합 중에 자르면 글자가 깨지므로, 조합이 끝난 뒤에만 30자로 다듬습니다.
-    if (!(event as InputEvent).isComposing) {
-      const clean = sanitizeTitle(input.value);
-      if (clean !== input.value) input.value = clean;
-      titleDraft = clean;
-    } else titleDraft = input.value;
-    clearTimeout(titleTimer);
-    titleTimer = setTimeout(() => void saveTitleNow(), 400);
-  }
-  function titleKeys(event: KeyboardEvent) {
-    if (event.key === 'Enter' || event.key === 'Escape') {
-      // Esc가 창 전체의 "전체 화면 끝내기"로 이어지지 않게 여기서 멈춥니다.
-      event.stopPropagation();
-      (event.currentTarget as HTMLInputElement).blur();
     }
   }
 
@@ -173,7 +130,6 @@
     wake();
   }
   async function close() {
-    await saveTitleNow().catch(() => {});
     await closeWindow();
   }
   function resizeFromCorner(event: MouseEvent, direction: 'NorthWest' | 'NorthEast' | 'SouthWest' | 'SouthEast') {
@@ -254,7 +210,6 @@
       } catch {
         say('설정을 읽지 못해 기본 설정으로 보여 줘요.');
       }
-      titleDraft = savedTitle = prefs.title;
       loaded = true;
       timeSync.setEnabled(prefs.standardTimeSync);
       if (!native) return;
@@ -274,10 +229,6 @@
         });
         if (disposed) resizeOff();
         else offs.push(resizeOff);
-        // 앱을 끌 때 쓰던 제목을 잃지 않게 바로 저장합니다.
-        const quitOff = await listen('before-quit', () => void saveTitleNow().catch(() => {}));
-        if (disposed) quitOff();
-        else offs.push(quitOff);
       } catch {
         say('창 상태를 읽지 못했어요.');
       }
@@ -289,7 +240,6 @@
       timeSync.stop();
       clearTimeout(idleTimer);
       clearTimeout(messageTimer);
-      if (titleTimer) void saveTitleNow().catch(() => {});
       document.removeEventListener('visibilitychange', onVisibility);
       window.removeEventListener('focus', onFocus);
       window.removeEventListener('online', onOnline);
@@ -327,12 +277,6 @@
     </div>
     <div class="window-actions">
       <button
-        class:pinned={titleShown}
-        aria-label={titleShown ? '제목 숨기기' : '제목 보이기'}
-        aria-pressed={titleShown}
-        title={titleShown ? '제목 숨기기' : '제목 보이기'}
-        onclick={() => void change({ titleHidden: titleShown })}><Tag size={15} /></button
-      ><button
         class:pinned={settingsOpen}
         aria-label="시계 설정"
         aria-expanded={settingsOpen}
@@ -358,29 +302,6 @@
   </header>
 
   <div class="clk-stage">
-    {#if titleShown}
-      <div class="clk-title" class:empty={!titleDraft} style="--clk-title-chars:{titleChars}">
-        <input
-          aria-label="시계 제목"
-          placeholder="제목을 입력해 보세요"
-          spellcheck="false"
-          value={titleDraft}
-          oninput={onTitleInput}
-          oncompositionend={onTitleInput}
-          onfocus={() => (titleFocused = true)}
-          onblur={() => {
-            titleFocused = false;
-            void saveTitleNow();
-          }}
-          onkeydown={titleKeys}
-        />
-        {#if titleFocused}<span class="clk-title-count" aria-hidden="true">{[...titleDraft].length}/{CLOCK_TITLE_MAX}</span>{/if}
-        <button class="clk-title-hide clk-chrome-soft" aria-label="제목 숨기기" title="제목 숨기기" onclick={() => void change({ titleHidden: true })}
-          ><ChevronUp size={18} /></button
-        >
-      </div>
-    {/if}
-
     <section
       class="clk-display"
       role="timer"
@@ -403,7 +324,9 @@
           minuteDigits={view.minuteDigits}
           secondDigits={view.secondDigits}
           meridiem={view.meridiem}
-          second={parts.seconds}
+          monthDay={date.monthDay}
+          weekday={date.weekday}
+          weekend={date.weekend}
         />
       {/if}
       <button
@@ -416,10 +339,13 @@
       >
     </section>
 
-    <p class="clk-date" aria-hidden="true">
-      <span>{date.monthDay}</span>
-      <span class="clk-weekday" data-weekend={date.weekend}>{date.weekday}</span>
-    </p>
+    {#if prefs.face === 'analog'}
+      <div class="clk-date" aria-hidden="true">
+        <span>{parts.year}년</span>
+        <strong>{date.monthDay}</strong>
+        <span class="clk-weekday" data-weekend={date.weekend}>{date.weekday}</span>
+      </div>
+    {/if}
   </div>
 
   <footer class="clk-controls clk-chrome">

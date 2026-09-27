@@ -39,7 +39,7 @@ pub(crate) fn request_for_update(app: &tauri::AppHandle) -> Option<String> {
     start(app, Purpose::Update)
 }
 fn start(app: &tauri::AppHandle, purpose: Purpose) -> Option<String> {
-    let windows: Vec<_> = ["noticeboard", "roster"]
+    let windows: Vec<_> = ["noticeboard", "roster", "seating", "seating-teacher"]
         .iter()
         .filter_map(|label| app.get_webview_window(label))
         .collect();
@@ -65,7 +65,7 @@ fn start(app: &tauri::AppHandle, purpose: Purpose) -> Option<String> {
         }
     }
     for win in windows {
-        let event = if win.label() == "roster" {
+        let event = if ["roster", "seating", "seating-teacher"].contains(&win.label()) {
             "classroom-quit-request"
         } else {
             "noticeboard-quit-request"
@@ -109,7 +109,7 @@ pub(crate) fn cancel_update(app: &tauri::AppHandle, request_id: &str) {
 }
 #[tauri::command]
 pub fn noticeboard_cancel_quit(app: tauri::AppHandle, window: tauri::WebviewWindow) {
-    if ["noticeboard", "roster"].contains(&window.label()) {
+    if ["noticeboard", "roster", "seating", "seating-teacher"].contains(&window.label()) {
         cancel(&app);
     }
 }

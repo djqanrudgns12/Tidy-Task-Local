@@ -24,17 +24,22 @@ pub fn clear_transients() {
         }
     }
 }
-pub fn register_drop(path: &std::path::Path) -> Option<String> {
+/// 명단 창에 떨어뜨린 파일을 기억하고, 창에 알릴 내용(가져갈 토큰 · 파일 이름)을 돌려줍니다.
+/// 파일 이름을 여기서 함께 보내는 이유: 파일 내용은 classroom_take_drop이 원본 바이트로만 돌려주기 때문입니다.
+pub fn register_drop(path: &std::path::Path) -> Option<serde_json::Value> {
     let token = uuid::Uuid::new_v4().to_string();
+    let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("file").to_owned();
     if let Ok(mut d) = DROPPED.lock() {
         *d = Some((token.clone(), path.to_owned()));
-        Some(token)
+        Some(serde_json::json!({ "token": token, "name": name }))
     } else {
         None
     }
 }
+/// 파일 바이트를 원본 그대로 돌려줍니다(JS에서는 ArrayBuffer).
+/// 왜: 예전처럼 JSON 숫자 배열로 보내면 원래 크기의 약 3.6배가 되고, 받는 창이 그것을 해석해 다시 바이트로 바꾸느라 느렸습니다.
 #[tauri::command]
-pub async fn classroom_take_drop(token: String) -> Result<serde_json::Value, String> {
+pub async fn classroom_take_drop(token: String) -> Result<tauri::ipc::Response, String> {
     let path = {
         let mut d = DROPPED.lock().map_err(|_| err())?;
         if d.as_ref().map(|v| &v.0) != Some(&token) {
@@ -42,7 +47,15 @@ pub async fn classroom_take_drop(token: String) -> Result<serde_json::Value, Str
         }
         d.take().unwrap().1
     };
-    tauri::async_runtime::spawn_blocking(move||{let f=std::fs::File::open(&path).map_err(|_|err())?;let mut bytes=vec![];f.take(20*1024*1024+1).read_to_end(&mut bytes).map_err(|_|err())?;if bytes.len()>20*1024*1024{return Err("LIMIT_EXCEEDED: 20MB 이하 파일을 선택해 주세요.".into());}Ok(serde_json::json!({"name":path.file_name().and_then(|n|n.to_str()).unwrap_or("file"),"bytes":bytes}))}).await.map_err(|_|err())?
+    let bytes = tauri::async_runtime::spawn_blocking(move||->Result<Vec<u8>,String>{let f=std::fs::File::open(&path).map_err(|_|err())?;let mut bytes=vec![];f.take(20*1024*1024+1).read_to_end(&mut bytes).map_err(|_|err())?;if bytes.len()>20*1024*1024{return Err("LIMIT_EXCEEDED: 20MB 이하 파일을 선택해 주세요.".into());}Ok(bytes)}).await.map_err(|_|err())??;
+    Ok(tauri::ipc::Response::new(bytes))
+}
+/// 요청 본문의 파일 바이트. 원본 바이트(보통)와 JSON 숫자 배열(예비 통로 postMessage) 둘 다 받습니다(lib.rs 공용 처리).
+fn body_bytes(body: &tauri::ipc::InvokeBody) -> Result<Vec<u8>, String> {
+    crate::invoke_body_bytes(body).ok_or_else(err)
+}
+fn header(headers: &tauri::http::HeaderMap, name: &str) -> Option<String> {
+    headers.get(name).and_then(|v| v.to_str().ok()).map(str::to_owned)
 }
 thread_local! { static JOB: std::cell::RefCell<Option<(Arc<AtomicBool>,std::time::Instant)>> = const { std::cell::RefCell::new(None) }; }
 fn checkpoint() -> Result<(), String> {
@@ -504,8 +517,23 @@ pub fn parse_mapped(
         _ => Err(err()),
     }
 }
+/// 명단 파일(XLSX·CSV·HWPX)을 분석합니다. 파일은 본문에 원본 바이트로, 나머지 값은 헤더로 받습니다
+/// (extension · request-id · columns(JSON)) — tauri-plugin-fs의 writeFile과 같은 방식.
+/// 왜: 예전에는 파일을 JSON 숫자 배열로 받았는데, Tauri가 JSON 본문을 메인(UI) 스레드에서 해석하는 동안
+///   모든 창이 멈췄습니다(5MB 파일 기준 약 0.2초). 원본 바이트는 해석 없이 그대로 넘어옵니다.
 #[tauri::command]
-pub async fn classroom_parse(
+pub async fn classroom_parse(request: tauri::ipc::Request<'_>) -> Result<Vec<Table>, String> {
+    let headers = request.headers();
+    let extension = header(headers, "extension").ok_or_else(err)?;
+    let request_id = header(headers, "request-id").ok_or_else(err)?;
+    let columns: Option<Columns> = match header(headers, "columns") {
+        Some(text) => serde_json::from_str(&text).map_err(|_| err())?,
+        None => None,
+    };
+    let bytes = body_bytes(request.body())?;
+    parse_job(extension, bytes, columns, request_id).await
+}
+async fn parse_job(
     extension: String,
     bytes: Vec<u8>,
     columns: Option<Columns>,
@@ -553,6 +581,30 @@ pub fn classroom_project(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn file_body_accepts_raw_bytes_and_number_array() {
+        // 보통은 원본 바이트, 예비 통로(postMessage)에서는 JSON 숫자 배열로 옵니다. 둘 다 같은 바이트여야 합니다.
+        let raw = tauri::ipc::InvokeBody::Raw(vec![0, 7, 128, 255]);
+        assert_eq!(body_bytes(&raw).unwrap(), vec![0, 7, 128, 255]);
+        let json = tauri::ipc::InvokeBody::Json(serde_json::json!([0, 7, 128, 255]));
+        assert_eq!(body_bytes(&json).unwrap(), vec![0, 7, 128, 255]);
+        // 예전 모양({bytes:[...]})처럼 배열이 아닌 본문은 거절합니다.
+        assert!(body_bytes(&tauri::ipc::InvokeBody::Json(serde_json::json!({ "bytes": [1] }))).is_err());
+    }
+    #[test]
+    fn columns_header_reads_like_the_old_argument() {
+        // JS가 JSON.stringify(columns ?? null)로 보낸 헤더가 예전 인수와 똑같이 풀려야 합니다.
+        let mut headers = tauri::http::HeaderMap::new();
+        headers.insert("columns", r#"{"number":2,"name":1,"gender":null,"startRow":2}"#.parse().unwrap());
+        headers.insert("extension", "xlsx".parse().unwrap());
+        let text = header(&headers, "columns").unwrap();
+        let columns: Option<Columns> = serde_json::from_str(&text).unwrap();
+        let c = columns.unwrap();
+        assert_eq!((c.number, c.name, c.gender, c.start_row), (Some(2), 1, None, 2));
+        assert_eq!(header(&headers, "extension").as_deref(), Some("xlsx"));
+        assert!(serde_json::from_str::<Option<Columns>>("null").unwrap().is_none());
+        assert!(header(&headers, "request-id").is_none());
+    }
     #[test]
     fn csv_quotes_and_class_boundaries() {
         let csv="학년,반,번호,성명,성별,비고\n5,1,1,\"예시,학생\",여성,제외\n5,2,1,다른학생,남성,제외\n";

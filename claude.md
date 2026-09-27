@@ -48,6 +48,11 @@
 | `src/lib/datePicker/` | 마감일 달력 — 날짜 계산(`calendarModel`), 창 사이 약속·검증(`protocol`), 테마 색(`palette`), 요청 창 쪽 창구(`datePickerClient.svelte.js`) |
 | `src-tauri/src/app_update.rs` | 앱 안 자동 업데이트 — latest.json·서명 확인, 모든 창 저장 확인(응답), 업데이트 직전 사본, 설치 프로그램 실행 |
 | `scripts/release-build.mjs`, `release-verify.mjs` | `npm run release`(점검·빌드·서명 확인·올릴 파일 준비), `npm run release:verify`(게시 후 앱과 같은 순서로 확인) |
+| `src/lib/scores/` | 점수판·학급 온도계 공용 — 구역 저장(`section.js`: 바로 반영·충돌 시 다시 읽고 재적용·되돌리기), 저장소 창구(`store.js`), 효과음(`audio.js`), 스프링 움직임(`motion.js`) |
+| `src/lib/scoreboard/`, `src/lib/thermometer/` | 점수판(자료 모양·순위 뱃지·카드 배치·판 조작), 학급 온도계(자료 모양·올리기 규칙·단계·달력·기록·눈금) 순수 로직 |
+| `src-tauri/src/scores.rs` | 점수판·온도계 저장 파일 — 구역별 revision, 원자적 쓰기, 백업·손상 복구, 업데이트 직전 사본 |
+| `src-tauri/src/classroom/intent.rs` | 다른 창이 학급 명단 창에 할 일(학급 만들기·학생 추가)을 넘기는 10초짜리 전달함 |
+| `src/lib/vote/` | 학급 투표 순수 로직 — 자료 모양·정규화(`model`), 부스 상태 기계(`ballot`), 표 변경 함수(`ballots`), 집계·당선 확실(`tally`), 개표 걸음(`reveal`), 기록함·결선(`archive`), 결과 모델·이미지(`result`·`resultImage`), 효과음(`audio`)·음량 측정(`loudness`)·배경 음악(`music` — 화면→곡·교차 넘김·이어 붙이기) |
 
 순수 로직 모듈은 모두 `node --test` 단위 테스트가 있습니다(`npm test`). 타입·접근성 검사는 `npm run check`.
 
@@ -79,6 +84,7 @@
 2. **State Persistence (상태 영속성 보장):** 창별로 저장할 새 상태값은 `appState.svelte.js`에 `$state` 필드를 선언한 뒤, **`src/lib/storage/windowDataCodec.js`의 `WINDOW_FIELDS` 표에 한 줄을 추가**합니다(되돌리기 대상이면 `snapshot: true` + `SNAPSHOT_FIELDS`). `init`·`performSave`·`takeSnapshot`·`applySnapshot`은 이 표를 자동으로 따릅니다. 기본값 규칙(`||` vs `??`)을 지키고, `windowDataCodec.test.js`에 경계값 테스트를 추가하세요. 초기화 로직(`resetContent` 등)도 함께 점검합니다.
 3. **Execution Hierarchy:** 이 규칙은 모든 UI/비즈니스 로직 작업 시 최우선적으로 지켜져야 하며, 예기치 못한 데이터 유실 리스크(예: 초기화 버그, 잘못된 윈도우 라벨 기반 스토어 덮어쓰기)가 있을 경우 반드시 작업을 중단하고 사용자에게 대안을 제안해야 합니다.
 4. **가독성 및 주석 (Readability):** 변수명은 직관적으로 작성하고, 주석은 항상 '한국어'로 '왜(Why)' 이렇게 코드를 짰는지 의도를 명확하게 남깁니다.
+5. **IPC 성능 규칙:** ① 파일을 읽고 쓰는 Rust 명령은 `#[tauri::command(async)]`(또는 `async fn`)로 만듭니다 — 그냥 `#[tauri::command] fn`은 메인(UI) 스레드에서 돌아 쓰는 동안 모든 창이 멈춥니다. ② 파일 바이트는 `Array.from(bytes)`(JSON 숫자 배열, 약 3.6배)로 보내지 말고 `invoke(명령, uint8Array, { headers })` 원본 바이트로 보내고, Rust는 `tauri::ipc::Request`로 받습니다(예비 통로의 숫자 배열도 받기 — `classroom/import.rs`의 `body_bytes`). 돌려줄 때는 `tauri::ipc::Response::new(bytes)`. JSON 본문은 Tauri가 메인 스레드에서 해석합니다(5MB 파일 약 0.2초 멈춤, 2026-09-26 측정).
 
 
 ### 마감일 달력 (날짜 선택 창, `date-picker`)
@@ -106,3 +112,32 @@
 - 설정은 툴킷 설정 파일 `preferences.clock`(스키마 8). 검증 규칙은 JS `clockPreferences.js`와 Rust `toolkit.rs`의 `clock` 분기가 같아야 합니다(제목 30자는 코드포인트 기준).
 - CSS에서 `light-dark()`를 쓰지 않습니다. 배포 빌드의 lightningcss가 변수 대체 코드로 바꾸는데, 툴킷은 다크 모드를 인라인 `color-scheme`으로 켜서 그 변수가 비어 값이 사라집니다. 시계는 `data-scheme` 속성으로 분기합니다.
 - 개발 시 `?toolkit-preview=clock`, 경계 확인은 `&clock-at=2026-09-23T23:59:55%2B09:00`(가짜 시각에서 출발, 개발 전용).
+
+### 점수판 · 학급 온도계 (툴킷 `scoreboard-*`, `thermometer`)
+- 툴킷의 "점수판" 버튼은 드롭다운 창 `toolkit-scoreboard-menu`(개인·모둠·커스텀)를 엽니다. 숨어 상주하는 팝업이라 `tray.rs`의 `TRANSIENT_LABELS`에 들어 있습니다.
+- **학급 명단과 이어지는 것은 개인 점수판뿐**입니다(학급 id별 점수). 모둠·커스텀 점수판은 명단과 상관없습니다. 온도계는 학급마다 따로(`sets[학급id]`, 명단이 없으면 `default` 한 묶음).
+- 저장: `tidy-task-scoreboard.json`(구역 shared·personal·group·custom), `tidy-task-thermometer.json`(구역 main). 구역마다 revision이 있어 `scores_write(expected_revision)`이 어긋나면 `CONFLICT` → `section.js`가 다시 읽고 대기 중 변경을 다시 적용합니다. 누르는 즉시 화면에 반영하고 저장은 뒤에서 합칩니다.
+  - Rust `check_data` 제한(문자열 200자·배열 1000개·깊이 10·2MB)을 넘는 자료를 만들지 않습니다. 긴 입력(커스텀 초안)은 줄 배열로 저장합니다.
+  - 업데이트 설치 전 `app_update.rs`가 `scores::LOCK`을 잡고, `snapshot_before_update`가 두 파일의 `*.before-update.json` 사본을 만듭니다. 새 저장 경로를 만들면 이 흐름에서도 기록되는지 확인하세요.
+- 온도계는 처음 1개, 설정 → 기본에서 2개까지. 창 최소 크기는 1개 380×520, 2개 760×520이며 Rust `work_window_size("thermometer")`·`thermometer_pair_size()`와 JS `setToolMinSize`(ThermometerApp) 값이 같아야 합니다.
+- 날짜 규칙: 자동 식힘은 **켠 날부터** 셉니다 — 설정을 바꿀 때 `applySettings(t, patch, today)`가 `lastCooledOn`을 적습니다. `catchUp`(자동 식힘·기한 판정)은 창 열기·초점·10분마다 부르며 여러 번 불러도 결과가 같아야 합니다.
+- 숫자 굴림(`components/scores/RollingNumber.svelte`)은 WAAPI로 직접 움직이고 끝·취소·시간 초과 때 옛 숫자를 반드시 지웁니다. Svelte `{#key}` in/out 전환은 연타·가려진 창에서 잔상이 남았습니다.
+- 개발 시 `?toolkit-preview=scoreboard-personal|scoreboard-group|scoreboard-custom|thermometer|toolkit-scoreboard-menu`, 날짜 흉내 `&thermo-today=2026-09-28`(개발 전용). 미리보기 저장은 localStorage `tidy-scores-preview-v1:<저장소>`입니다. 검수 기록은 `docs/QA-scoreboard.md`.
+
+### 학급 투표 (툴킷 `vote`, `vote-teacher`)
+- 학생은 키보드 숫자키로만 투표합니다(마우스·터치 투표 없음). 투표 단계(부스·개표 대기)에서는 `VoteApp`이 창 전체의 keydown·keyup을 먼저 잡아 부스로만 넘기고(선생님 메뉴·확인창이 없을 때의 Esc도 부스로 — 다시 투표하기 팝업 닫기), 선생님 버튼·확인창은 마우스로만 눌립니다(`tabindex=-1`, 경고 창 버튼은 `pointerup`). 새 버튼을 투표 화면에 넣을 때도 이 원칙을 지키세요.
+- **비밀 원칙**: 투표판 화면 값은 `ballot.js`의 `view()`만 보고, 어떤 번호·기권이든 같아야 합니다(단위 테스트가 확인). 효과음 `vote.cast`는 모든 표에 같습니다. 표는 무작위 위치에 끼우고 시각을 남기지 않으며, 개표 전에는 선생님도 득표를 못 봅니다. 공개 전 카드에 결과 글자를 미리 넣지 않습니다(뒷면 숨김이 깨져도 비치지 않게).
+- **스페이스바 · Enter는 쓰지 않습니다**(2026-09-26): 첫 친구는 곧바로 투표판, 번호를 누르면 "투표했어요!"(`DONE_MS` 1.3초) → 저절로 봉인 → "다음 친구 차례예요"(`HANDOFF_MS` 1.4초) → 저절로 새 투표판. 이 두 시간 동안 숫자를 모두 무시하는 것이 연타로 두 번째 표가 들어가는 것을 막는 유일한 틈이니 줄이거나 없애지 마세요. 완료 화면에 [다음 친구 투표]·Enter를 다시 넣지 마세요(사용자: "학생들이 빨리빨리 해야 하는데 번거롭다").
+- **다시 투표하기**(2026-09-26): 투표판 오른쪽 위 [다시 투표하기] 또는 백스페이스(고르던 표가 없을 때 — 투표했어요 · 다음 친구 화면에서도) → 팝업(`booth/UndoDialog.svelte`) → Enter · [다시 투표하기]면 **저장소의 `lastBallotId`**(선생님 [직전 표 취소]와 같은 표)를 뺍니다. Esc · 백스페이스 · [아니요]는 닫기. 팝업이 뜬 뒤 `UNDO_ARM_MS`(0.4초) 안의 Enter는 무시(연타로 보지도 않고 취소되지 않게), 팝업이 떠 있는 동안에는 저절로 넘어가지 않습니다(`dueAt`).
+- **투표는 선생님이 멈추지 않으면 멈추지 않습니다**(2026-09-26): 잠시 멈춤 · "잠시 쉬어요" 화면 · 초점 가림막을 없앴습니다. 창을 다시 열 때 · 안내 다시 보기 · 저장 3회 실패 · 되돌리기 뒤에도 `paused`로 바꾸지 않습니다(`paused`는 예전 저장 파일 호환용으로만 남음, 열 때 `voting`으로 풂). 선생님 메뉴 · 경고 · 확인창이 열려 있는 동안만 부스가 막힙니다(`held`).
+  - **투표판은 키보드(초점)를 스스로 되찾지 않습니다**(2026-09-26 사용자 요청): 예전의 0.25초 뒤 `setFocus()` 되찾기 때문에 투표 중에는 다른 창에 입력할 수 없었습니다(누르자마자 투표판이 초점을 빼앗음). 다른 창에 초점이 있는 동안 투표판 왼쪽 위에 작은 알림("키보드가 다른 창에 있어요")만 띄우고, 막지도 멈추지도 않습니다. `setFocus()`로 되찾는 코드도, 가림막도 다시 넣지 마세요. 선생님 창만 자기 버튼 · pointerup · 창 옮김이 끝난 뒤(0.5초) 투표판에 돌려줍니다(선생님이 그 창을 쓴 직후라서). 새 멈춤 경로를 만들지 마세요.
+- 표 저장은 `mutateAndConfirm`으로 **저장 확인 뒤에만** 완료 화면으로 넘어갑니다. session 구역은 "투표 있음 | `{id:null}`" 두 모양이고, 변경 함수(`ballots.js`)는 맨 앞에서 id·단계를 보고 할 수 없으면 입력을 그대로 돌려줍니다(충돌 재적용에 안전).
+- 저장: `tidy-task-vote.json`(구역 session·archive·draft·prefs, `scores.rs`). 업데이트 직전 사본에 포함됩니다. 기록함은 최근 30개, 결선은 원래 기록의 `runoffs`에 묶입니다.
+- 선생님 창은 같은 저장소를 같은 변경 함수로 고치고, 저장하지 않는 신호(안내 넘기기·개표 재생·골라 공개)는 `remote.js`(`vote-remote` / `vote-state`, 미리보기는 BroadcastChannel)로 주고받습니다. 누른 뒤 0.15초 만에 `focusBoard()`로 키보드를 투표판에 돌려줍니다.
+- 효과음 음량은 `audio.js`의 `LOUDNESS`(PRD 목표, BS.1770) · `TRIM`(보정) · `TAME`(타격음 봉우리 누름) 표 한곳에서 정합니다. 소리를 고치면 미리보기에서 `renderCue` + `loudness.js`로 다시 재서 표를 고치세요(최고점 −3dBTP가 먼저). 녹음 파일은 `src/assets/vote/audio/{id}.wav|ogg`, 캐릭터 그림은 `src/assets/vote/characters/{m1..f9}.webp`에 넣으면 코드 수정 없이 우선 쓰입니다.
+- **배경 음악**(`music.js`, 2026-09-26): 곡은 `public/music` — `main`(첫 화면·만들기·준비·결과 뒤) · `vote`(안내·투표·마감) · `vote counting`(개표·다시 보기). 곡은 화면이 아니라 **곡이 바뀔 때만** 교차로 넘기고(같은 곡 화면끼리는 끊기지 않음), 곡마다 재생기 하나라 겹치지 않습니다. 결과 화면(개표 직후)은 개표 곡을 걷고 축하 소리 뒤에 메인을 올립니다. 곡 끝은 다음 바퀴 처음과 4초 겹쳐 잇습니다.
+  - 켜기/끄기는 `prefs.music` 하나(제목줄 `MusicToggle` · 선생님 메뉴 · 선생님 창 공통) — 저장되므로 화면을 옮기거나 창을 다시 열어도 유지. 끄기·전체 소리 끄기는 "잠시 멈춤"(다시 켜면 이어서). 켤 때 전체 소리가 꺼져 있으면 함께 켭니다(`musicTogglePatch`).
+  - 음악은 **투표판 창에서만** 만듭니다(선생님 창은 설정만 바꿈). 음량은 곡마다 잰 LUFS로 −27 LUFS에 맞추고, 안내 음성 때 −8dB · 큰 효과음(`MUSIC_DUCK`) 때 잠깐 낮춥니다. 곡 파일을 바꾸면 `ffmpeg -i 파일 -af ebur128 -f null -`로 다시 재서 `MUSIC_TRACKS.lufs`를 고치세요. 화면 전환 도중 잠깐 거쳐 가는 view가 생기지 않게 하세요(예: `finishArchive`는 투표를 비우기 전에 `screen='result'`). 개발 미리보기 콘솔에서 `__voteMusic.snapshot()`으로 곡·크기·위치를 봅니다.
+- 작업 창 1280×820(최소 760×560), 선생님 창 440×760(최소 380×560) — Rust `work_window_size("vote" | "vote-teacher")`와 JS 미리보기 크기(`toolkit/windows.js`)가 같아야 합니다.
+- 준비 화면(`prep/PrepScreen.svelte`) 확인 카드의 체크는 실제 상태(전체 화면·놓인 모니터·소리 켜짐·눌러 본 키)에서 `$derived`로 계산합니다. `$effect` 안에서 읽은 상태를 다시 쓰면 무한 반복 오류(`effect_update_depth_exceeded`)로 창 전체의 화면 갱신이 멈춰 모든 버튼이 먹통이 됩니다(실제로 났던 사고). 오늘의 후보 판 크기는 `layout.js`의 `lineupGrid`가 정합니다.
+- 개발 시 `?toolkit-preview=vote`(선생님 창은 `vote-teacher`), 예시 채우기 `&vote-fixture=candidate9|opinion|yesno3|voting|counting-<방식>[-yesno]|result|result-tie|result-winner|archive`, 효과음 청취·음량 검수 `&vote-sounds`(모두 개발 전용, 배포 번들에 없음). 검수 기록은 `docs/QA-vote.md`.

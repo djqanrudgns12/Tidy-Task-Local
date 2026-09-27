@@ -2,15 +2,36 @@
   import { onMount } from 'svelte';
   import { getCurrentWindow } from '@tauri-apps/api/window';
   import { WebviewWindow } from '@tauri-apps/api/webviewWindow';
-  import { TIMER_TOOLS, PLATFORM_TOOLS } from '../../lib/toolkit/registry.js';
+  import { TIMER_TOOLS, SCOREBOARD_TOOLS, PLATFORM_TOOLS } from '../../lib/toolkit/registry.js';
+  import ToolIcon from './ToolIcon.svelte';
+  import { contextPanel } from '../../lib/toolkit/contextPanel.js';
+  import ToolkitQuickTools from './ToolkitQuickTools.svelte';
   import { native, readSettings, subscribeSettings, patchSettings, setEnabled } from '../../lib/toolkit/store.js';
   import { openTool, openPlatform, dismissMenu, centerToolbar } from '../../lib/toolkit/windows.js';
   import TimerIcon from './TimerIcon.svelte';
-  import { ArrowUpRight, Minimize2, Maximize2, LocateFixed, Settings, Power } from 'lucide-svelte';
+  import { ArrowUpRight, Minimize2, Maximize2, LocateFixed, Settings, Power, GripHorizontal } from 'lucide-svelte';
   // ondone: 브라우저 미리보기에서는 메뉴가 툴바 안에 그려지므로, 동작 뒤 닫기를 툴바에 맡깁니다.
-  let { kind = 'timer', ondone } = $props<{ kind?: 'timer' | 'external' | 'context'; ondone?: () => void }>();
+  let { kind = 'timer', ondone } = $props<{ kind?: 'timer' | 'scoreboard' | 'external' | 'context'; ondone?: () => void }>();
+  // 점수판 메뉴: 마지막으로 연 항목에 초점을 두어 Enter 한 번으로 다시 열게 하고, 이미 열린 창에는 점을 찍습니다.
+  // 왜 localStorage인가: 잃어도 첫 항목에 초점이 갈 뿐인 편의 값이라 저장소를 따로 두지 않습니다.
+  const LAST_KEY = 'tidy-scoreboard-menu-last';
+  let openLabels = $state<string[]>([]);
+  function lastScoreboard() {
+    try { return localStorage.getItem(LAST_KEY); } catch { return null; }
+  }
+  async function refreshOpen() {
+    if (kind !== 'scoreboard' || !native) return;
+    const found = await Promise.all(SCOREBOARD_TOOLS.map(async (tool) => ((await WebviewWindow.getByLabel(tool.id)) ? tool.id : '')));
+    openLabels = found.filter(Boolean);
+  }
+  function focusFirst() {
+    const last = kind === 'scoreboard' ? lastScoreboard() : null;
+    const target = (last && list.querySelector<HTMLButtonElement>(`button[data-tool="${last}"]`)) || list.querySelector('button');
+    target?.focus();
+  }
   let list: HTMLDivElement;
   let error = $state('');
+  let panelDragging = $state(false);
   let hiddenPlatformIds = $state<string[]>([]);
   let externalToolsEnabled = $state(true);
   let collapsed = $state(false);
@@ -19,11 +40,14 @@
   const visiblePlatforms = $derived(
     PLATFORM_TOOLS.filter((tool) => externalToolsEnabled && !hiddenPlatformIds.includes(tool.id)),
   );
-  const menuLabel = $derived(kind === 'timer' ? '타이머' : kind === 'external' ? '외부 툴' : 'Tidy 툴킷');
+  const menuLabel = $derived(kind === 'timer' ? '타이머' : kind === 'scoreboard' ? '점수판' : kind === 'external' ? '외부 툴' : 'Tidy 툴킷');
   async function launch(id: string) {
     try {
       if (kind === 'timer') await openTool(id);
-      else await openPlatform(id);
+      else if (kind === 'scoreboard') {
+        await openTool(id);
+        try { localStorage.setItem(LAST_KEY, id); } catch {}
+      } else await openPlatform(id);
       await dismissMenu(kind);
       ondone?.();
     } catch {
@@ -45,13 +69,16 @@
     }
   }
   async function keys(e: KeyboardEvent) {
-    const buttons = Array.from(list.querySelectorAll('button'));
+    if (e.defaultPrevented) return;
+    const buttons = Array.from(list.querySelectorAll<HTMLButtonElement>('button:not(:disabled)'));
+    if (kind === 'context' && e.key !== 'Escape') return;
     const i = buttons.indexOf(document.activeElement as HTMLButtonElement);
     if (e.key === 'Tab' || ['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(e.key)) {
       suppressInitialFocusRing = false;
     }
     if (e.key === 'Escape') {
       await dismissMenu(kind);
+      ondone?.();
       if (native) await (await WebviewWindow.getByLabel('toolkit'))?.setFocus();
     }
     if (['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(e.key)) {
@@ -66,11 +93,12 @@
     }
   }
   onMount(() => {
-    list.querySelector('button')?.focus();
+    focusFirst();
+    void refreshOpen();
     let offFocus = () => {};
     let offSettings = () => {};
     let disposed = false;
-    if (kind !== 'timer') {
+    if (kind !== 'timer' && kind !== 'scoreboard') {
       const apply = (settings: Awaited<ReturnType<typeof readSettings>>) => {
         if (disposed) return;
         hiddenPlatformIds = settings.toolkit.hiddenPlatformIds;
@@ -90,10 +118,11 @@
           if (!payload) {
             // 툴바 버튼을 다시 누를 때는 메뉴 창의 blur가 버튼 click보다 먼저 옵니다.
             // 즉시 숨기면 click 쪽에서 닫힌 메뉴를 다시 열기 때문에, 토글 판단이 끝날 틈을 둡니다.
-            focusDismissTimer = setTimeout(() => void dismissMenu(kind), 120);
+            focusDismissTimer = setTimeout(() => { if (!panelDragging) void dismissMenu(kind); }, 120);
           } else {
             suppressInitialFocusRing = true;
-            list.querySelector('button')?.focus();
+            focusFirst();
+            void refreshOpen();
           }
         })
         .then((fn) => {
@@ -114,14 +143,20 @@
   class="toolkit-menu"
   class:suppress-initial-focus-ring={suppressInitialFocusRing}
   bind:this={list}
-  role="menu"
+  use:contextPanel={{ enabled: kind === 'context', ondrag: (active) => panelDragging = active }}
+  role={kind === 'context' ? 'dialog' : 'menu'}
   aria-label={`${menuLabel} 선택`}
   class:external-menu={kind === 'external'}
+  class:scoreboard-menu={kind === 'scoreboard'}
   class:context-menu={kind === 'context'}
   tabindex="-1"
   oncontextmenu={(e) => e.preventDefault()}
 >
-  <p class="toolkit-menu-heading">{menuLabel}</p>
+  {#if kind === 'context'}
+    <header class="context-panel-heading" data-panel-drag title="잡고 끌어서 패널 이동">
+      <span>{menuLabel}</span><span class="context-panel-grip"><GripHorizontal size={16}/><span>이동</span></span>
+    </header>
+  {:else}<p class="toolkit-menu-heading">{menuLabel}</p>{/if}
   {#if kind === 'timer'}
     {#each TIMER_TOOLS as tool}<button
       role="menuitem"
@@ -130,23 +165,27 @@
         size={14}
       /></button
     >{/each}
+  {:else if kind === 'scoreboard'}
+    {#each SCOREBOARD_TOOLS as tool}<button
+      role="menuitem"
+      data-tool={tool.id}
+      title={openLabels.includes(tool.id) ? `${tool.label} (열려 있어요 · 누르면 앞으로)` : tool.label}
+      onclick={() => launch(tool.id)}
+      ><span class="menu-icon"><ToolIcon kind={tool.id} size={26} /></span><span class="menu-copy"
+        ><span class="menu-title">{tool.label}{#if openLabels.includes(tool.id)}<i class="menu-open-dot" aria-label="열려 있음"></i>{/if}</span
+        ><small>{tool.hint}</small></span
+      ><ArrowUpRight size={14} /></button
+    >{/each}
   {:else if kind === 'context'}
-    <button role="menuitem" onclick={() => runContext('collapse')}
-      ><span class="menu-icon">{#if collapsed}<Maximize2 size={15} />{:else}<Minimize2 size={15} />{/if}</span
-      ><span>{collapsed ? '펼치기' : '접기'}</span></button
-    >
-    <button role="menuitem" title="툴킷을 지금 화면 한가운데로 옮겨요" onclick={() => runContext('center')}
-      ><span class="menu-icon"><LocateFixed size={15} /></span><span>좌표 초기화</span><small class="context-hint">화면 가운데</small></button
-    >
-    <button role="menuitem" onclick={() => runContext('settings')}
-      ><span class="menu-icon"><Settings size={15} /></span><span>설정</span></button
-    >
-    <hr class="context-divider" />
-    <button role="menuitem" class="context-danger" onclick={() => runContext('disable')}
-      ><span class="menu-icon"><Power size={15} /></span><span
-        >툴킷 끄기<small>설정에서 다시 켤 수 있어요</small></span
-      ></button
-    >
+    <div class="context-shortcuts">
+      <button onclick={() => runContext('collapse')}><span class="menu-icon">{#if collapsed}<Maximize2 size={15}/>{:else}<Minimize2 size={15}/>{/if}</span><span>{collapsed ? '펼치기' : '접기'}</span></button>
+      <button title="툴킷을 화면 가운데로 이동" onclick={() => runContext('center')}><span class="menu-icon"><LocateFixed size={15}/></span><span>가운데로</span></button>
+    </div>
+    <ToolkitQuickTools />
+    <div class="context-footer">
+      <button onclick={() => runContext('settings')}><Settings size={15}/><span>전체 설정</span></button>
+      <button class="context-power" onclick={() => runContext('disable')}><Power size={15}/><span>툴킷 끄기</span></button>
+    </div>
   {:else}
     {#each visiblePlatforms as tool}<button
         role="menuitem"

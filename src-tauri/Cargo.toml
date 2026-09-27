@@ -1,6 +1,6 @@
 [package]
 name = "tidy_task"
-version = "5.5.3"
+version = "5.6.0"
 description = "여러분들의 소중한 업무를 기록해보세요!"
 authors = ["you"]
 license = ""
@@ -47,3 +47,5 @@ zip = { version = "2.4", default-features = false, features = ["deflate"] }
 quick-xml = "0.37"
 csv = "1.3"
 encoding_rs = "0.8"
+# invoke 헤더로 보낸 한글 파일 이름(encodeURIComponent)을 되돌립니다. tauri-plugin-fs가 같은 헤더를 푸는 데 쓰는 것과 같은 크레이트(이미 의존성 트리에 있음).
+percent-encoding = "2.3"

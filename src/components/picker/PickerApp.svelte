@@ -11,6 +11,7 @@
   import {TOYS,BALLOONS,PALETTES,createSuspense} from '../../lib/picker/designs.js';
   import {emptyLibrary,readLibrary,writeLibrary} from '../../lib/picker/storage.js';
   import {createPickerAudio} from '../../lib/picker/audio.js';
+  import {rollingPlan,rollingStep,fitName} from '../../lib/picker/nameCard.js';
   import ToolkitSwitch from '../toolkit/ToolkitSwitch.svelte';
   import PickerStage from './PickerStage.svelte';
   import PickerCelebration from './PickerCelebration.svelte';
@@ -21,6 +22,8 @@
   let roster=$state<Awaited<ReturnType<typeof readRoster>>>({classes:[],revision:0,defaultClassId:null});
   let rosterReady=$state(false),rosterError=$state(''),error=$state(''),notice=$state('');
   let session=$state(createSession()),repeat=$state(true);
+  // 바로 결과 보기: 켜면 애니메이션 없이 누르는 즉시 결과가 나옵니다. "한 번씩 골고루"처럼 창을 열 때마다 꺼진 상태로 시작합니다.
+  let instant=$state(false);
   let lists=$state<Record<string,List>>({groups:makeList('groups',[]),custom:makeList('custom',[])});
   let library=$state<any>(emptyLibrary()),libraryReady=$state(false),saving=$state(false),storageError=$state('');
   let sound=$state(true),reduce=$state(false),pinned=$state(false),expanded=$state(false);
@@ -35,7 +38,8 @@
   const audio=createPickerAudio();
   let cues=new Set<string>();
   let editor:HTMLDialogElement,confirmDialog:HTMLDialogElement,utilityDialog:HTMLDialogElement;
-  let drawEntries=$state<Entry[]>([]),runReduced=$state(false);
+  let drawEntries=$state<Entry[]>([]),runReduced=$state(false),runInstant=$state(false);
+  let rolling=$state.raw<{at:number;index:number}[]>([]);
   let editorFor=$state(''),editorKind=$state('custom'),editorName=$state(''),editorText=$state(''),editorRows=$state<Entry[]>([]),editorStep=$state('input'),editorError=$state(''),duplicateOK=$state(false);
   let confirmTitle=$state(''),confirmCopy=$state(''),confirmAction:()=>void=()=>{};
   const classroom=$derived(roster.classes.find(c=>c.id===classId)??null);
@@ -58,7 +62,12 @@
   const visibleEntries=$derived(entries.filter(e=>`${e.number??''} ${e.name}`.includes(search.trim())));
   const duplicates=$derived(editorRows.filter((e,i,a)=>a.findIndex(x=>x.name.trim()===e.name.trim())!==i).map(e=>e.name));
   const phase=$derived(runReduced?'두근두근, 결과를 준비하고 있어요':elapsed<suspense.duration?(mode==='claw'?'이쪽일까요… 저쪽일까요?':'잠깐, 다른 풍선도 볼까요?'):mode==='claw'?(sceneElapsed<800?'집게가 인형을 찾아가요':sceneElapsed<1600?'집게가 천천히 내려와요':sceneElapsed<2100?'인형을 꼭 잡았어요!':sceneElapsed<3000?'인형을 들어 올려요':sceneElapsed<3650?'선물 출구로 이동해요':'인형이 나옵니다!'):mode==='balloon'?(sceneElapsed<900?'어떤 풍선일까요? 조준 중!':sceneElapsed<1700?'다트가 날아가요!':sceneElapsed<2300?'명중! 풍선이 터졌어요':'당첨된 이름을 공개해요'):'이름을 골고루 섞고 있어요');
-  const rollingEntry=$derived(drawEntries[Math.floor(elapsed/(elapsed<1000?85:180))%Math.max(1,drawEntries.length)]);
+  const rollingEntry=$derived(drawEntries[rolling[rollingStep(rolling,elapsed)]?.index??0]);
+  // 클래식 이름 카드는 한 장이 대기(뒷면) → 넘기는 중 → 멈춤(당첨자가 나온 뒤 한 박자) → 결과로 이어집니다.
+  // 동작 감소 모드는 넘기지 않고 뒷면인 채로 기다립니다.
+  const cardState=$derived(session.active?(runReduced?'waiting':elapsed>=(rolling.at(-1)?.at??0)?'landed':'rolling'):result?'result':'idle');
+  const cardEntry=$derived(cardState==='result'?result:cardState==='rolling'||cardState==='landed'?rollingEntry:null);
+  const footerText=$derived(session.active?phase:shuffling?'골고루 섞고 있어요':!eligible.length&&entries.length?'이번 뽑기가 끝났어요. 다시 시작할 수 있어요.':!entries.length?'명단을 준비하면 시작할 수 있어요':instant?'애니메이션 없이 바로 결과를 보여 줘요':mode==='classic'?'이름이 섞이다가 오늘의 주인공이 나타나요':mode==='claw'?'집게가 인형을 잡아 선물 출구로 가져와요':'다트를 던져 풍선 속 이름을 확인해요');
   const duration=$derived(runReduced?900:DURATION[mode as keyof typeof DURATION]+suspense.duration);
   const steps=$derived(mode==='claw'?['이동','내려가기','잡기','올리기','선물 도착']:mode==='balloon'?['조준','다트 발사','풍선 팡!','결과 공개']:['이름 섞기','결과 공개']);
   const stepIndex=$derived(mode==='claw'?(elapsed<800?0:elapsed<1600?1:elapsed<2100?2:elapsed<3650?3:4):mode==='balloon'?(elapsed<900?0:elapsed<1700?1:elapsed<2300?2:3):(elapsed<1600?0:1));
@@ -81,21 +90,29 @@
   async function preload(){assetError='';assetsReady=false;try{await Promise.all(TOYS.map(t=>new Promise<void>((resolve,reject)=>{const img=new Image();img.onload=()=>img.decode().then(()=>resolve()).catch(reject);img.onerror=reject;img.src=t.src;})));if(!disposed)assetsReady=true;}catch{if(!disposed)assetError='인형 이미지를 불러오지 못했어요.';}}
   $effect(()=>{if(mode==='claw'&&!assetsReady&&!assetError)void preload();});
   $effect(()=>{if(!utilityDialog)return;if(panel&&!utilityDialog.open)utilityDialog.showModal();else if(!panel&&utilityDialog.open)utilityDialog.close();});
-  function complete(id:string){if(disposed||session.active?.id!==id)return;const winner=session.active.winner;session=finishDraw(session,id);if(mode!=='classic')celebration={...winner};elapsed=0;clearTimeout(watchdog);if(!document.hidden)audio.play('result');}
+  // 소리는 잠금 해제 뒤에 냅니다. 바로 결과 보기에서는 첫 클릭과 같은 순간에 결과가 나와 아직 소리가 잠겨 있을 수 있습니다.
+  function complete(id:string){if(disposed||session.active?.id!==id)return;const winner=session.active.winner;session=finishDraw(session,id);if(mode!=='classic')celebration={...winner};elapsed=0;clearTimeout(watchdog);if(!document.hidden)void audio.unlock().then(()=>{if(!disposed)audio.play('result');});}
   async function draw(){
     if(!canDraw)return;
     error='';notice='';
     try{
       // Commit the outcome synchronously before audio or any awaited work.
-      drawEntries=eligible.map(e=>({...e}));runReduced=reduced;
+      drawEntries=eligible.map(e=>({...e}));runReduced=reduced;runInstant=instant;
       session=beginDraw(session,sourceKey,custom?entries:filterEntries(captureCandidates(classroom!).students,source),mode,roster.revision,repeat);
+      const winner=session.active!.winner,id=session.active!.id;
       runScene=sceneBase.map(e=>({...e}));
-      target=runScene.findIndex(e=>e.id===session.active!.winner.id);
-      if(target<0){target=runScene.length-1;runScene[target]={...session.active!.winner};}
-      suspense=runReduced||mode==='classic'?{duration:0,visits:[]}:createSuspense(runScene.flatMap((e,i)=>sceneVisible.has(e.id)?[i]:[]),target);
+      target=runScene.findIndex(e=>e.id===winner.id);
+      if(target<0){target=runScene.length-1;runScene[target]={...winner};}
       if(mode==='claw')resultToySrc=TOYS[designs.claw==='mixed'?(target+seed)%6:Math.max(0,TOYS.findIndex(t=>t.id===designs.claw))].src;
+      // 바로 결과 보기: 이미 정해진 결과를 연출 없이 곧바로 기록합니다(뽑는 방법과 확률은 같습니다).
+      if(instant){complete(id);return;}
+      suspense=runReduced||mode==='classic'?{duration:0,visits:[]}:createSuspense(runScene.flatMap((e,i)=>sceneVisible.has(e.id)?[i]:[]),target);
+      if(mode==='classic'&&!runReduced){
+        let at=drawEntries.findIndex(e=>e.id===winner.id);
+        if(at<0){drawEntries=[...drawEntries,{...winner}];at=drawEntries.length-1;}
+        rolling=rollingPlan(drawEntries.length,at,DURATION.classic);
+      }
       startedAt=session.active!.startedAt;clock=startedAt;elapsed=0;cues=new Set();
-      const id=session.active!.id;
       // Sound permission must never block or consume the visual sequence.
       void audio.unlock().then(()=>{if(!disposed&&session.active?.id===id&&!runReduced)audio.play('move');});
       watchdog=setTimeout(()=>complete(id),(runReduced?900:DURATION[mode as keyof typeof DURATION]+suspense.duration)+150);
@@ -182,7 +199,10 @@
         <div class="picker-list-actions"><button disabled={busy||saving||!libraryReady||!entries.length} onclick={saveList}><Save size={16}/>{saving?'저장 중…':'목록 저장'}</button><button disabled={busy||!libraryReady} onclick={()=>panel='library'}><FolderOpen size={16}/>불러오기</button><button disabled={busy} onclick={()=>ask('새 목록을 만들까요?','현재 적용한 목록 대신 새 목록을 입력해요. 저장하지 않은 목록은 이 화면에서 사라집니다.',()=>{lists={...lists,[source]:makeList(source,[])};editorFor='';void editList();})}><Plus size={16}/>새 목록</button></div>
       {/if}
       </div>
-      <div class="picker-rule"><div><strong>한 번씩 골고루</strong><ToolkitSwitch label="뽑힌 대상 제외" checked={repeat} disabled={busy} onchange={v=>repeat=v}/></div><p>{repeat?'중복 없이 한 번씩 뽑아요.':'같은 대상도 다시 뽑아요.'}</p></div>
+      <div class="picker-rules">
+        <div class="picker-rule"><div><strong>바로 결과 보기</strong><ToolkitSwitch label="바로 결과 보기" checked={instant} disabled={busy} onchange={v=>instant=v}/></div><p>{instant?'애니메이션 없이 바로 뽑아요.':'애니메이션과 함께 뽑아요.'}</p></div>
+        <div class="picker-rule"><div><strong>한 번씩 골고루</strong><ToolkitSwitch label="뽑힌 대상 제외" checked={repeat} disabled={busy} onchange={v=>repeat=v}/></div><p>{repeat?'중복 없이 한 번씩 뽑아요.':'같은 대상도 다시 뽑아요.'}</p></div>
+      </div>
       <div class="picker-pool"><div><span>전체 대상</span><strong>{entries.length}<small>{unit}</small></strong></div><div><span>남은 대상</span><strong>{eligible.length}<small>{unit}</small></strong></div></div>
     </aside>
     <div class="picker-play-area">
@@ -193,22 +213,31 @@
     {#if rosterError&&!custom}<p class="picker-error" role="alert">{rosterError}<button onclick={refreshRoster}>다시 시도</button></p>{/if}
     {#if error}<p class="picker-error" role="alert">{error}</p>{/if}
     <div id="picker-mode-panel" role="tabpanel" aria-labelledby={`picker-tab-${mode}`} class="picker-mode-panel">
-      <div class="picker-stage" class:classic={mode==='classic'} class:dense={mode!=='classic'&&eligible.length>15} class:reduced class:has-result={!!result&&!session.active}>
+      <div class="picker-stage" class:classic={mode==='classic'} class:dense={mode!=='classic'&&eligible.length>15} class:reduced class:instant={runInstant} class:has-result={!!result&&!session.active} class:ended={!busy&&entries.length>0&&!eligible.length}>
         <div class="picker-stage-top"><span class="picker-stage-label">{mode==='classic'?'두근두근 이름 카드':mode==='claw'?'우리 반 인형뽑기':'알록달록 풍선 다트'}</span><span class="picker-count">남은 {eligible.length}{unit}</span></div>
         {#if mode!=='classic'}<PickerStage {mode} {suspense} {elapsed} {clock} {startedAt} drawing={!!session.active&&!runReduced} {reduced} {seed} design={designs[mode]} {target} count={sceneEntries.length} entries={sceneEntries} visible={sceneVisible} {shuffling} onasseterror={()=>{assetError='인형 이미지를 불러오지 못했어요.';if(session.active)complete(session.active.id);}}/>{:else}<div class="picker-classic-ornament" aria-hidden="true"><span>?</span><span>?</span><span>?</span></div>{/if}
         {#if !session.active && (!entries.length || (!custom&&!classroom))}
           <div class="picker-stage-message" class:over-scene={mode!=='classic'}><span class="picker-empty-icon"><UsersRound size={32}/></span><h2>{custom?'뽑을 목록부터 준비해요':!classroom?'우리 반을 선택해 주세요':'해당하는 학생이 없어요'}</h2><p>{custom?'모둠, 학생 이름, 오늘의 활동까지.':'왼쪽에서 학급을 선택하거나 직접 입력해 보세요.'}<br/>{custom?'한 줄에 하나씩 입력하면 준비 끝!':'명단을 준비하면 즐거운 뽑기가 시작돼요.'}</p><div class="picker-empty-actions"><button class="picker-small-primary" onclick={()=>custom?editList():openTool('roster')}>{custom?'목록 입력하기':'학급 명단 열기'}<ArrowRight size={18}/></button>{#if !custom}<button onclick={()=>{changeSource('custom');void editList();}}>직접 입력하기</button>{/if}</div></div>
-        {:else if session.active&&runReduced}<div class="picker-classic-ready"><Sparkles size={40}/><h2>두근두근, 누구일까요?</h2><p>잠시 후 결과를 보여드려요</p></div>
-        {:else if !session.active&&result}
+        {:else if session.active&&runReduced&&mode!=='classic'}<div class="picker-classic-ready"><Sparkles size={40}/><h2>두근두근, 누구일까요?</h2><p>잠시 후 결과를 보여드려요</p></div>
+        {:else if !session.active&&result&&mode!=='classic'}
           {@const winner=result}
           <div class="picker-result" class:over-scene={mode!=='classic'} data-testid="picker-result">
             <span class="picker-result-caption"><Sparkles size={18}/>{custom?'이번에 뽑힌 주인공':'이번에 뽑힌 학생'}</span>
             {#if mode==='claw'&&!assetError}<img class="picker-result-toy" src={resultToySrc} alt=""/>{/if}
             <div class="picker-result-identity"><span class="picker-result-number">{winner.number}{custom?'번째 항목':'번'}</span><strong class:long={winner.name.length>12}>{winner.name}</strong></div>
           </div>
-        {:else if mode==='classic'}<div class="picker-classic-ready" class:selecting={!!session.active}>{#if session.active}<div class="picker-rolling-card" aria-hidden="true"><span>{rollingEntry?.number}{custom?'번째 항목':'번'}</span><strong>{rollingEntry?.name}</strong></div><p>두근두근… 누가 뽑힐까요?</p>{:else}<span class="picker-number-mark">?</span><h2>오늘의 주인공은 누구?</h2><p>아래 ‘뽑기 시작’을 눌러 주세요</p>{/if}</div>{/if}
+        {:else if mode==='classic'}
+          <div class="picker-classic" data-state={cardState}>
+            <p class="picker-classic-caption">{#if cardState==='result'}<Sparkles size={18}/>{custom?'이번에 뽑힌 주인공':'이번에 뽑힌 학생'}{:else if cardState==='idle'}오늘의 주인공은 누구?{:else if cardState==='waiting'}잠시 후 결과를 보여 드려요{:else}두근두근… 누가 뽑힐까요?{/if}</p>
+            <!-- 넘기는 동안의 이름은 읽어 주지 않습니다. 결과는 아래 알림 영역(picker-sr)이 한 번 읽어 줍니다. -->
+            <div class="picker-name-card" data-state={cardState} aria-hidden={cardState!=='result'} data-testid={cardState==='result'?'picker-result':undefined}>
+              {#if cardEntry}<span class="picker-name-number">{cardEntry.number}{custom?'번째 항목':'번'}</span><strong use:fitName={cardEntry.name}>{cardEntry.name}</strong>
+              {:else}<span class="picker-name-mark">?</span>{/if}
+            </div>
+          </div>
+        {/if}
         {#if mode==='claw'&&(!assetsReady||assetError)}<div class="picker-asset-state"><span>{assetError||'인형을 준비하고 있어요…'}</span>{#if assetError}<button onclick={preload}>다시 시도</button><button onclick={()=>changeMode('classic')}>클래식으로</button>{/if}</div>{/if}
-        <div class="picker-stage-footer"><span>{session.active?phase:shuffling?'골고루 섞고 있어요':!eligible.length&&entries.length?'이번 뽑기가 끝났어요. 다시 시작할 수 있어요.':!entries.length?'명단을 준비하면 시작할 수 있어요':mode==='classic'?'이름이 섞이다가 오늘의 주인공이 나타나요':mode==='claw'?'집게가 인형을 잡아 선물 출구로 가져와요':'다트를 던져 풍선 속 이름을 확인해요'}</span>{#if session.active}<span class="picker-progress"><i style={`width:${Math.min(100,elapsed/duration*100)}%`}></i></span>{/if}</div>
+        <div class="picker-stage-footer"><span>{footerText}</span>{#if session.active}<span class="picker-progress"><i style={`width:${Math.min(100,elapsed/duration*100)}%`}></i></span>{/if}</div>
       </div>
       <div class="picker-sequence" aria-label="뽑기 진행 단계">{#each steps as step,i}<span class:current={!!session.active&&!runReduced&&i===stepIndex} class:done={!!session.active&&!runReduced&&i<stepIndex}><i>{i+1}</i>{step}</span>{/each}</div>
       <div class="picker-draw-row"><div class="picker-keyhint"><kbd>Space</kbd> 키로도 뽑을 수 있어요</div>{#if !busy&&entries.length&&!eligible.length}<button class="picker-draw" onclick={()=>history.length?reset():panel='targets'}><RotateCcw size={22}/>{history.length?'다시 시작하기':'제외한 대상 확인'}</button>{:else}<button class="picker-draw" disabled={!canDraw} onclick={draw}>{#if session.active}<span class="picker-spinner"></span>뽑는 중…{:else}<ArrowRight size={22}/>{result?'다음 뽑기':'뽑기 시작'}{/if}</button>{/if}{#if mode!=='classic'}<button class="picker-shuffle" disabled={busy||!entries.length||mode==='claw'&&!assetsReady} onclick={shuffleScene}><Shuffle size={18}/>{shuffling?'섞는 중':'다시 섞기'}</button>{/if}</div>
@@ -220,7 +249,7 @@
     {#if storageError}<p class="picker-error" role="alert">{storageError}<button onclick={loadLibrary}>저장 자료 다시 읽기</button></p>{/if}
     <div class="picker-sr" aria-live="polite" aria-atomic="true">{!session.active&&result?`${result.number}${custom?'번째 항목':'번'} ${result.name}, 남은 ${eligible.length}${unit}`:''}</div>
   </main>
-  {#if celebration}<PickerCelebration winner={celebration} {mode} {custom} {reduced} toy={assetError?'':resultToySrc} onclose={()=>{celebration=null;void tick().then(()=>document.querySelector<HTMLButtonElement>('.picker-draw')?.focus({preventScroll:true}));}}/>{/if}
+  {#if celebration}<PickerCelebration winner={celebration} {mode} {custom} reduced={reduced||runInstant} toy={assetError?'':resultToySrc} onclose={()=>{celebration=null;void tick().then(()=>document.querySelector<HTMLButtonElement>('.picker-draw')?.focus({preventScroll:true}));}}/>{/if}
   <dialog class="picker-dialog picker-utility" bind:this={utilityDialog} onclose={()=>panel=''} oncancel={()=>panel=''} aria-labelledby="picker-utility-title">
     <header><div><small>간단 뽑기</small><h2 id="picker-utility-title">{panel==='settings'?'뽑기 설정':panel==='targets'?'대상 관리':'저장한 목록'}</h2></div><button aria-label="관리 창 닫기" onclick={()=>panel=''}><X size={22}/></button></header>
     {#if panel==='settings'}<section class="picker-panel" aria-label="뽑기 설정"><div class="picker-settings-row"><div><strong>효과음</strong><small>움직임과 결과를 소리로 알려요</small></div><ToolkitSwitch label="효과음" checked={sound} disabled={saving} onchange={v=>preference('sound',v)}/></div><div class="picker-settings-row"><div><strong>동작 감소 모드</strong><small>{reduced?'움직임 없이 잠시 기다린 뒤 결과를 보여줘요.':'집게 이동과 다트 비행을 처음부터 끝까지 보여줘요.'}</small></div><ToolkitSwitch label="동작 감소 모드" checked={reduced} disabled={busy||saving} onchange={v=>preference('reduced',v)}/></div>

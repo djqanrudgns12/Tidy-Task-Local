@@ -1,24 +1,57 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { X, MoveHorizontal, MoveVertical, ChevronDown } from 'lucide-svelte';
+  import { flip } from 'svelte/animate';
+  import { cubicOut } from 'svelte/easing';
+  import { sortToolRows } from '../../lib/toolkit/sortTools.js';
+  import { X, MoveHorizontal, MoveVertical, ChevronDown, GripVertical, Type } from 'lucide-svelte';
   import {
     readSettings,
     patchSettings,
     setEnabled,
     subscribeSettings,
+    previewToolOrder,
     native,
   } from '../../lib/toolkit/store.js';
   import { PLATFORM_TOOLS } from '../../lib/toolkit/registry.js';
-  import { defaults, TOOLBAR_SIZES } from '../../lib/toolkit/preferences.js';
+  import { defaults, TOOLBAR_SIZES, groupToolOrder, isToolEnabled } from '../../lib/toolkit/preferences.js';
   import { closeWindow } from '../../lib/toolkit/windows.js';
   import { dragRegion } from '../../lib/dragRegion.js';
   import ToolIcon from './ToolIcon.svelte';
   import ToolkitSwitch from './ToolkitSwitch.svelte';
   import ToolkitSelect from './ToolkitSelect.svelte';
   import { TOOLKIT_THEMES } from '../../lib/toolkit/themes.js';
+  import { uiFontChoices, uiFontStack, watchCustomFonts } from '../../lib/toolkit/appearance.js';
+  import type { CustomFont } from '../../lib/toolkit/appearance.js';
+  import { registerFontFace } from '../../lib/fonts.js';
   let config = $state(defaults().toolkit),
     error = $state('');
+  // 글꼴 목록은 Tidy Task에서 읽기만 합니다. 고른 값은 툴킷 설정에만 저장되어 Tidy Task 글꼴에 영향을 주지 않습니다.
+  let customFonts = $state<CustomFont[]>([]);
+  let customFontsLoaded = $state(false);
+  const fontChoices = $derived(uiFontChoices(customFonts));
+  // 등록 글꼴이 Tidy Task에서 지워졌으면 목록에 없으므로, 지금 값을 따로 보여 주어 선택 상자가 비지 않게 합니다.
+  const fontMissing = $derived(customFontsLoaded && !fontChoices.some((font) => font.name === config.uiFontFamily));
+  const fontOptions = $derived([
+    ...(fontMissing ? [{ value: config.uiFontFamily, label: config.uiFontFamily, note: '찾을 수 없음' }] : []),
+    ...fontChoices.map((font) => ({
+      value: font.name,
+      label: font.name,
+      font: uiFontStack({ uiFontFamily: font.name }),
+      note: font.custom ? '내 글꼴' : undefined,
+    })),
+  ]);
   let externalExpanded = $state(false);
+  let draggedId = $state('');
+  let toolsSaving = $state(false);
+  let draftOrder = $state<string[] | null>(null);
+  const renderedOrder = $derived(groupToolOrder(draftOrder ?? config.toolOrderIds, config));
+  const enabledIds = $derived(renderedOrder.filter((id) => isToolEnabled(config, id)));
+  const disabledIds = $derived(renderedOrder.filter((id) => !isToolEnabled(config, id)));
+  const renderedItems = $derived([...enabledIds, ...(disabledIds.length ? ['disabled-divider', ...disabledIds] : [])]);
+  function previewOrder(ids: string[] | null) {
+    draftOrder = ids;
+    void previewToolOrder(ids).catch(() => {});
+  }
   const draggable = (node: HTMLElement) => (native ? dragRegion(node) : { destroy() {} });
   async function change(patch: Record<string, unknown>) {
     try {
@@ -28,27 +61,78 @@
       error = '설정을 저장하지 못했어요.';
     }
   }
-  // 도구 표시 줄은 모양이 모두 같아 표 하나로 그립니다. 외부 툴 묶음은 앞 4개와 뒤 4개 사이에 놓입니다.
+  // 도구는 하나의 목록에 두고, 표시 상태에 따라 활성화·비활성화 영역으로 모읍니다.
   type ToolRow = { id: string; title: string; hint: string };
-  const TOOL_ROWS_BEFORE_EXTERNAL: ToolRow[] = [
+  const TOOL_ROWS: ToolRow[] = [
     { id: 'timer', title: '타이머', hint: '수업 시간을 한눈에 확인해요' },
     { id: 'clock', title: '시계', hint: '지금 몇 시인지 표준시로 크게 보여줘요' },
-    { id: 'noticeboard', title: '알림장', hint: '작성하고 화이트보드로 보여줘요' },
     { id: 'picker', title: '간단 뽑기', hint: '클래식 · 인형 뽑기 · 풍선 다트' },
-  ];
-  const TOOL_ROWS_AFTER_EXTERNAL: ToolRow[] = [
+    { id: 'noticeboard', title: '알림장', hint: '작성하고 화이트보드로 보여줘요' },
+    { id: 'tournament', title: '토너먼트', hint: '대진을 만들고 우리 반 우승자를 정해요' },
     { id: 'focus-bell', title: '집중벨', hint: '소리와 애니메이션으로 시선을 모아요' },
     { id: 'dice', title: '주사위', hint: '1~3개를 던지고 합계를 크게 보여줘요' },
-    { id: 'tournament', title: '토너먼트', hint: '대진을 만들고 우리 반 우승자를 정해요' },
+    { id: 'scoreboard', title: '점수판', hint: '개인 · 모둠 · 커스텀 점수를 크게 보여줘요' },
+    { id: 'thermometer', title: '학급 온도계', hint: '우리 반 공동 목표를 온도로 보여줘요' },
+    { id: 'vote', title: '학급 투표', hint: '키보드로 비밀 투표하고 두근두근 개표해요' },
+    { id: 'seating', title: '자리 배치', hint: '교실 자리를 고르고 배치해요' },
     { id: 'roster', title: '학급 명단', hint: '학생과 모둠을 함께 관리해요' },
   ];
-  function setToolVisible(id: string, visible: boolean) {
-    const others = config.visibleToolIds.filter((toolId) => toolId !== id);
-    void change({ visibleToolIds: visible ? [...others, id] : others });
+  const TOOL_ROWS_BY_ID: Record<string, ToolRow> = Object.fromEntries(TOOL_ROWS.map((tool) => [tool.id, tool]));
+  async function saveOrder(ids: string[]) {
+    if (toolsSaving) return false;
+    toolsSaving = true;
+    const before = config.toolOrderIds;
+    config = { ...config, toolOrderIds: ids };
+    try {
+      config = (await patchSettings('toolkit', { toolOrderIds: ids })).toolkit;
+      error = '';
+      return true;
+    } catch {
+      config = { ...config, toolOrderIds: before };
+      error = '도구 순서를 저장하지 못했어요.';
+      return false;
+    } finally {
+      toolsSaving = false;
+    }
+  }
+  function moveWithKey(event: KeyboardEvent, id: string) {
+    if (draggedId || toolsSaving || (event.key !== 'ArrowUp' && event.key !== 'ArrowDown')) return;
+    event.preventDefault();
+    const ids = [...config.toolOrderIds];
+    const index = ids.indexOf(id);
+    const target = index + (event.key === 'ArrowUp' ? -1 : 1);
+    if (target < 0 || target >= ids.length) return;
+    if (isToolEnabled(config, id) !== isToolEnabled(config, ids[target])) return;
+    [ids[index], ids[target]] = [ids[target], ids[index]];
+    void saveOrder(ids);
+  }
+  async function setToolVisible(id: string, visible: boolean) {
+    if (toolsSaving || draggedId) return;
+    toolsSaving = true;
+    try {
+      const others = config.visibleToolIds.filter((toolId) => toolId !== id);
+      await change(id === 'external' ? { externalToolsEnabled: visible } : { visibleToolIds: visible ? [...others, id] : others });
+    } finally {
+      toolsSaving = false;
+    }
   }
   onMount(() => {
     let off = () => {};
+    let offFonts = () => {};
     let disposed = false;
+    void watchCustomFonts((fonts) => {
+      customFonts = fonts;
+      customFontsLoaded = true;
+      // 목록에서 각 글꼴 모양을 미리 보이려면 이 창에도 등록 글꼴 파일을 불러와야 합니다.
+      for (const font of fonts) void registerFontFace(font.name, font.path);
+    })
+      .then((fn) => {
+        if (disposed) fn();
+        else offFonts = fn;
+      })
+      .catch(() => {
+        customFontsLoaded = true;
+      });
     void (async () => {
       try {
         const fn = await subscribeSettings((s) => (config = s.toolkit));
@@ -64,7 +148,9 @@
     })();
     return () => {
       disposed = true;
+      void previewToolOrder(null).catch(() => {});
       off();
+      offFonts();
     };
   });
 </script>
@@ -120,6 +206,21 @@
         </span>
       </div>
     </section>
+    <section class="settings-section ui-setting-card">
+      <div class="settings-heading"><div><h2>UI 설정</h2><p>툴킷 화면에 쓰는 글꼴을 골라요</p></div></div>
+      <div class="theme-picker-row ui-font-row">
+        <span class="ui-font-icon" aria-hidden="true"><Type size={16} /></span>
+        <ToolkitSelect label="UI 글꼴" value={config.uiFontFamily}
+          options={fontOptions}
+          onchange={(uiFontFamily) => change({ uiFontFamily })} />
+      </div>
+      <p class="ui-font-preview" aria-hidden="true" style:font-family={uiFontStack(config)}>가나다라 Aa 0123</p>
+      {#if fontMissing}
+        <p class="theme-mode-hint">이 글꼴을 찾을 수 없어 맑은 고딕으로 보여요. 다른 글꼴을 골라 주세요.</p>
+      {:else}
+        <p class="ui-font-hint">Tidy Task 메모 글꼴과는 따로 저장돼요. 글꼴 파일은 Tidy Task 설정에서 추가할 수 있어요.</p>
+      {/if}
+    </section>
     <section class="settings-section direction-setting-card">
       <div class="settings-heading">
         <div>
@@ -163,11 +264,15 @@
       <div class="settings-heading">
         <div>
           <h2>보이는 도구</h2>
-          <p>자주 쓰는 도구만 남겨두세요</p>
+          <p>자주 쓰는 도구를 고르고, 손잡이를 끌어 순서를 바꿔요</p>
         </div>
       </div>
       {#snippet toolRow(tool: ToolRow)}
         <div class="settings-row tool-setting-row">
+          <button class="tool-order-grip"
+            aria-label={`${tool.title} 순서 변경. 위쪽 또는 아래쪽 화살표로 이동`}
+            title="끌어서 순서 변경"
+            onkeydown={(event) => moveWithKey(event, tool.id)}><GripVertical size={18} /></button>
           <span class="settings-icon-label">
             <span class="settings-tool-icon"><ToolIcon kind={tool.id} size={36} /></span>
             <span class="settings-copy"><strong>{tool.title}</strong><small>{tool.hint}</small></span>
@@ -175,38 +280,60 @@
           <ToolkitSwitch
             label={`${tool.title} 표시`}
             checked={config.visibleToolIds.includes(tool.id)}
+            disabled={toolsSaving || !!draggedId}
             onchange={(visible) => setToolVisible(tool.id, visible)}
           />
         </div>
       {/snippet}
-      {#each TOOL_ROWS_BEFORE_EXTERNAL as tool (tool.id)}{@render toolRow(tool)}{/each}
-      <div class="external-tools-group" class:expanded={externalExpanded}>
-        <div class="settings-row tool-setting-row external-tools-heading">
-          <button class="external-tools-disclosure" aria-expanded={externalExpanded}
-            aria-controls="external-tool-options" onclick={() => externalExpanded = !externalExpanded}>
-            <span class="settings-tool-icon"><ToolIcon kind="external" size={36} /></span>
-            <span class="settings-copy"><strong>외부 툴</strong><small>롤린썬더 · 클래너</small></span>
-            <ChevronDown size={16} />
-          </button>
-          <ToolkitSwitch label="외부 툴 표시" checked={config.externalToolsEnabled}
-            onchange={(v) => change({ externalToolsEnabled: v })} />
+      <div class="tool-order-list" role="list"
+        use:sortToolRows={{ order: renderedOrder, groups: [enabledIds, disabledIds], disabled: toolsSaving, onpreview: previewOrder, onactive: (id) => draggedId = id, oncommit: saveOrder }}>
+      {#each renderedItems as id (id)}
+        <div class="tool-order-item" role={id === 'disabled-divider' ? 'presentation' : 'listitem'} data-tool-order-id={id === 'disabled-divider' ? undefined : id}
+          class:tool-disabled={id !== 'disabled-divider' && !isToolEnabled(config, id)}
+          class:tool-disabled-last={id === disabledIds.at(-1)}
+          class:tool-disabled-divider={id === 'disabled-divider'}
+          class:sort-placeholder={draggedId === id}
+          animate:flip={{ duration: draggedId === id ? 0 : draggedId ? 180 : 240, easing: cubicOut }}>
+        {#if id === 'disabled-divider'}
+          <div class="disabled-tools-heading"><span>비활성화된 도구</span><small>{disabledIds.length}개</small></div>
+        {:else if id === 'external'}
+          <div class="external-tools-group" class:expanded={externalExpanded}>
+            <div class="settings-row tool-setting-row external-tools-heading" role="group" aria-label="외부 툴 순서와 표시 설정">
+              <button class="tool-order-grip"
+                aria-label="외부 툴 순서 변경. 위쪽 또는 아래쪽 화살표로 이동"
+                title="끌어서 순서 변경"
+                onkeydown={(event) => moveWithKey(event, id)}><GripVertical size={18} /></button>
+              <button class="external-tools-disclosure" aria-expanded={externalExpanded}
+                aria-controls="external-tool-options" onclick={() => externalExpanded = !externalExpanded}>
+                <span class="settings-tool-icon"><ToolIcon kind="external" size={36} /></span>
+                <span class="settings-copy"><strong>외부 툴</strong><small>롤린썬더 · 클래너</small></span>
+                <ChevronDown size={16} />
+              </button>
+              <ToolkitSwitch label="외부 툴 표시" checked={config.externalToolsEnabled}
+                disabled={toolsSaving || !!draggedId}
+                onchange={(v) => setToolVisible(id, v)} />
+            </div>
+            <div id="external-tool-options" class="external-tool-options" hidden={!externalExpanded}>
+            {#each PLATFORM_TOOLS as tool}
+            <div class="settings-row tool-setting-row">
+              <span class="settings-icon-label">
+                <span class="settings-tool-icon toolkit-platform-icon"><img src={tool.icon} alt="" draggable="false" /></span>
+                <span class="settings-copy"><strong>{tool.label}</strong><small>웹사이트 바로가기</small></span>
+              </span>
+              <ToolkitSwitch label={`${tool.label} 표시`}
+                checked={!config.hiddenPlatformIds.includes(tool.id)}
+                onchange={(v) => change({ hiddenPlatformIds: v ? config.hiddenPlatformIds.filter((platformId) => platformId !== tool.id) : [...config.hiddenPlatformIds, tool.id] })} />
+            </div>
+            {/each}
+            {#if !config.externalToolsEnabled}<p class="external-tools-hint">외부 툴을 켜면 선택한 도구가 툴바에 표시돼요.</p>{/if}
+            </div>
+          </div>
+        {:else}
+          {@render toolRow(TOOL_ROWS_BY_ID[id])}
+        {/if}
         </div>
-        <div id="external-tool-options" class="external-tool-options" hidden={!externalExpanded}>
-        {#each PLATFORM_TOOLS as tool}
-        <div class="settings-row tool-setting-row">
-          <span class="settings-icon-label">
-            <span class="settings-tool-icon toolkit-platform-icon"><img src={tool.icon} alt="" draggable="false" /></span>
-            <span class="settings-copy"><strong>{tool.label}</strong><small>웹사이트 바로가기</small></span>
-          </span>
-          <ToolkitSwitch label={`${tool.label} 표시`}
-            checked={!config.hiddenPlatformIds.includes(tool.id)}
-            onchange={(v) => change({ hiddenPlatformIds: v ? config.hiddenPlatformIds.filter((id) => id !== tool.id) : [...config.hiddenPlatformIds, tool.id] })} />
+      {/each}
         </div>
-        {/each}
-        {#if !config.externalToolsEnabled}<p class="external-tools-hint">외부 툴을 켜면 선택한 도구가 툴바에 표시돼요.</p>{/if}
-        </div>
-      </div>
-      {#each TOOL_ROWS_AFTER_EXTERNAL as tool (tool.id)}{@render toolRow(tool)}{/each}
     </section>
     {#if error}<p class="tk-error" role="alert">{error}</p>{/if}
   </div>

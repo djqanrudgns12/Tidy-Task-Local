@@ -558,6 +558,17 @@
     };
   });
 
+  onMount(() => {
+    const contextAction = async ({ detail }) => {
+      if (detail === 'tiny-pin') await handlePin();
+      else if (detail === 'tiny-theme') handleThemeCycle();
+      else if (detail === 'tiny-rollup' && !appState.isFullscreen) await handleRollup();
+      else if (detail === 'tiny-archive') await handleArchive();
+    };
+    window.addEventListener('tiny-context-action', contextAction);
+    return () => window.removeEventListener('tiny-context-action', contextAction);
+  });
+
   // 평소에는 은은하게, 헤더에 마우스를 올리면 또렷하게.
   let toolIdleOpacity = $derived(isWindowFocused ? 0.45 : 0.25);
 

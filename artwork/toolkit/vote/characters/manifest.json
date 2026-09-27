@@ -1,0 +1,1793 @@
+{
+  "direction": "flat-vector-bust-v2",
+  "generatedWith": "built-in ImageGen",
+  "date": "2026-09-25",
+  "runtimeDirectory": "src/assets/vote/characters",
+  "characters": [
+    {
+      "id": "f1",
+      "gender": "여",
+      "label": "양갈래 땋은 머리 · 멜빵 치마",
+      "generatedSourcePath": "C:\\Users\\rudgn\\.codex\\generated_images\\01a0d596-4dab-7e22-b5f9-595f55599f91\\exec-56c6dcaa-1ba0-4b32-b485-7d5204996bdc.png",
+      "original": {
+        "path": "artwork/toolkit/vote/characters/originals/f1.png",
+        "sha256": "d815f00573c3fa8c80ff861f407cb79708867bd2bf46a8d13dfce135608cfeb6",
+        "bytes": 950098,
+        "width": 1254,
+        "height": 1254,
+        "alpha": {
+          "min": 0,
+          "max": 255,
+          "corners": [
+            0,
+            0,
+            0,
+            0
+          ]
+        }
+      },
+      "result": {
+        "path": "src/assets/vote/characters/f1.webp",
+        "sha256": "5a106864c1b1b8281c139f949074f4290bc638919f55acd6088286f6ecb56210",
+        "bytes": 34516,
+        "width": 512,
+        "height": 512,
+        "compression": "손실 q92",
+        "alpha": {
+          "min": 0,
+          "max": 255,
+          "corners": [
+            0,
+            0,
+            0,
+            0
+          ]
+        },
+        "boundingBox": {
+          "left": 78,
+          "right": 434,
+          "top": 41,
+          "bottom": 511,
+          "width": 357,
+          "height": 471,
+          "centerX": 256,
+          "topRatio": 0.080078125,
+          "bottomRatio": 0.998046875,
+          "leftRatio": 0.15234375,
+          "rightRatio": 0.84765625,
+          "heightRatio": 0.919921875
+        },
+        "outsideCirclePixels": 0
+      },
+      "measurement": {
+        "source": {
+          "eyes": [
+            500,
+            550,
+            753,
+            550
+          ],
+          "face": [
+            355,
+            895
+          ],
+          "faceY": 650,
+          "faceWidth": 540
+        },
+        "transform": {
+          "scale": 0.3962962962962963,
+          "moveX": 8,
+          "moveY": 22,
+          "targetFaceWidth": 214
+        },
+        "result": {
+          "eyes": [
+            206.14814814814815,
+            239.96296296296296,
+            306.4111111111111,
+            239.96296296296296
+          ],
+          "face": [
+            148.6851851851852,
+            362.6851851851852
+          ],
+          "eyesCenterX": 256.27962962962965,
+          "eyesCenterY": 239.96296296296296,
+          "faceCenterX": 255.68518518518522,
+          "faceWidth": 214.00000000000003
+        }
+      },
+      "attempts": 5,
+      "descriptionChanges": [],
+      "automaticCheck": "통과",
+      "visualCheck": "18명 검수 시트에서 화풍·라벨·명도·34/64px 구분을 확인했습니다",
+      "reprocessing": "원본 재생성 없이 얼굴 폭 목표를 225px에서 214px로 바꿔 재가공했습니다"
+    },
+    {
+      "id": "f2",
+      "gender": "여",
+      "label": "똥머리 · 리본 브로치",
+      "generatedSourcePath": "C:\\Users\\rudgn\\.codex\\generated_images\\01a0d596-4dab-7e22-b5f9-595f55599f91\\exec-416f900b-6d69-433a-81f4-8952f9c1abae.png",
+      "original": {
+        "path": "artwork/toolkit/vote/characters/originals/f2.png",
+        "sha256": "04ac97756dd08a3dfa6141c03870f30a118350ecb444750ad1a37d2b08013433",
+        "bytes": 813897,
+        "width": 1254,
+        "height": 1254,
+        "alpha": {
+          "min": 0,
+          "max": 255,
+          "corners": [
+            0,
+            0,
+            0,
+            0
+          ]
+        }
+      },
+      "result": {
+        "path": "src/assets/vote/characters/f2.webp",
+        "sha256": "7d6b67a15ecc0bc10a20121121a67c58c63100a3ac35c7f9f3df1d370df957c2",
+        "bytes": 34382,
+        "width": 512,
+        "height": 512,
+        "compression": "손실 q92",
+        "alpha": {
+          "min": 0,
+          "max": 255,
+          "corners": [
+            0,
+            0,
+            0,
+            0
+          ]
+        },
+        "boundingBox": {
+          "left": 89,
+          "right": 423,
+          "top": 19,
+          "bottom": 511,
+          "width": 335,
+          "height": 493,
+          "centerX": 256,
+          "topRatio": 0.037109375,
+          "bottomRatio": 0.998046875,
+          "leftRatio": 0.173828125,
+          "rightRatio": 0.826171875,
+          "heightRatio": 0.962890625
+        },
+        "outsideCirclePixels": 0
+      },
+      "measurement": {
+        "source": {
+          "eyes": [
+            505,
+            611,
+            747,
+            610
+          ],
+          "face": [
+            356,
+            896
+          ],
+          "faceY": 711,
+          "faceWidth": 540
+        },
+        "transform": {
+          "scale": 0.3962962962962963,
+          "moveX": 8,
+          "moveY": -2,
+          "targetFaceWidth": 214
+        },
+        "result": {
+          "eyes": [
+            208.12962962962965,
+            240.13703703703706,
+            304.03333333333336,
+            239.74074074074076
+          ],
+          "face": [
+            149.0814814814815,
+            363.0814814814815
+          ],
+          "eyesCenterX": 256.0814814814815,
+          "eyesCenterY": 239.93888888888893,
+          "faceCenterX": 256.0814814814815,
+          "faceWidth": 214
+        }
+      },
+      "attempts": 2,
+      "descriptionChanges": [],
+      "automaticCheck": "통과",
+      "visualCheck": "18명 검수 시트에서 화풍·라벨·명도·34/64px 구분을 확인했습니다",
+      "selectedCandidate": "f2-1"
+    },
+    {
+      "id": "f3",
+      "gender": "여",
+      "label": "일자 앞머리 단발 · 세일러 칼라",
+      "generatedSourcePath": "C:\\Users\\rudgn\\.codex\\generated_images\\01a0d596-4dab-7e22-b5f9-595f55599f91\\exec-5ec7e62f-5689-432f-a483-8d271d1ef0f0.png",
+      "original": {
+        "path": "artwork/toolkit/vote/characters/originals/f3.png",
+        "sha256": "3c27672f7537c518df6ea4065c0c2f599191516395aff7ea11b0c8e97460a7d1",
+        "bytes": 898870,
+        "width": 1254,
+        "height": 1254,
+        "alpha": {
+          "min": 0,
+          "max": 255,
+          "corners": [
+            0,
+            0,
+            0,
+            0
+          ]
+        }
+      },
+      "result": {
+        "path": "src/assets/vote/characters/f3.webp",
+        "sha256": "9046036b05cd92e504a8642ff8fd48adb1c2039865c32808b7549253c5faec90",
+        "bytes": 34254,
+        "width": 512,
+        "height": 512,
+        "compression": "손실 q92",
+        "alpha": {
+          "min": 0,
+          "max": 255,
+          "corners": [
+            0,
+            0,
+            0,
+            0
+          ]
+        },
+        "boundingBox": {
+          "left": 86,
+          "right": 424,
+          "top": 44,
+          "bottom": 511,
+          "width": 339,
+          "height": 468,
+          "centerX": 255,
+          "topRatio": 0.0859375,
+          "bottomRatio": 0.998046875,
+          "leftRatio": 0.16796875,
+          "rightRatio": 0.828125,
+          "heightRatio": 0.9140625
+        },
+        "outsideCirclePixels": 0
+      },
+      "measurement": {
+        "source": {
+          "eyes": [
+            500,
+            576,
+            755,
+            576
+          ],
+          "face": [
+            357.5,
+            897.5
+          ],
+          "faceY": 676,
+          "faceWidth": 540
+        },
+        "transform": {
+          "scale": 0.3962962962962963,
+          "moveX": 7,
+          "moveY": 12,
+          "targetFaceWidth": 214
+        },
+        "result": {
+          "eyes": [
+            205.14814814814815,
+            240.26666666666668,
+            306.2037037037037,
+            240.26666666666668
+          ],
+          "face": [
+            148.67592592592592,
+            362.6759259259259
+          ],
+          "eyesCenterX": 255.67592592592592,
+          "eyesCenterY": 240.26666666666668,
+          "faceCenterX": 255.67592592592592,
+          "faceWidth": 214
+        }
+      },
+      "attempts": 2,
+      "descriptionChanges": [],
+      "automaticCheck": "통과",
+      "visualCheck": "18명 검수 시트에서 화풍·라벨·명도·34/64px 구분을 확인했습니다",
+      "selectedCandidate": "f3-2"
+    },
+    {
+      "id": "f4",
+      "gender": "여",
+      "label": "높은 포니테일 · 줄무늬 티",
+      "generatedSourcePath": "C:\\Users\\rudgn\\.codex\\generated_images\\01a0d596-4dab-7e22-b5f9-595f55599f91\\exec-6e17b2f6-ab6f-42c3-9395-110c83042724.png",
+      "original": {
+        "path": "artwork/toolkit/vote/characters/originals/f4.png",
+        "sha256": "870eccb4c27ba7cecd4d8fef2bd2279fd0af5984f91ae751666c8423ef99bfef",
+        "bytes": 980242,
+        "width": 1254,
+        "height": 1254,
+        "alpha": {
+          "min": 0,
+          "max": 255,
+          "corners": [
+            0,
+            0,
+            0,
+            0
+          ]
+        }
+      },
+      "result": {
+        "path": "src/assets/vote/characters/f4.webp",
+        "sha256": "de59db190c884839f5c91f0325d46032b12591ffabc86af69848ee996b1a3e8c",
+        "bytes": 41262,
+        "width": 512,
+        "height": 512,
+        "compression": "손실 q92",
+        "alpha": {
+          "min": 0,
+          "max": 255,
+          "corners": [
+            0,
+            0,
+            0,
+            0
+          ]
+        },
+        "boundingBox": {
+          "left": 85,
+          "right": 473,
+          "top": 33,
+          "bottom": 511,
+          "width": 389,
+          "height": 479,
+          "centerX": 279,
+          "topRatio": 0.064453125,
+          "bottomRatio": 0.998046875,
+          "leftRatio": 0.166015625,
+          "rightRatio": 0.923828125,
+          "heightRatio": 0.935546875
+        },
+        "outsideCirclePixels": 0
+      },
+      "measurement": {
+        "source": {
+          "eyes": [
+            477,
+            571,
+            722,
+            570
+          ],
+          "face": [
+            329.5,
+            869.5
+          ],
+          "faceY": 671,
+          "faceWidth": 540
+        },
+        "transform": {
+          "scale": 0.3962962962962963,
+          "moveX": 18,
+          "moveY": 14,
+          "targetFaceWidth": 214
+        },
+        "result": {
+          "eyes": [
+            207.03333333333333,
+            240.28518518518518,
+            304.1259259259259,
+            239.88888888888889
+          ],
+          "face": [
+            148.57962962962964,
+            362.57962962962966
+          ],
+          "eyesCenterX": 255.5796296296296,
+          "eyesCenterY": 240.08703703703702,
+          "faceCenterX": 255.57962962962966,
+          "faceWidth": 214.00000000000003
+        }
+      },
+      "attempts": 2,
+      "descriptionChanges": [],
+      "automaticCheck": "통과",
+      "visualCheck": "18명 검수 시트에서 화풍·라벨·명도·34/64px 구분을 확인했습니다",
+      "selectedCandidate": "f4-1"
+    },
+    {
+      "id": "f5",
+      "gender": "여",
+      "label": "긴 생머리 · 머리띠",
+      "generatedSourcePath": "C:\\Users\\rudgn\\.codex\\generated_images\\01a0d596-4dab-7e22-b5f9-595f55599f91\\exec-8c8d6de9-f141-41ce-8e9c-73666594bbd8.png",
+      "original": {
+        "path": "artwork/toolkit/vote/characters/originals/f5.png",
+        "sha256": "facbeeb411bd39c19f4ed753d71a92fbeb74559c4cc3d61f51efb5afe087a0ca",
+        "bytes": 1022333,
+        "width": 1254,
+        "height": 1254,
+        "alpha": {
+          "min": 0,
+          "max": 255,
+          "corners": [
+            0,
+            0,
+            0,
+            0
+          ]
+        }
+      },
+      "result": {
+        "path": "src/assets/vote/characters/f5.webp",
+        "sha256": "acdd25c7086494fb319c15366dc7f9297d3b84e1761839dd5a05b35049d9dbce",
+        "bytes": 36440,
+        "width": 512,
+        "height": 512,
+        "compression": "손실 q92",
+        "alpha": {
+          "min": 0,
+          "max": 255,
+          "corners": [
+            0,
+            0,
+            0,
+            0
+          ]
+        },
+        "boundingBox": {
+          "left": 76,
+          "right": 440,
+          "top": 44,
+          "bottom": 511,
+          "width": 365,
+          "height": 468,
+          "centerX": 258,
+          "topRatio": 0.0859375,
+          "bottomRatio": 0.998046875,
+          "leftRatio": 0.1484375,
+          "rightRatio": 0.859375,
+          "heightRatio": 0.9140625
+        },
+        "outsideCirclePixels": 0
+      },
+      "measurement": {
+        "source": {
+          "eyes": [
+            498,
+            552,
+            751,
+            551
+          ],
+          "face": [
+            354.5,
+            894.5
+          ],
+          "faceY": 652,
+          "faceWidth": 540
+        },
+        "transform": {
+          "scale": 0.3962962962962963,
+          "moveX": 9,
+          "moveY": 21,
+          "targetFaceWidth": 214
+        },
+        "result": {
+          "eyes": [
+            206.35555555555555,
+            239.75555555555556,
+            306.61851851851856,
+            239.35925925925926
+          ],
+          "face": [
+            149.48703703703706,
+            363.48703703703706
+          ],
+          "eyesCenterX": 256.48703703703706,
+          "eyesCenterY": 239.55740740740742,
+          "faceCenterX": 256.48703703703706,
+          "faceWidth": 214
+        }
+      },
+      "attempts": 2,
+      "descriptionChanges": [],
+      "automaticCheck": "통과",
+      "visualCheck": "18명 검수 시트에서 화풍·라벨·명도·34/64px 구분을 확인했습니다",
+      "selectedCandidate": "f5-2"
+    },
+    {
+      "id": "f6",
+      "gender": "여",
+      "label": "곱슬 단발 · 꽃 핀",
+      "generatedSourcePath": "C:\\Users\\rudgn\\.codex\\generated_images\\01a0d596-4dab-7e22-b5f9-595f55599f91\\exec-f18a69f4-0518-45f5-8a75-7d40e3dd4c3c.png",
+      "original": {
+        "path": "artwork/toolkit/vote/characters/originals/f6.png",
+        "sha256": "d815f5e151fd6b32e047428414c85ffe3f6f11b536926d80fde388850628f17f",
+        "bytes": 932568,
+        "width": 1254,
+        "height": 1254,
+        "alpha": {
+          "min": 0,
+          "max": 255,
+          "corners": [
+            0,
+            0,
+            0,
+            0
+          ]
+        }
+      },
+      "result": {
+        "path": "src/assets/vote/characters/f6.webp",
+        "sha256": "66d8df85bb34a485fa4ded8fd1018fd53735adbb8b1433a540ef1c842e93209e",
+        "bytes": 36684,
+        "width": 512,
+        "height": 512,
+        "compression": "손실 q92",
+        "alpha": {
+          "min": 0,
+          "max": 255,
+          "corners": [
+            0,
+            0,
+            0,
+            0
+          ]
+        },
+        "boundingBox": {
+          "left": 71,
+          "right": 441,
+          "top": 48,
+          "bottom": 511,
+          "width": 371,
+          "height": 464,
+          "centerX": 256,
+          "topRatio": 0.09375,
+          "bottomRatio": 0.998046875,
+          "leftRatio": 0.138671875,
+          "rightRatio": 0.861328125,
+          "heightRatio": 0.90625
+        },
+        "outsideCirclePixels": 0
+      },
+      "measurement": {
+        "source": {
+          "eyes": [
+            498,
+            560,
+            752,
+            561
+          ],
+          "face": [
+            355,
+            895
+          ],
+          "faceY": 661,
+          "faceWidth": 540
+        },
+        "transform": {
+          "scale": 0.3962962962962963,
+          "moveX": 8,
+          "moveY": 18,
+          "targetFaceWidth": 214
+        },
+        "result": {
+          "eyes": [
+            205.35555555555555,
+            239.92592592592592,
+            306.0148148148148,
+            240.32222222222222
+          ],
+          "face": [
+            148.6851851851852,
+            362.6851851851852
+          ],
+          "eyesCenterX": 255.6851851851852,
+          "eyesCenterY": 240.1240740740741,
+          "faceCenterX": 255.68518518518522,
+          "faceWidth": 214.00000000000003
+        }
+      },
+      "attempts": 2,
+      "descriptionChanges": [],
+      "automaticCheck": "통과",
+      "visualCheck": "18명 검수 시트에서 화풍·라벨·명도·34/64px 구분을 확인했습니다",
+      "selectedCandidate": "f6-2"
+    },
+    {
+      "id": "f7",
+      "gender": "여",
+      "label": "짧은 양갈래 · 방울 머리끈",
+      "generatedSourcePath": "C:\\Users\\rudgn\\.codex\\generated_images\\01a0d596-4dab-7e22-b5f9-595f55599f91\\exec-2dfcaca2-ca3c-42aa-a982-a01e9e16cc18.png",
+      "original": {
+        "path": "artwork/toolkit/vote/characters/originals/f7.png",
+        "sha256": "4772099e9408dbcf58ace6fbd6a33cddfc9a1b253a130b6adb753a08eb3d5e8a",
+        "bytes": 975695,
+        "width": 1254,
+        "height": 1254,
+        "alpha": {
+          "min": 0,
+          "max": 255,
+          "corners": [
+            0,
+            0,
+            0,
+            0
+          ]
+        }
+      },
+      "result": {
+        "path": "src/assets/vote/characters/f7.webp",
+        "sha256": "bee8215a980ea936029091b7f34b692fdb355f8ad95a596b89c0254393ad9e3e",
+        "bytes": 38244,
+        "width": 512,
+        "height": 512,
+        "compression": "손실 q92",
+        "alpha": {
+          "min": 0,
+          "max": 255,
+          "corners": [
+            0,
+            0,
+            0,
+            0
+          ]
+        },
+        "boundingBox": {
+          "left": 84,
+          "right": 430,
+          "top": 50,
+          "bottom": 511,
+          "width": 347,
+          "height": 462,
+          "centerX": 257,
+          "topRatio": 0.09765625,
+          "bottomRatio": 0.998046875,
+          "leftRatio": 0.1640625,
+          "rightRatio": 0.83984375,
+          "heightRatio": 0.90234375
+        },
+        "outsideCirclePixels": 0
+      },
+      "measurement": {
+        "source": {
+          "eyes": [
+            497,
+            550,
+            752,
+            549
+          ],
+          "face": [
+            354.5,
+            894.5
+          ],
+          "faceY": 650,
+          "faceWidth": 540
+        },
+        "transform": {
+          "scale": 0.3962962962962963,
+          "moveX": 9,
+          "moveY": 22,
+          "targetFaceWidth": 214
+        },
+        "result": {
+          "eyes": [
+            205.95925925925926,
+            239.96296296296296,
+            307.0148148148148,
+            239.56666666666666
+          ],
+          "face": [
+            149.48703703703706,
+            363.48703703703706
+          ],
+          "eyesCenterX": 256.48703703703706,
+          "eyesCenterY": 239.76481481481483,
+          "faceCenterX": 256.48703703703706,
+          "faceWidth": 214
+        }
+      },
+      "attempts": 2,
+      "descriptionChanges": [],
+      "automaticCheck": "통과",
+      "visualCheck": "18명 검수 시트에서 화풍·라벨·명도·34/64px 구분을 확인했습니다",
+      "selectedCandidate": "f7-2"
+    },
+    {
+      "id": "f8",
+      "gender": "여",
+      "label": "반묶음 · 큰 리본",
+      "generatedSourcePath": "C:\\Users\\rudgn\\.codex\\generated_images\\01a0d596-4dab-7e22-b5f9-595f55599f91\\exec-fc7a2172-d44c-4313-9f54-fde383812bb4.png",
+      "original": {
+        "path": "artwork/toolkit/vote/characters/originals/f8.png",
+        "sha256": "6f7593f10e6de6979eab975a3c9738a03ef152bd4b5487e45d821d6ddf2f3f4e",
+        "bytes": 951690,
+        "width": 1254,
+        "height": 1254,
+        "alpha": {
+          "min": 0,
+          "max": 255,
+          "corners": [
+            0,
+            0,
+            0,
+            0
+          ]
+        }
+      },
+      "result": {
+        "path": "src/assets/vote/characters/f8.webp",
+        "sha256": "cded5f4707b32cf83f458e4063a78c5be7743ad0a3fba4b50dc598c2966b6e5b",
+        "bytes": 34434,
+        "width": 512,
+        "height": 512,
+        "compression": "손실 q92",
+        "alpha": {
+          "min": 0,
+          "max": 255,
+          "corners": [
+            0,
+            0,
+            0,
+            0
+          ]
+        },
+        "boundingBox": {
+          "left": 82,
+          "right": 429,
+          "top": 31,
+          "bottom": 511,
+          "width": 348,
+          "height": 481,
+          "centerX": 255.5,
+          "topRatio": 0.060546875,
+          "bottomRatio": 0.998046875,
+          "leftRatio": 0.16015625,
+          "rightRatio": 0.837890625,
+          "heightRatio": 0.939453125
+        },
+        "outsideCirclePixels": 0
+      },
+      "measurement": {
+        "source": {
+          "eyes": [
+            508,
+            585,
+            746,
+            585
+          ],
+          "face": [
+            357,
+            897
+          ],
+          "faceY": 685,
+          "faceWidth": 540
+        },
+        "transform": {
+          "scale": 0.3962962962962963,
+          "moveX": 8,
+          "moveY": 8,
+          "targetFaceWidth": 214
+        },
+        "result": {
+          "eyes": [
+            209.31851851851852,
+            239.83333333333334,
+            303.63703703703703,
+            239.83333333333334
+          ],
+          "face": [
+            149.4777777777778,
+            363.4777777777778
+          ],
+          "eyesCenterX": 256.47777777777776,
+          "eyesCenterY": 239.83333333333334,
+          "faceCenterX": 256.4777777777778,
+          "faceWidth": 214.00000000000003
+        }
+      },
+      "attempts": 2,
+      "descriptionChanges": [],
+      "automaticCheck": "통과",
+      "visualCheck": "18명 검수 시트에서 화풍·라벨·명도·34/64px 구분을 확인했습니다",
+      "selectedCandidate": "f8-2"
+    },
+    {
+      "id": "f9",
+      "gender": "여",
+      "label": "숏컷 · 동그란 안경",
+      "generatedSourcePath": "C:\\Users\\rudgn\\.codex\\generated_images\\01a0d596-4dab-7e22-b5f9-595f55599f91\\exec-16e47687-8eb9-4107-8418-9220380a1fb4.png",
+      "original": {
+        "path": "artwork/toolkit/vote/characters/originals/f9.png",
+        "sha256": "74ad385fad714e8a9c1c340e2b91f862122d130e2e97ec4669a9cdc09cb1f023",
+        "bytes": 955325,
+        "width": 1254,
+        "height": 1254,
+        "alpha": {
+          "min": 0,
+          "max": 255,
+          "corners": [
+            0,
+            0,
+            0,
+            0
+          ]
+        }
+      },
+      "result": {
+        "path": "src/assets/vote/characters/f9.webp",
+        "sha256": "77bc225a614895e0f4c5437ee3e229f39a4d6971d2c7de310758fe1a45f0174a",
+        "bytes": 35382,
+        "width": 512,
+        "height": 512,
+        "compression": "손실 q92",
+        "alpha": {
+          "min": 0,
+          "max": 255,
+          "corners": [
+            0,
+            0,
+            0,
+            0
+          ]
+        },
+        "boundingBox": {
+          "left": 85,
+          "right": 426,
+          "top": 37,
+          "bottom": 511,
+          "width": 342,
+          "height": 475,
+          "centerX": 255.5,
+          "topRatio": 0.072265625,
+          "bottomRatio": 0.998046875,
+          "leftRatio": 0.166015625,
+          "rightRatio": 0.83203125,
+          "heightRatio": 0.927734375
+        },
+        "outsideCirclePixels": 0
+      },
+      "measurement": {
+        "source": {
+          "eyes": [
+            501,
+            568,
+            752,
+            568
+          ],
+          "face": [
+            356.5,
+            896.5
+          ],
+          "faceY": 668,
+          "faceWidth": 540
+        },
+        "transform": {
+          "scale": 0.3962962962962963,
+          "moveX": 8,
+          "moveY": 15,
+          "targetFaceWidth": 214
+        },
+        "result": {
+          "eyes": [
+            206.54444444444445,
+            240.09629629629632,
+            306.0148148148148,
+            240.09629629629632
+          ],
+          "face": [
+            149.27962962962962,
+            363.27962962962965
+          ],
+          "eyesCenterX": 256.27962962962965,
+          "eyesCenterY": 240.09629629629632,
+          "faceCenterX": 256.27962962962965,
+          "faceWidth": 214.00000000000003
+        }
+      },
+      "attempts": 8,
+      "descriptionChanges": [
+        "숏컷을 머리에 붙는 둥근 픽시컷으로 바꾸고 겨자색 머리핀, 흰 둥근 옷깃과 차콜 가디건을 더했습니다. 라벨 숏컷·동그란 안경은 유지했습니다."
+      ],
+      "automaticCheck": "통과",
+      "visualCheck": "18명 검수 시트에서 화풍·라벨·명도·34/64px 구분을 확인했습니다",
+      "selectedCandidate": "f9-r2",
+      "revisionAttempts": 2
+    },
+    {
+      "id": "m1",
+      "gender": "남",
+      "label": "스포츠머리 · 남색 후드티",
+      "generatedSourcePath": "C:\\Users\\rudgn\\.codex\\generated_images\\01a0d596-4dab-7e22-b5f9-595f55599f91\\exec-1f99ef31-2261-4d25-8063-70356eeb527c.png",
+      "original": {
+        "path": "artwork/toolkit/vote/characters/originals/m1.png",
+        "sha256": "207205255dc1d8eac4c4101d3d770bc6f08af7ff8952979b971d909adad0e51c",
+        "bytes": 832268,
+        "width": 1254,
+        "height": 1254,
+        "alpha": {
+          "min": 0,
+          "max": 255,
+          "corners": [
+            0,
+            0,
+            0,
+            0
+          ]
+        }
+      },
+      "result": {
+        "path": "src/assets/vote/characters/m1.webp",
+        "sha256": "8d412c645afc02dfc16aad0dd3b43e005baa39ef4f6166b1062ad55f42e54f92",
+        "bytes": 29260,
+        "width": 512,
+        "height": 512,
+        "compression": "손실 q92",
+        "alpha": {
+          "min": 0,
+          "max": 255,
+          "corners": [
+            0,
+            0,
+            0,
+            0
+          ]
+        },
+        "boundingBox": {
+          "left": 77,
+          "right": 434,
+          "top": 59,
+          "bottom": 511,
+          "width": 358,
+          "height": 453,
+          "centerX": 255.5,
+          "topRatio": 0.115234375,
+          "bottomRatio": 0.998046875,
+          "leftRatio": 0.150390625,
+          "rightRatio": 0.84765625,
+          "heightRatio": 0.884765625
+        },
+        "outsideCirclePixels": 0
+      },
+      "measurement": {
+        "source": {
+          "eyes": [
+            492,
+            564,
+            759,
+            563
+          ],
+          "face": [
+            355.5,
+            895.5
+          ],
+          "faceY": 664,
+          "faceWidth": 540
+        },
+        "transform": {
+          "scale": 0.3962962962962963,
+          "moveX": 8,
+          "moveY": 17,
+          "targetFaceWidth": 214
+        },
+        "result": {
+          "eyes": [
+            202.9777777777778,
+            240.51111111111112,
+            308.7888888888889,
+            240.11481481481482
+          ],
+          "face": [
+            148.88333333333333,
+            362.8833333333333
+          ],
+          "eyesCenterX": 255.88333333333333,
+          "eyesCenterY": 240.31296296296296,
+          "faceCenterX": 255.88333333333333,
+          "faceWidth": 214
+        }
+      },
+      "attempts": 4,
+      "descriptionChanges": [],
+      "automaticCheck": "통과",
+      "visualCheck": "18명 검수 시트에서 화풍·라벨·명도·34/64px 구분을 확인했습니다",
+      "selectedCandidate": "m1-4"
+    },
+    {
+      "id": "m2",
+      "gender": "남",
+      "label": "곱슬머리 · 나비넥타이",
+      "generatedSourcePath": "C:\\Users\\rudgn\\.codex\\generated_images\\01a0d596-4dab-7e22-b5f9-595f55599f91\\exec-653559fc-fe3c-4295-a72a-5635a450a628.png",
+      "original": {
+        "path": "artwork/toolkit/vote/characters/originals/m2.png",
+        "sha256": "918c6eb6dd83f819ed1bf8bee981fd73277747ce8f0cc9ec1626d6b8d97f0f51",
+        "bytes": 911616,
+        "width": 1254,
+        "height": 1254,
+        "alpha": {
+          "min": 0,
+          "max": 255,
+          "corners": [
+            0,
+            0,
+            0,
+            0
+          ]
+        }
+      },
+      "result": {
+        "path": "src/assets/vote/characters/m2.webp",
+        "sha256": "c6a053d709d5bda8c09e7209983e3396174ccec07b2e9505e854f33fdb0fdde1",
+        "bytes": 35102,
+        "width": 512,
+        "height": 512,
+        "compression": "손실 q92",
+        "alpha": {
+          "min": 0,
+          "max": 255,
+          "corners": [
+            0,
+            0,
+            0,
+            0
+          ]
+        },
+        "boundingBox": {
+          "left": 83,
+          "right": 429,
+          "top": 32,
+          "bottom": 511,
+          "width": 347,
+          "height": 480,
+          "centerX": 256,
+          "topRatio": 0.0625,
+          "bottomRatio": 0.998046875,
+          "leftRatio": 0.162109375,
+          "rightRatio": 0.837890625,
+          "heightRatio": 0.9375
+        },
+        "outsideCirclePixels": 0
+      },
+      "measurement": {
+        "source": {
+          "eyes": [
+            497,
+            581,
+            754,
+            580
+          ],
+          "face": [
+            355.5,
+            895.5
+          ],
+          "faceY": 681,
+          "faceWidth": 540
+        },
+        "transform": {
+          "scale": 0.3962962962962963,
+          "moveX": 8,
+          "moveY": 10,
+          "targetFaceWidth": 214
+        },
+        "result": {
+          "eyes": [
+            204.95925925925926,
+            240.24814814814815,
+            306.8074074074074,
+            239.85185185185185
+          ],
+          "face": [
+            148.88333333333333,
+            362.8833333333333
+          ],
+          "eyesCenterX": 255.88333333333333,
+          "eyesCenterY": 240.05,
+          "faceCenterX": 255.88333333333333,
+          "faceWidth": 214
+        }
+      },
+      "attempts": 2,
+      "descriptionChanges": [],
+      "automaticCheck": "통과",
+      "visualCheck": "18명 검수 시트에서 화풍·라벨·명도·34/64px 구분을 확인했습니다",
+      "selectedCandidate": "m2-2"
+    },
+    {
+      "id": "m3",
+      "gender": "남",
+      "label": "옆가르마 · 동그란 안경",
+      "generatedSourcePath": "C:\\Users\\rudgn\\.codex\\generated_images\\01a0d596-4dab-7e22-b5f9-595f55599f91\\exec-28ec5c28-35b4-4de5-87bf-eeefad637d16.png",
+      "original": {
+        "path": "artwork/toolkit/vote/characters/originals/m3.png",
+        "sha256": "07ebc06656a6d9c718838f6743cfe7d799bb1daf37f25c0f2d005c746ecfb0d2",
+        "bytes": 958768,
+        "width": 1254,
+        "height": 1254,
+        "alpha": {
+          "min": 0,
+          "max": 255,
+          "corners": [
+            0,
+            0,
+            0,
+            0
+          ]
+        }
+      },
+      "result": {
+        "path": "src/assets/vote/characters/m3.webp",
+        "sha256": "b3701ea329b736cf997d979e8ba8a49586f87b3c08c299d5b988beca856cbb35",
+        "bytes": 34142,
+        "width": 512,
+        "height": 512,
+        "compression": "손실 q92",
+        "alpha": {
+          "min": 0,
+          "max": 255,
+          "corners": [
+            0,
+            0,
+            0,
+            0
+          ]
+        },
+        "boundingBox": {
+          "left": 81,
+          "right": 431,
+          "top": 36,
+          "bottom": 511,
+          "width": 351,
+          "height": 476,
+          "centerX": 256,
+          "topRatio": 0.0703125,
+          "bottomRatio": 0.998046875,
+          "leftRatio": 0.158203125,
+          "rightRatio": 0.841796875,
+          "heightRatio": 0.9296875
+        },
+        "outsideCirclePixels": 0
+      },
+      "measurement": {
+        "source": {
+          "eyes": [
+            499,
+            575,
+            754,
+            575
+          ],
+          "face": [
+            356.5,
+            896.5
+          ],
+          "faceY": 675,
+          "faceWidth": 540
+        },
+        "transform": {
+          "scale": 0.3962962962962963,
+          "moveX": 8,
+          "moveY": 12,
+          "targetFaceWidth": 214
+        },
+        "result": {
+          "eyes": [
+            205.75185185185185,
+            239.87037037037038,
+            306.8074074074074,
+            239.87037037037038
+          ],
+          "face": [
+            149.27962962962962,
+            363.27962962962965
+          ],
+          "eyesCenterX": 256.27962962962965,
+          "eyesCenterY": 239.87037037037038,
+          "faceCenterX": 256.27962962962965,
+          "faceWidth": 214.00000000000003
+        }
+      },
+      "attempts": 2,
+      "descriptionChanges": [],
+      "automaticCheck": "통과",
+      "visualCheck": "18명 검수 시트에서 화풍·라벨·명도·34/64px 구분을 확인했습니다",
+      "selectedCandidate": "m3-2"
+    },
+    {
+      "id": "m4",
+      "gender": "남",
+      "label": "삐죽 앞머리 · 줄무늬 티",
+      "generatedSourcePath": "C:\\Users\\rudgn\\.codex\\generated_images\\01a0d596-4dab-7e22-b5f9-595f55599f91\\exec-b28f6475-a66f-4abe-b3a9-915f7d8adf24.png",
+      "original": {
+        "path": "artwork/toolkit/vote/characters/originals/m4.png",
+        "sha256": "442a4a16d3ba6926b1f2d89261b38f6929e8a70844a471e7044a4bd8702259b3",
+        "bytes": 844132,
+        "width": 1254,
+        "height": 1254,
+        "alpha": {
+          "min": 0,
+          "max": 255,
+          "corners": [
+            0,
+            0,
+            0,
+            0
+          ]
+        }
+      },
+      "result": {
+        "path": "src/assets/vote/characters/m4.webp",
+        "sha256": "bdceeaf5c4a7a30b9a2813e1f687cfd0b225496b45d4d65a4e20df6885043b12",
+        "bytes": 32606,
+        "width": 512,
+        "height": 512,
+        "compression": "손실 q92",
+        "alpha": {
+          "min": 0,
+          "max": 255,
+          "corners": [
+            0,
+            0,
+            0,
+            0
+          ]
+        },
+        "boundingBox": {
+          "left": 84,
+          "right": 428,
+          "top": 31,
+          "bottom": 511,
+          "width": 345,
+          "height": 481,
+          "centerX": 256,
+          "topRatio": 0.060546875,
+          "bottomRatio": 0.998046875,
+          "leftRatio": 0.1640625,
+          "rightRatio": 0.8359375,
+          "heightRatio": 0.939453125
+        },
+        "outsideCirclePixels": 0
+      },
+      "measurement": {
+        "source": {
+          "eyes": [
+            498,
+            574,
+            753,
+            574
+          ],
+          "face": [
+            355.5,
+            895.5
+          ],
+          "faceY": 674,
+          "faceWidth": 540
+        },
+        "transform": {
+          "scale": 0.3962962962962963,
+          "moveX": 8,
+          "moveY": 13,
+          "targetFaceWidth": 214
+        },
+        "result": {
+          "eyes": [
+            205.35555555555555,
+            240.47407407407408,
+            306.4111111111111,
+            240.47407407407408
+          ],
+          "face": [
+            148.88333333333333,
+            362.8833333333333
+          ],
+          "eyesCenterX": 255.88333333333333,
+          "eyesCenterY": 240.47407407407408,
+          "faceCenterX": 255.88333333333333,
+          "faceWidth": 214
+        }
+      },
+      "attempts": 2,
+      "descriptionChanges": [],
+      "automaticCheck": "통과",
+      "visualCheck": "18명 검수 시트에서 화풍·라벨·명도·34/64px 구분을 확인했습니다",
+      "selectedCandidate": "m4-1"
+    },
+    {
+      "id": "m5",
+      "gender": "남",
+      "label": "바가지머리 · 멜빵바지",
+      "generatedSourcePath": "C:\\Users\\rudgn\\.codex\\generated_images\\01a0d596-4dab-7e22-b5f9-595f55599f91\\exec-6ee52617-a438-4ca6-8ff6-b1f7e93e59c0.png",
+      "original": {
+        "path": "artwork/toolkit/vote/characters/originals/m5.png",
+        "sha256": "7cda98f53a9593fa2bb28abe218382eb150aef6ba1b64b18f355541fc7f85e72",
+        "bytes": 815895,
+        "width": 1254,
+        "height": 1254,
+        "alpha": {
+          "min": 0,
+          "max": 255,
+          "corners": [
+            0,
+            0,
+            0,
+            0
+          ]
+        }
+      },
+      "result": {
+        "path": "src/assets/vote/characters/m5.webp",
+        "sha256": "4b05f74c296470fcac21df7558aae2f3e9d3b96bbfb9a216a0155f98fa7b28e4",
+        "bytes": 31818,
+        "width": 512,
+        "height": 512,
+        "compression": "손실 q92",
+        "alpha": {
+          "min": 0,
+          "max": 255,
+          "corners": [
+            0,
+            0,
+            0,
+            0
+          ]
+        },
+        "boundingBox": {
+          "left": 84,
+          "right": 427,
+          "top": 49,
+          "bottom": 511,
+          "width": 344,
+          "height": 463,
+          "centerX": 255.5,
+          "topRatio": 0.095703125,
+          "bottomRatio": 0.998046875,
+          "leftRatio": 0.1640625,
+          "rightRatio": 0.833984375,
+          "heightRatio": 0.904296875
+        },
+        "outsideCirclePixels": 0
+      },
+      "measurement": {
+        "source": {
+          "eyes": [
+            499,
+            598,
+            753,
+            598
+          ],
+          "face": [
+            356,
+            896
+          ],
+          "faceY": 698,
+          "faceWidth": 540
+        },
+        "transform": {
+          "scale": 0.3962962962962963,
+          "moveX": 8,
+          "moveY": 3,
+          "targetFaceWidth": 214
+        },
+        "result": {
+          "eyes": [
+            205.75185185185185,
+            239.9851851851852,
+            306.4111111111111,
+            239.9851851851852
+          ],
+          "face": [
+            149.0814814814815,
+            363.0814814814815
+          ],
+          "eyesCenterX": 256.0814814814815,
+          "eyesCenterY": 239.9851851851852,
+          "faceCenterX": 256.0814814814815,
+          "faceWidth": 214
+        }
+      },
+      "attempts": 2,
+      "descriptionChanges": [],
+      "automaticCheck": "통과",
+      "visualCheck": "18명 검수 시트에서 화풍·라벨·명도·34/64px 구분을 확인했습니다",
+      "selectedCandidate": "m5-2"
+    },
+    {
+      "id": "m6",
+      "gender": "남",
+      "label": "야구모자 · 볼 반창고",
+      "generatedSourcePath": "C:\\Users\\rudgn\\.codex\\generated_images\\01a0d596-4dab-7e22-b5f9-595f55599f91\\exec-82296ac2-28de-4c64-9e60-be113de07994.png",
+      "original": {
+        "path": "artwork/toolkit/vote/characters/originals/m6.png",
+        "sha256": "eb7502b10488a8a265a3bd8d4682bdd6aee462dbd6ec84f05d2a774e2715dbf4",
+        "bytes": 934169,
+        "width": 1254,
+        "height": 1254,
+        "alpha": {
+          "min": 0,
+          "max": 255,
+          "corners": [
+            0,
+            0,
+            0,
+            0
+          ]
+        }
+      },
+      "result": {
+        "path": "src/assets/vote/characters/m6.webp",
+        "sha256": "34a5f48420cc6535540b5462e0a1f2bfa40447fd4b730164b79cfa1a37c7ba30",
+        "bytes": 32874,
+        "width": 512,
+        "height": 512,
+        "compression": "손실 q92",
+        "alpha": {
+          "min": 0,
+          "max": 255,
+          "corners": [
+            0,
+            0,
+            0,
+            0
+          ]
+        },
+        "boundingBox": {
+          "left": 79,
+          "right": 435,
+          "top": 16,
+          "bottom": 511,
+          "width": 357,
+          "height": 496,
+          "centerX": 257,
+          "topRatio": 0.03125,
+          "bottomRatio": 0.998046875,
+          "leftRatio": 0.154296875,
+          "rightRatio": 0.849609375,
+          "heightRatio": 0.96875
+        },
+        "outsideCirclePixels": 0
+      },
+      "measurement": {
+        "source": {
+          "eyes": [
+            500,
+            600,
+            750,
+            600
+          ],
+          "face": [
+            365,
+            895
+          ],
+          "faceY": 710,
+          "faceWidth": 530
+        },
+        "transform": {
+          "scale": 0.4033018867924528,
+          "moveX": 4,
+          "moveY": -2,
+          "shrink": 0.95
+        },
+        "result": {
+          "eyes": [
+            205.6509433962264,
+            239.9811320754717,
+            306.47641509433964,
+            239.9811320754717
+          ],
+          "face": [
+            151.20518867924528,
+            364.9551886792453
+          ],
+          "eyesCenterX": 256.063679245283,
+          "eyesCenterY": 239.9811320754717,
+          "faceCenterX": 258.0801886792453,
+          "faceWidth": 213.75
+        }
+      },
+      "attempts": 6,
+      "descriptionChanges": [],
+      "automaticCheck": "통과",
+      "visualCheck": "18명 검수 시트에서 화풍·라벨·명도·34/64px 구분을 확인했습니다",
+      "reprocessing": "1단계에서 승인된 파일을 변경하지 않았습니다"
+    },
+    {
+      "id": "m7",
+      "gender": "남",
+      "label": "투블럭 · 체크 셔츠",
+      "generatedSourcePath": "C:\\Users\\rudgn\\.codex\\generated_images\\01a0d596-4dab-7e22-b5f9-595f55599f91\\exec-653a9caa-7774-410d-9482-abed5746b9fd.png",
+      "original": {
+        "path": "artwork/toolkit/vote/characters/originals/m7.png",
+        "sha256": "2f4dfc95f2fa265a03defa0edacda2c8faaa7b87c99b19546025efc81e57f5dc",
+        "bytes": 870472,
+        "width": 1254,
+        "height": 1254,
+        "alpha": {
+          "min": 0,
+          "max": 255,
+          "corners": [
+            0,
+            0,
+            0,
+            0
+          ]
+        }
+      },
+      "result": {
+        "path": "src/assets/vote/characters/m7.webp",
+        "sha256": "acf2dfef0afb6ee16d6f4385f0f6910647ef1bd3d3362762dd9725df000df214",
+        "bytes": 33756,
+        "width": 512,
+        "height": 512,
+        "compression": "손실 q92",
+        "alpha": {
+          "min": 0,
+          "max": 255,
+          "corners": [
+            0,
+            0,
+            0,
+            0
+          ]
+        },
+        "boundingBox": {
+          "left": 85,
+          "right": 427,
+          "top": 40,
+          "bottom": 511,
+          "width": 343,
+          "height": 472,
+          "centerX": 256,
+          "topRatio": 0.078125,
+          "bottomRatio": 0.998046875,
+          "leftRatio": 0.166015625,
+          "rightRatio": 0.833984375,
+          "heightRatio": 0.921875
+        },
+        "outsideCirclePixels": 0
+      },
+      "measurement": {
+        "source": {
+          "eyes": [
+            500,
+            564,
+            754,
+            564
+          ],
+          "face": [
+            357,
+            897
+          ],
+          "faceY": 664,
+          "faceWidth": 540
+        },
+        "transform": {
+          "scale": 0.3962962962962963,
+          "moveX": 8,
+          "moveY": 16,
+          "targetFaceWidth": 214
+        },
+        "result": {
+          "eyes": [
+            206.14814814814815,
+            239.51111111111112,
+            306.8074074074074,
+            239.51111111111112
+          ],
+          "face": [
+            149.4777777777778,
+            363.4777777777778
+          ],
+          "eyesCenterX": 256.47777777777776,
+          "eyesCenterY": 239.51111111111112,
+          "faceCenterX": 256.4777777777778,
+          "faceWidth": 214.00000000000003
+        }
+      },
+      "attempts": 2,
+      "descriptionChanges": [],
+      "automaticCheck": "통과",
+      "visualCheck": "18명 검수 시트에서 화풍·라벨·명도·34/64px 구분을 확인했습니다",
+      "selectedCandidate": "m7-2"
+    },
+    {
+      "id": "m8",
+      "gender": "남",
+      "label": "파마머리 · 작은 책가방",
+      "generatedSourcePath": "C:\\Users\\rudgn\\.codex\\generated_images\\01a0d596-4dab-7e22-b5f9-595f55599f91\\exec-6187806b-b31b-4fe5-bcc7-14dc85e4ea73.png",
+      "original": {
+        "path": "artwork/toolkit/vote/characters/originals/m8.png",
+        "sha256": "c557126fcc61046c31ac428e52a0325ae275443266cf663b340b63fa4ca0abf1",
+        "bytes": 923579,
+        "width": 1254,
+        "height": 1254,
+        "alpha": {
+          "min": 0,
+          "max": 255,
+          "corners": [
+            0,
+            0,
+            0,
+            0
+          ]
+        }
+      },
+      "result": {
+        "path": "src/assets/vote/characters/m8.webp",
+        "sha256": "3038a483240bd7e2807b0cb7874b946bc7f8d68db18ced21988b09c8613594e0",
+        "bytes": 38456,
+        "width": 512,
+        "height": 512,
+        "compression": "손실 q92",
+        "alpha": {
+          "min": 0,
+          "max": 255,
+          "corners": [
+            0,
+            0,
+            0,
+            0
+          ]
+        },
+        "boundingBox": {
+          "left": 80,
+          "right": 427,
+          "top": 36,
+          "bottom": 511,
+          "width": 348,
+          "height": 476,
+          "centerX": 253.5,
+          "topRatio": 0.0703125,
+          "bottomRatio": 0.998046875,
+          "leftRatio": 0.15625,
+          "rightRatio": 0.833984375,
+          "heightRatio": 0.9296875
+        },
+        "outsideCirclePixels": 0
+      },
+      "measurement": {
+        "source": {
+          "eyes": [
+            506,
+            581,
+            750,
+            581
+          ],
+          "face": [
+            358,
+            898
+          ],
+          "faceY": 681,
+          "faceWidth": 540
+        },
+        "transform": {
+          "scale": 0.3962962962962963,
+          "moveX": 7,
+          "moveY": 10,
+          "targetFaceWidth": 214
+        },
+        "result": {
+          "eyes": [
+            207.52592592592595,
+            240.24814814814815,
+            304.22222222222223,
+            240.24814814814815
+          ],
+          "face": [
+            148.8740740740741,
+            362.8740740740741
+          ],
+          "eyesCenterX": 255.8740740740741,
+          "eyesCenterY": 240.24814814814815,
+          "faceCenterX": 255.8740740740741,
+          "faceWidth": 214
+        }
+      },
+      "attempts": 2,
+      "descriptionChanges": [],
+      "automaticCheck": "통과",
+      "visualCheck": "18명 검수 시트에서 화풍·라벨·명도·34/64px 구분을 확인했습니다",
+      "selectedCandidate": "m8-2"
+    },
+    {
+      "id": "m9",
+      "gender": "남",
+      "label": "땀밴드 · 체육복",
+      "generatedSourcePath": "C:\\Users\\rudgn\\.codex\\generated_images\\01a0d596-4dab-7e22-b5f9-595f55599f91\\exec-fb7ac885-f4b0-4c91-bd26-8ad424bf9e80.png",
+      "original": {
+        "path": "artwork/toolkit/vote/characters/originals/m9.png",
+        "sha256": "8e7835e2c25de27cfae466c2300ef7c409402d6628f688ccc08488c30bf28f2c",
+        "bytes": 919277,
+        "width": 1254,
+        "height": 1254,
+        "alpha": {
+          "min": 0,
+          "max": 255,
+          "corners": [
+            0,
+            0,
+            0,
+            0
+          ]
+        }
+      },
+      "result": {
+        "path": "src/assets/vote/characters/m9.webp",
+        "sha256": "0af50d3bb4ed4b7f2680ccf1641378008f452cf125a7e3e2b0f5c34c7ebca5ba",
+        "bytes": 36074,
+        "width": 512,
+        "height": 512,
+        "compression": "손실 q92",
+        "alpha": {
+          "min": 0,
+          "max": 255,
+          "corners": [
+            0,
+            0,
+            0,
+            0
+          ]
+        },
+        "boundingBox": {
+          "left": 79,
+          "right": 434,
+          "top": 35,
+          "bottom": 511,
+          "width": 356,
+          "height": 477,
+          "centerX": 256.5,
+          "topRatio": 0.068359375,
+          "bottomRatio": 0.998046875,
+          "leftRatio": 0.154296875,
+          "rightRatio": 0.84765625,
+          "heightRatio": 0.931640625
+        },
+        "outsideCirclePixels": 0
+      },
+      "measurement": {
+        "source": {
+          "eyes": [
+            497,
+            578,
+            751,
+            578
+          ],
+          "face": [
+            354,
+            894
+          ],
+          "faceY": 678,
+          "faceWidth": 540
+        },
+        "transform": {
+          "scale": 0.3962962962962963,
+          "moveX": 9,
+          "moveY": 11,
+          "targetFaceWidth": 214
+        },
+        "result": {
+          "eyes": [
+            205.95925925925926,
+            240.05925925925928,
+            306.61851851851856,
+            240.05925925925928
+          ],
+          "face": [
+            149.2888888888889,
+            363.2888888888889
+          ],
+          "eyesCenterX": 256.2888888888889,
+          "eyesCenterY": 240.05925925925928,
+          "faceCenterX": 256.2888888888889,
+          "faceWidth": 214
+        }
+      },
+      "attempts": 2,
+      "descriptionChanges": [],
+      "automaticCheck": "통과",
+      "visualCheck": "18명 검수 시트에서 화풍·라벨·명도·34/64px 구분을 확인했습니다",
+      "selectedCandidate": "m9-1"
+    }
+  ]
+}

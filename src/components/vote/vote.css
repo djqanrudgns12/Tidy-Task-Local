@@ -1,0 +1,432 @@
+/* 학급 투표 공통 스타일(PRD 9·10절). 공용 .tk-* 규칙은 건드리지 않고 .vt-* 접두어만 씁니다.
+   light-dark()는 쓰지 않습니다(배포 빌드의 lightningcss가 값을 비우는 문제 — CLAUDE.md 시계 절). 다크 모드는 [data-scheme='dark']로 나눕니다.
+   화면별 세부 스타일은 각 컴포넌트의 <style>에 두고, 여기는 토큰과 여러 화면이 함께 쓰는 부품만 둡니다. */
+
+.vt-root {
+  /* 움직임 토큰(src/lib/vote/motion.js와 같은 값) */
+  --vt-ease: cubic-bezier(0.2, 0, 0, 1);
+  --vt-ease-pop: cubic-bezier(0.34, 1.36, 0.64, 1);
+  --vt-ease-exit: cubic-bezier(0.3, 0, 1, 1);
+  --vt-quick: 160ms;
+  --vt-standard: 280ms;
+  --vt-slow: 520ms;
+  /* 재질 */
+  --vt-paper: #fffdf8;
+  --vt-card: var(--tk-panel);
+  --vt-soft: var(--tk-soft);
+  --vt-line: var(--tk-line);
+  --vt-ink: var(--tk-ink);
+  --vt-muted: var(--tk-muted);
+  --vt-accent: var(--tk-accent);
+  --vt-action: var(--tk-action);
+  --vt-on-action: var(--tk-on-action);
+  --vt-danger: var(--tk-danger);
+  --vt-chalkboard: #2f5d50;
+  --vt-chalkboard-deep: #24493f;
+  --vt-chalk: #f4f1e8;
+  --vt-wood: #b88a5a;
+  --vt-stamp: #d2455b;
+  --vt-gold: #f4c95d;
+  --vt-gold-deep: #c9952a;
+  --vt-shadow: 0 8px 24px color-mix(in srgb, var(--tk-ink) 7%, transparent);
+  --vt-shadow-lift: 0 16px 34px color-mix(in srgb, var(--tk-ink) 11%, transparent);
+
+  position: relative;
+  height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  color: var(--vt-ink);
+  background: var(--tk-bg);
+  border: 1px solid var(--tk-line);
+  border-radius: 18px;
+  user-select: none;
+  container-type: inline-size;
+}
+.vt-root.fullscreen {
+  border-radius: 0;
+  border-color: transparent;
+}
+.vt-root[data-scheme='dark'] {
+  --vt-paper: #2b3039;
+  --vt-chalkboard: #2a4f45;
+}
+.vt-root.cursor-hidden,
+.vt-root.cursor-hidden * {
+  cursor: none !important;
+}
+.vt-root button { line-height: 1.35; }
+.vt-root :where(input, textarea) {
+  user-select: text;
+}
+
+/* ── 후보 색(카드마다 style로 --c-bg · --c-line · --c-ink를 넣음) ── */
+.vt-c {
+  --cbg: var(--c-bg);
+  --cline: var(--c-line);
+  --cink: var(--c-ink);
+}
+.vt-root[data-scheme='dark'] .vt-c {
+  --cbg: color-mix(in srgb, var(--c-line) 24%, #2b3039);
+  --cline: color-mix(in srgb, var(--c-line) 50%, #2b3039);
+  --cink: var(--c-line);
+}
+
+/* ── 버튼 ── */
+.vt-root .vt-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-height: 46px;
+  padding: 0 18px;
+  border: 1px solid var(--vt-line);
+  border-radius: 14px;
+  background: var(--vt-card);
+  color: var(--vt-ink);
+  font-size: 16px;
+  font-weight: 700;
+  box-shadow: var(--vt-shadow);
+  transition: transform var(--vt-quick) var(--vt-ease), box-shadow var(--vt-quick) var(--vt-ease), background var(--vt-quick) var(--vt-ease);
+}
+.vt-btn:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--vt-soft) 60%, var(--vt-card));
+}
+.vt-btn:active:not(:disabled) {
+  transform: translateY(2px);
+  box-shadow: 0 0 0 transparent;
+}
+.vt-btn.primary {
+  border-color: transparent;
+  background: var(--vt-action);
+  color: var(--vt-on-action);
+  box-shadow: 0 5px 14px color-mix(in srgb, var(--vt-action) 20%, transparent);
+}
+.vt-btn.primary:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--vt-action) 88%, #fff);
+}
+.vt-btn.big {
+  height: 54px;
+  padding: 0 26px;
+  border-radius: 18px;
+  font-size: 18px;
+}
+.vt-btn.ghost {
+  border-color: transparent;
+  background: transparent;
+  box-shadow: none;
+  color: var(--vt-muted);
+}
+.vt-btn.ghost:hover:not(:disabled) {
+  background: var(--vt-soft);
+  color: var(--vt-ink);
+}
+.vt-btn.danger {
+  color: var(--vt-danger);
+}
+.vt-btn.danger-fill {
+  border-color: transparent;
+  background: var(--vt-danger);
+  color: #fff;
+  box-shadow: 0 3px 0 color-mix(in srgb, var(--vt-danger) 60%, #000);
+}
+.vt-btn.icon {
+  width: 42px;
+  padding: 0;
+}
+
+/* 개표 조작: 투표판과 선생님 창에서 기능별 색·크기·상태를 공유합니다. */
+.vt-count-action.autoplay {
+  --vt-control-bg: #d5eee3;
+  --vt-control-line: #95c7b6;
+  --vt-control-ink: #245e4e;
+}
+.vt-count-action.next {
+  --vt-control-bg: #dbeafd;
+  --vt-control-line: #a2bde3;
+  --vt-control-ink: #234f86;
+}
+.vt-count-action.skip,
+.vt-count-skip-panel {
+  --vt-control-bg: #ebe1f6;
+  --vt-control-line: #c8b0df;
+  --vt-control-ink: #62417e;
+}
+.vt-root[data-scheme='dark'] .vt-count-action.autoplay {
+  --vt-control-bg: #244a40;
+  --vt-control-line: #4c8875;
+  --vt-control-ink: #d1f3e5;
+}
+.vt-root[data-scheme='dark'] .vt-count-action.next {
+  --vt-control-bg: #264260;
+  --vt-control-line: #537baa;
+  --vt-control-ink: #dceaff;
+}
+.vt-root[data-scheme='dark'] .vt-count-action.skip,
+.vt-root[data-scheme='dark'] .vt-count-skip-panel {
+  --vt-control-bg: #44334f;
+  --vt-control-line: #87679d;
+  --vt-control-ink: #f0ddff;
+}
+.vt-root .vt-btn.vt-count-action {
+  min-height: 48px;
+  border-color: var(--vt-control-line);
+  background: var(--vt-control-bg);
+  color: var(--vt-control-ink);
+  font-weight: 800;
+  white-space: nowrap;
+  box-shadow: inset 0 1px 0 color-mix(in srgb, #fff 22%, transparent), 0 3px 8px color-mix(in srgb, var(--vt-control-ink) 9%, transparent);
+}
+.vt-root .vt-count-action:hover:not(:disabled),
+.vt-root .vt-count-action[aria-pressed='true'] {
+  border-color: var(--vt-control-ink);
+  background: color-mix(in srgb, var(--vt-control-bg) 88%, var(--vt-control-line));
+}
+.vt-root .vt-count-action:focus-visible,
+.vt-root .vt-count-cancel:focus-visible {
+  outline: 3px solid var(--vt-control-ink);
+  outline-offset: 3px;
+}
+.vt-root .vt-count-action:active:not(:disabled) { box-shadow: none; }
+.vt-root .vt-count-action:disabled { opacity: .55; box-shadow: none; }
+.vt-count-skip-panel {
+  display: flex;
+  align-items: center;
+  max-width: 100%;
+  border-radius: 14px;
+}
+.vt-count-skip-panel.confirming {
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 6px;
+  border: 1px solid var(--vt-control-line);
+  background: var(--vt-control-bg);
+}
+.vt-count-confirm {
+  padding: 0 8px;
+  color: var(--vt-control-ink);
+  font-size: 15px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+.vt-count-skip-panel.confirming .vt-btn {
+  min-height: 40px;
+  padding: 0 14px;
+  border-radius: 10px;
+  box-shadow: none;
+}
+.vt-root .vt-count-cancel {
+  border-color: var(--vt-control-line);
+  color: var(--vt-control-ink);
+}
+@media (forced-colors: active) {
+  .vt-root .vt-count-action[aria-pressed='true'] { outline: 2px solid Highlight; outline-offset: -4px; }
+}
+
+.vt-link {
+  border: 0;
+  background: none;
+  color: var(--vt-muted);
+  font-size: 14px;
+  font-weight: 700;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.vt-link:hover {
+  color: var(--vt-ink);
+}
+
+/* ── 카드·칩·입력 ── */
+.vt-card {
+  border: 1px solid var(--vt-line);
+  border-radius: 20px;
+  background: var(--vt-card);
+  box-shadow: var(--vt-shadow);
+}
+.vt-root .vt-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 42px;
+  height: 40px;
+  padding: 0 14px;
+  border: 1px solid var(--vt-line);
+  border-radius: 999px;
+  background: var(--vt-card);
+  color: var(--vt-ink);
+  font-size: 15px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+.vt-chip[aria-pressed='true'],
+.vt-chip[aria-checked='true'] {
+  border-color: transparent;
+  background: var(--vt-action);
+  color: var(--vt-on-action);
+  box-shadow: 0 2px 8px color-mix(in srgb, var(--vt-action) 35%, transparent);
+}
+.vt-root .vt-input {
+  width: 100%;
+  height: 48px;
+  padding: 0 14px;
+  border: 1px solid var(--vt-line);
+  border-radius: 12px;
+  background: var(--vt-card);
+  color: var(--vt-ink);
+  font-size: 16px;
+  font-weight: 600;
+}
+.vt-input::placeholder {
+  color: var(--vt-muted);
+  opacity: .9;
+  font-weight: 500;
+}
+.vt-input:focus {
+  outline: 3px solid color-mix(in srgb, var(--vt-accent) 45%, transparent);
+  outline-offset: 1px;
+  border-color: var(--vt-accent);
+}
+.vt-input[aria-invalid='true'] {
+  border-color: var(--vt-danger);
+}
+.vt-problem {
+  margin: 4px 2px 0;
+  color: var(--vt-danger);
+  font-size: 13px;
+  font-weight: 700;
+}
+.vt-problem.warning {
+  color: #9a6a12;
+}
+.vt-root[data-scheme='dark'] .vt-problem.warning {
+  color: #e8bd70;
+}
+
+/* 만들기 네 단계에서 공통으로 쓰는 제목 카드와 내용 카드 */
+.vt-step-heading {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 15px 18px;
+  border: 1px solid var(--vt-line);
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--vt-card) 88%, var(--vt-soft));
+}
+.vt-heading-icon {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 48px;
+  height: 48px;
+  border: 1px solid color-mix(in srgb, var(--vt-accent) 16%, var(--vt-line));
+  border-radius: 14px;
+  background: var(--vt-soft);
+  color: var(--vt-accent);
+}
+.vt-heading-copy {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+.vt-step-heading .vt-step-title {
+  margin: 0;
+  font-size: clamp(22px, 1.9cqi, 28px);
+  line-height: 1.3;
+  word-break: keep-all;
+}
+.vt-step-heading .vt-step-eyebrow {
+  color: var(--vt-accent);
+  font-size: 13px;
+  font-weight: 800;
+}
+.vt-step-heading .vt-step-lead {
+  margin: 2px 0 0;
+  color: var(--vt-muted);
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.55;
+  word-break: keep-all;
+}
+.vt-step-panel {
+  padding: 14px 18px;
+  border: 1px solid var(--vt-line);
+  border-radius: 16px;
+  background: var(--vt-card);
+}
+@container (max-width: 760px) {
+  .vt-step-heading, .vt-step-panel { padding: 13px 14px; }
+  .vt-step-heading { gap: 10px; }
+  .vt-heading-icon { width: 40px; height: 40px; border-radius: 12px; }
+}
+
+/* ── 알림 띠 ── */
+.vt-toast {
+  position: absolute;
+  left: 50%;
+  bottom: 22px;
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  max-width: min(640px, calc(100% - 32px));
+  padding: 12px 14px 12px 18px;
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--vt-ink) 92%, transparent);
+  color: var(--tk-panel);
+  font-size: 15px;
+  font-weight: 700;
+  transform: translateX(-50%);
+  box-shadow: var(--vt-shadow-lift);
+  animation: vt-toast-in var(--vt-standard) var(--vt-ease-pop);
+}
+.vt-toast button {
+  border: 0;
+  background: none;
+  color: var(--vt-gold);
+  font-weight: 800;
+}
+@keyframes vt-toast-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, 12px) scale(0.96);
+  }
+}
+
+/* ── 화면 전환: 아래 12px에서 올라오며 나타남(PRD 10절) ── */
+.vt-stage-enter {
+  animation: vt-stage-in var(--vt-standard) var(--vt-ease) both;
+}
+@keyframes vt-stage-in {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+}
+/* 스티커 붙이기: 아래 8px + 0.94배 + −2° → 제자리 */
+.vt-pop-in {
+  animation: vt-pop-in var(--vt-standard) var(--vt-ease-pop) both;
+}
+@keyframes vt-pop-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.94) rotate(-2deg);
+  }
+}
+.vt-root.reduced .vt-stage-enter,
+.vt-root.reduced .vt-pop-in {
+  animation: vt-fade 120ms linear both;
+}
+@keyframes vt-fade {
+  from {
+    opacity: 0;
+  }
+}
+
+.vt-visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}

@@ -68,5 +68,4 @@
   @keyframes smoke{0%{transform:scale(.5);opacity:0}35%{opacity:1}100%{transform:scale(1.2) translateY(-12px);opacity:.2}}
   @keyframes cloud{0%{transform:scale(.7)}25%{transform:scale(1.08,.94)}60%{transform:scale(.98,1.02)}100%{transform:scale(1)}}
   @keyframes beacon{from{transform:translateX(-28px) scaleX(.6)}to{transform:translateX(28px) scaleX(1)}}
-  @media(prefers-reduced-motion:reduce){.focus-art *{animation:none!important}}
 </style>

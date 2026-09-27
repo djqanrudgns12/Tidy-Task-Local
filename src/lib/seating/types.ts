@@ -1,0 +1,16 @@
+export type Student = {id:string;number:number;name:string;gender:string;groupId:string|null};
+export type Classroom = {id:string;name:string;revision:number;students:Student[];groups:{id:string;name:string}[]};
+export type Point = {x:number;y:number};
+export type Seat = Point & {id:string;angle:number;pair:string;group:string;locked:boolean;active:boolean};
+export type Prop = Point & {id:string;kind:string};
+export type Layout = {shape:string;seats:Seat[];props:Prop[];front:string;columns?:number;rows?:number};
+export type Rule = {id:string;kind:string;students:string[];hard?:boolean;distance?:string;seatId?:string|null;seatIds?:string[]};
+export type Draft = {title:string;layout:Layout;assignments:Record<string,string>;rules:Rule[];excluded:string[];appearances:Record<string,string>;comparisonArchiveId?:string|null;recent?:number;avoidPartners:boolean;avoidGroups:boolean;avoidPosition:boolean;gender:string;groupPolicy?:string;rosterRevision:number};
+export type Relations = {pairs:string[];groups:string[]};
+export type Archive = {id:string;sessionId?:string;date:string;createdAt:number;title:string;used:boolean;draft:Draft;students:Student[];relations:Relations};
+export type SeatingDocument = {version:number;revision:number;draft:Draft;archives:Archive[];currentId:string|null};
+export type Snapshot = {revision:number;defaultClassId:string|null;classes:Classroom[];seating?:Record<string,SeatingDocument>};
+export type PublicSeat = Point & {id:string;angle:number;active:boolean;name:string;number:number|string;appearance:string;gender?:string};
+export type Board = {title:string;className:string;date:string;props:Omit<Prop,'id'>[];seats:PublicSeat[]};
+export type Metrics = {tuple:number[];repeated:number;groupRepeat:number;positions:number;gender:number};
+export type Candidate = {assignments:Record<string,string>;metrics:Metrics};

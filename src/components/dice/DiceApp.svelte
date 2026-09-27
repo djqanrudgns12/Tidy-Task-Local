@@ -6,7 +6,8 @@
   import { closeWindow } from '../../lib/toolkit/windows.js';
   import { dragRegion } from '../../lib/dragRegion.js';
   import { MAX_DICE, clampCount, rollValues, matchKind, spokenResult, randomWord } from '../../lib/dice/engine.js';
-  import { createRng, rollPlan, readableAt, landingAt, fitDieSize, slotOffset } from '../../lib/dice/motion.js';
+  import { createRng, rollPlan, readableAt, impactsOf, fitDieSize, fitResultSize, slotOffset } from '../../lib/dice/motion.js';
+  import type { DiePlan } from '../../lib/dice/motion.js';
   import { loadPrefs, savePrefs } from '../../lib/dice/preferences.js';
   import { createDiceAudio } from '../../lib/dice/audio.js';
   import ToolkitSwitch from '../toolkit/ToolkitSwitch.svelte';
@@ -26,10 +27,10 @@
   let count = $state(saved.prefs.count);
   let sound = $state(saved.prefs.sound);
   let reducedChoice = $state<boolean | null>(saved.prefs.reduced);
-  let osReduced = $state(false);
   let error = $state(saved.error);
-  // 사용자가 스위치를 누른 적이 없으면 OS의 "동작 줄이기"를 따릅니다.
-  const reduced = $derived(reducedChoice ?? osReduced);
+  // 사용자가 스위치를 누른 적이 없으면 움직임을 켭니다. Windows "애니메이션 효과" 설정은 따르지 않습니다
+  // (학교 PC는 꺼진 경우가 많아, 따르면 주사위가 굴러가지 않고 숫자만 바뀌었습니다).
+  const reduced = $derived(reducedChoice ?? false);
 
   let phase = $state<Phase>('idle');
   let values = $state<number[]>([]);
@@ -46,6 +47,8 @@
   let rollSize = $state(0);
   const fitSize = $derived(fitDieSize(count, area.w, area.h));
   const size = $derived(phase === 'rolling' && rollSize ? rollSize : fitSize);
+  // 결과 패널: 합계 글자 크기·패널 폭을 창 폭과 개수로 계산해 "a + b + c = 합"이 어떤 창에서도 한 줄에 들어가게 합니다.
+  const result = $derived(fitResultSize(count, area.w, size));
 
   let slots = $state<Slot[]>(Array.from({ length: saved.prefs.count }, (_, id) => ({ id, leaving: false, x: 0, s: 0 })));
   // 나가는 주사위는 사라지는 동안 옛 자리·크기를 유지하고, 남는 주사위만 새 자리로 미끄러집니다.
@@ -146,11 +149,14 @@
     }
   }
 
-  async function playSounds(landings: number[]) {
+  /** 던지는 순간 "달그락·휙", 이어서 주사위마다 부딪힐 때마다 "톡"(세기에 따라 크기가 다름)을 예약합니다. */
+  async function playSounds(plans: DiePlan[]) {
     const started = performance.now();
     await audio.unlock();
+    if (!plans.length) return;
     const late = performance.now() - started;
-    for (const at of landings) audio.play('land', at - late);
+    audio.play('throw');
+    for (const plan of plans) for (const hit of impactsOf(plan)) audio.play('land', hit.at - late, hit.strength);
   }
 
   async function roll() {
@@ -167,8 +173,8 @@
     badge = null;
     spoken = '';
     rollKey++;
-    // 줄임 모드에서는 "딩" 한 번만 냅니다(PRD 5.5).
-    void playSounds(sound && !reduced ? plans.map(landingAt) : []);
+    // 줄임 모드에서는 "딩" 한 번만 냅니다(PRD 5.5). 소리를 꺼도 unlock은 해 둬야 나중에 켰을 때 바로 납니다.
+    void playSounds(sound && !reduced ? plans : []);
     plans.forEach((plan, i) => later(readableAt(plan), () => { if (token === rollToken) filled[i] = true; }));
     await Promise.all(next.map((value, i) => dice[i]?.roll(value, plans[i]) ?? Promise.resolve()));
     if (token !== rollToken) return;
@@ -243,12 +249,6 @@
   function onKey(event: KeyboardEvent) {
     if (event.ctrlKey || event.metaKey || event.altKey) return;
     const target = event.target as HTMLElement | null;
-    if (event.code === 'Space') {
-      // 어느 버튼에 초점이 있든 Space는 던지기입니다. 그 버튼 자체의 클릭은 keyup에서 막습니다.
-      event.preventDefault();
-      if (!event.repeat) void roll();
-      return;
-    }
     if (event.key === 'Enter') {
       if (target?.closest('button') && !target.closest('.dice-roll')) return;
       event.preventDefault();
@@ -269,6 +269,15 @@
     }
     if (event.key === 'Escape' && fullscreen) void windowAction(toggleFullscreen);
   }
+  /** 어느 버튼에 초점이 있든 Space는 던지기입니다. 창 단계에서 먼저 가로채야 합니다 — 초점이 "동작 줄이기" 스위치에 있으면
+   * 스위치가 keydown에서 스스로 켜고 끄기 때문에, 마우스로 스위치를 켠 뒤 Space로 던지면 스위치가 도로 꺼졌습니다.
+   * 그 버튼 자체의 클릭은 keyup에서 막습니다. */
+  function onSpaceCapture(event: KeyboardEvent) {
+    if (event.code !== 'Space' || event.ctrlKey || event.metaKey || event.altKey) return;
+    event.preventDefault();
+    event.stopPropagation();
+    if (!event.repeat) void roll();
+  }
   function onKeyUp(event: KeyboardEvent) {
     if (event.code === 'Space') event.preventDefault();
   }
@@ -279,10 +288,6 @@
   }
 
   onMount(() => {
-    const media = window.matchMedia('(prefers-reduced-motion: reduce)');
-    osReduced = media.matches;
-    const onMedia = () => (osReduced = media.matches);
-    media.addEventListener('change', onMedia);
     // 창이 가려지면 애니메이션 시계가 멈추므로 남은 연출을 건너뛰고 결과를 바로 확정합니다.
     const onVisibility = () => {
       if (!document.hidden || phase !== 'rolling') return;
@@ -306,7 +311,6 @@
       exits.forEach((exit) => exit.cancel());
       audio.dispose();
       observer.disconnect();
-      media.removeEventListener('change', onMedia);
       document.removeEventListener('visibilitychange', onVisibility);
       document.removeEventListener('fullscreenchange', syncFullscreen);
       window.removeEventListener('pagehide', stop);
@@ -314,8 +318,9 @@
   });
 </script>
 
-<svelte:window onkeydown={onKey} onkeyup={onKeyUp} />
-<section class="dice-app" data-phase={phase} style:--s={`${size}px`}>
+<svelte:window onkeydowncapture={onSpaceCapture} onkeydown={onKey} onkeyup={onKeyUp} />
+<section class="dice-app" data-phase={phase} style:--s={`${size}px`} style:--dice-total={`${result.total}px`}
+  style:--dice-panel={`${result.panel}px`} style:--dice-hint={`${result.hint}px`}>
   <header class="dice-titlebar" use:draggable>
     <div class="dice-brand"><ToolIcon kind="dice" size={24} /><strong>주사위</strong><span>Tidy 툴킷</span></div>
     <div class="dice-window-actions">
@@ -341,9 +346,10 @@
 
   <footer class="dice-controls">
     <div class="dice-count" role="radiogroup" aria-label="주사위 개수" tabindex="-1" onkeydown={onCountKey}>
-      <span class="dice-count-label">주사위</span>
+      <span class="dice-count-label">주사위 개수</span>
       {#each COUNTS as n (n)}
-        <button role="radio" aria-checked={count === n} tabindex={count === n ? 0 : -1} class:selected={count === n}
+        <!-- 숫자키로도 바꿀 수 있다는 것을 마우스를 올렸을 때 알려 줍니다. -->
+        <button role="radio" aria-checked={count === n} tabindex={count === n ? 0 : -1} class:selected={count === n} title={`주사위 ${n}개 (숫자 ${n}키)`}
           disabled={phase === 'rolling'} bind:this={countButtons[n - 1]} onclick={() => setCount(n)}>
           <span class="dice-count-dots" aria-hidden="true">{#each TONES.slice(0, n) as tone}<i data-tone={tone}></i>{/each}</span>{n}개
         </button>

@@ -1,9 +1,4 @@
 /** Pure selection/session model. No storage, artwork or animation randomness here. */
-export const SOURCES = [
-  { value: 'all', label: '전체 선출' }, { value: 'groups', label: '모둠 선출' },
-  { value: 'male', label: '남학생' }, { value: 'female', label: '여학생' },
-  { value: 'custom', label: '직접 명단 등록' },
-];
 export const MODES = [{ id: 'classic', label: '클래식' }, { id: 'claw', label: '인형 뽑기' }, { id: 'balloon', label: '풍선 다트' }];
 export const DURATION = { classic: 2000, claw: 4700, balloon: 3300 };
 export const randomWord = () => crypto.getRandomValues(new Uint32Array(1))[0];

@@ -2,8 +2,9 @@ import { WebviewWindow } from '@tauri-apps/api/webviewWindow';
 import { primaryMonitor } from '@tauri-apps/api/window';
 import { PhysicalPosition } from '@tauri-apps/api/dpi';
 import { LazyStore } from '@tauri-apps/plugin-store';
-import { UPDATE_NOTICE_STORE_KEY, UPDATE_NOTICE_WINDOW_LABEL, getWelcomeWindowOptions, getUpdateNoticeWindowOptions, shouldShowUpdateNotice } from './updateNotice.js';
-import { TOOLKIT_RELEASE_LABEL, TOOLKIT_RELEASE_STORE_KEY, getToolkitReleaseOptions, runNoticeQueue, fitNoticeSize } from './toolkitRelease.js';
+import { RELEASE_NEWS_KEY, STARTUP_PROFILE_KEY, classifyStartupProfile, shouldShowReleaseNews, runReleaseStartup } from './releaseNews.js';
+import { openReleaseNews } from './releaseNewsWindow.js';
+import { fitNoticeSize } from './toolkitRelease.js';
 import {
   INITIAL_SETUP_STORE_KEY,
   INITIAL_SETUP_WINDOW_LABEL,
@@ -26,7 +27,7 @@ async function showUntilClosed(entry) {
     try { storedValue = await store.get(entry.key); } catch { /* 읽기 실패 시 안내를 보여 줍니다. */ }
     const shouldShow = entry.shouldShow
       ? entry.shouldShow(storedValue)
-      : shouldShowUpdateNotice(storedValue);
+      : shouldShowReleaseNews(storedValue);
     if (!shouldShow) return false;
   }
   const monitor = await primaryMonitor().catch(() => null);
@@ -79,36 +80,36 @@ async function launchStartupFeatures() {
   if (results[1].status === 'rejected') console.warn('Tidy 툴킷을 자동으로 열지 못했습니다.');
 }
 
-/** @param {boolean} showWelcome */
-async function runStartup(showWelcome) {
-  try {
-    await showUntilClosed({
-      label: INITIAL_SETUP_WINDOW_LABEL,
-      key: INITIAL_SETUP_STORE_KEY,
-      shouldShow: (value) => !isInitialSetupComplete(value),
-      options: getInitialSetupWindowOptions,
-    });
-  } catch (error) {
-    // 창 생성 실패가 기존 사용자의 저장된 자동 실행까지 막지 않게 합니다.
-    console.warn('처음 설정 창을 열지 못했습니다:', error);
-  }
-
-  // 급식과 툴킷은 최초 선택이 끝난 뒤에만 자동 실행합니다.
-  await launchStartupFeatures();
-
-  const entries = [
-    ...(showWelcome ? [{ label: 'welcome', options: getWelcomeWindowOptions }] : []),
-    { label: TOOLKIT_RELEASE_LABEL, key: TOOLKIT_RELEASE_STORE_KEY, options: getToolkitReleaseOptions },
-    { label: UPDATE_NOTICE_WINDOW_LABEL, key: UPDATE_NOTICE_STORE_KEY, options: getUpdateNoticeWindowOptions },
-  ];
-  // 실패한 창의 상태를 알 수 없을 때 다음 공지를 겹쳐 열지 않습니다.
-  try { await runNoticeQueue(entries, showUntilClosed); }
-  catch (error) { console.warn('시작 안내를 열지 못했습니다:', error); }
+// appState.init() 전에 구분합니다. 신규 실행에서 생성한 main을 기존 데이터로 오인하지 않습니다.
+export async function captureStartupProfile() {
+  const store = new LazyStore('tidy-task-config.json');
+  const [profile, main, todos] = await Promise.all([
+    store.get(STARTUP_PROFILE_KEY), store.get('main'), store.get('todos'),
+  ]);
+  const kind = classifyStartupProfile(profile, main, todos);
+  if (profile !== kind) { await store.set(STARTUP_PROFILE_KEY, kind); await store.save(); }
+  return kind;
 }
 
-/** @param {boolean} showWelcome */
-export function startStartupNotices(showWelcome) {
-  // 메인 창 초기화가 중복되어도 시작 절차와 표시 횟수는 한 번으로 합칩니다.
-  if (!startupPromise) startupPromise = runStartup(showWelcome);
+/** @param {'new'|'existing'|null} profile */
+async function runStartup(profile) {
+  const store = new LazyStore('tidy-task-config.json');
+  const completed = await store.get(INITIAL_SETUP_STORE_KEY);
+  const needsSetup = profile === 'new' && !isInitialSetupComplete(completed);
+  await runReleaseStartup(needsSetup, {
+    setup: () => showUntilClosed({ label: INITIAL_SETUP_WINDOW_LABEL, options: getInitialSetupWindowOptions }),
+    launch: launchStartupFeatures,
+    news: async () => {
+      const hidden = await store.get(RELEASE_NEWS_KEY);
+      if (shouldShowReleaseNews(hidden)) await openReleaseNews();
+    },
+  });
+}
+
+/** @param {'new'|'existing'|null} profile */
+export function startStartupNotices(profile) {
+  if (!startupPromise) startupPromise = runStartup(profile).catch(error => {
+    console.warn('시작 안내를 열지 못했습니다:', error);
+  });
   return startupPromise;
 }
