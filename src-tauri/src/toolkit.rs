@@ -26,16 +26,30 @@ const TOOL_ORDER_IDS: [&str; 13] = ["timer", "picker", "noticeboard", "vote", "s
 const LEGACY_TOOL_ORDER_IDS: [&str; 13] = ["timer", "clock", "picker", "noticeboard", "tournament", "focus-bell", "dice", "scoreboard", "thermometer", "vote", "seating", "external", "roster"];
 // 점수판 3종의 창 이름(드롭다운 항목). JS registry.js의 SCOREBOARD_TOOLS와 같습니다.
 const SCOREBOARD_ROLES: [&str; 3] = ["scoreboard-personal", "scoreboard-group", "scoreboard-custom"];
+// 타이머 소리 id(시계음·종료 경고음·종료음). JS src/lib/timers/soundLibrary.js의 SOUND_LIBRARY와 같아야 합니다
+// (soundLibrary.test.js가 이 세 목록을 읽어 대조). 목록에 없는 값은 저장을 거부하고, 읽을 때는 기본 소리로 둡니다.
+const TICK_SOUNDS: [&str; 14] = ["clock-closeup", "small-tick", "wall-clock", "grandfather-clock", "alarm-clock", "stopwatch", "kitchen-timer", "metronome", "woodblock", "water-drop", "button-click", "soft-tap", "digital-tick", "glass-tink"];
+const WARNING_SOUNDS: [&str; 13] = ["double-beep", "buzzer", "signal", "time-signal", "alarm-beep", "game-beep", "soft-ding", "chime-alert", "xylophone", "kalimba", "music-box", "heartbeat", "hurry-tick"];
+const END_SOUNDS: [&str; 13] = ["clock-gong", "happy-bells", "kitchen-bell", "boxing-bell", "counter-bell", "doorbell", "singing-bowl", "triangle", "winning-chimes", "celebration", "xylophone-finish", "phone-timer", "cheer"];
 
 fn defaults() -> Value {
     let sound = json!({"tickEnabled":true,"warningEnabled":true,"endEnabled":true,"warningLeadSeconds":5,"warningDurationSeconds":null});
-    let mut analog = sound.clone();
+    // 소리 기본값은 타이머마다 예전부터 울리던 소리입니다(JS soundLibrary.js의 DEFAULT_SOUNDS와 같음).
+    let with_sounds = |tick: &str, warning: &str, end: &str| {
+        let mut prefs = sound.clone();
+        prefs["tickSound"] = json!(tick);
+        prefs["warningSound"] = json!(warning);
+        prefs["endSound"] = json!(end);
+        prefs
+    };
+    let digital = with_sounds("clock-closeup", "double-beep", "winning-chimes");
+    let mut analog = with_sounds("small-tick", "buzzer", "clock-gong");
     analog["dialRangeMinutes"] = json!(60);
-    let mut hourglass = sound.clone();
+    let mut hourglass = with_sounds("water-drop", "signal", "happy-bells");
     hourglass["showRemainingTime"] = json!(true);
     let clock = json!({"face":"digital","showSeconds":true,"hour12":true,"title":"","titleHidden":false,"standardTimeSync":true,"analogCaption":true,"analogMinuteNumbers":false});
-    json!({"schemaVersion":12,"revision":0,"toolkit":{"theme":"sage","darkMode":false,"uiFontFamily":"메이플스토리 L","enabled":false,"orientation":"horizontal","toolbarSize":2,"collapsed":false,"visibleToolIds":DEFAULT_VISIBLE_TOOL_IDS,"toolOrderIds":TOOL_ORDER_IDS,"hiddenPlatformIds":[],"externalToolsEnabled":true,"position":null},
-        "preferences":{"digital":sound,"analog":analog,"hourglass":hourglass,"stopwatch":{"tickEnabled":true},"clock":clock}})
+    json!({"schemaVersion":12,"revision":0,"toolkit":{"theme":"sage","darkMode":false,"uiFontFamily":"메이플스토리 L","enabled":false,"orientation":"horizontal","toolbarSize":2,"alwaysOnTop":true,"collapsed":false,"visibleToolIds":DEFAULT_VISIBLE_TOOL_IDS,"toolOrderIds":TOOL_ORDER_IDS,"hiddenPlatformIds":[],"externalToolsEnabled":true,"position":null},
+        "preferences":{"digital":digital,"analog":analog,"hourglass":hourglass,"stopwatch":{"tickEnabled":true,"tickSound":"button-click"},"clock":clock}})
 }
 fn tool_enabled(toolkit: &Value, id: &Value) -> bool {
     if id == "external" {
@@ -57,7 +71,7 @@ fn group_tool_order(value: &mut Value) {
 fn field_valid(scope: &str, key: &str, value: &Value) -> bool {
     if scope == "toolkit" {
         return match key {
-            "enabled" | "collapsed" | "externalToolsEnabled" | "darkMode" => value.is_boolean(),
+            "enabled" | "collapsed" | "externalToolsEnabled" | "darkMode" | "alwaysOnTop" => value.is_boolean(),
             "theme" => matches!(value.as_str(), Some("sage" | "ocean" | "lavender" | "rose" | "amber" | "slate")),
             "toolbarSize" => value.as_u64().is_some_and(|n| n <= 4),
             // 툴킷 전용 글꼴 이름(Tidy Task 글꼴과 따로 저장). 등록 글꼴 목록은 다른 저장소에 있어 이름 모양만 봅니다.
@@ -117,11 +131,17 @@ fn field_valid(scope: &str, key: &str, value: &Value) -> bool {
     if key == "tickEnabled" {
         return value.is_boolean();
     }
+    // 스톱워치도 시계음은 고를 수 있습니다(경고음·종료음은 없음).
+    if key == "tickSound" {
+        return value.as_str().is_some_and(|id| TICK_SOUNDS.contains(&id));
+    }
     if scope == "stopwatch" {
         return false;
     }
     match key {
         "warningEnabled" | "endEnabled" => value.is_boolean(),
+        "warningSound" => value.as_str().is_some_and(|id| WARNING_SOUNDS.contains(&id)),
+        "endSound" => value.as_str().is_some_and(|id| END_SOUNDS.contains(&id)),
         "warningLeadSeconds" => value
             .as_u64()
             .is_some_and(|n| [5, 10, 20, 30, 40, 50, 60, 90, 120].contains(&n)),
@@ -294,21 +314,54 @@ pub fn toolkit_read(app: tauri::AppHandle) -> Result<Value, String> {
 }
 #[tauri::command(async)]
 pub fn toolkit_patch(app: tauri::AppHandle, scope: String, patch: Value) -> Result<Value, String> {
-    let _guard = STORE_LOCK.lock().map_err(|_| "설정 잠금 오류")?;
-    let store = open_store(&app)?;
-    let previous = store.get("settings");
-    let next = merge(normalized(previous.clone())?, &scope, patch)?;
-    store.set("settings", next.clone());
-    if let Err(error) = store.save() {
-        if let Some(old) = previous {
-            store.set("settings", old);
-        } else {
-            store.delete("settings");
+    let layer_changed = scope == "toolkit" && patch.get("alwaysOnTop").is_some();
+    let next = {
+        let _guard = STORE_LOCK.lock().map_err(|_| "설정 잠금 오류")?;
+        let store = open_store(&app)?;
+        let previous = store.get("settings");
+        let next = merge(normalized(previous.clone())?, &scope, patch)?;
+        store.set("settings", next.clone());
+        if let Err(error) = store.save() {
+            if let Some(old) = previous {
+                store.set("settings", old);
+            } else {
+                store.delete("settings");
+            }
+            return Err(error.to_string());
         }
-        return Err(error.to_string());
+        let _ = app.emit("toolkit-preferences-changed", &next);
+        next
+    };
+    // 왜 잠금을 푼 뒤에 하는가: 창 설정은 UI 스레드로 넘어가는 일이라, 설정 잠금을 쥔 채 기다리지 않게 합니다.
+    if layer_changed {
+        if let Some(win) = app.get_webview_window("toolkit") {
+            apply_toolbar_layer(&win, toolbar_on_top(&next));
+        }
     }
-    let _ = app.emit("toolkit-preferences-changed", &next);
     Ok(next)
+}
+/// 설정의 "툴바 위치(맨 앞으로 / 맨 뒤로)". 값이 없거나 읽지 못하면 기본값인 맨 앞(true)입니다.
+fn toolbar_on_top(settings: &Value) -> bool {
+    settings["toolkit"]["alwaysOnTop"].as_bool().unwrap_or(true)
+}
+/// 저장된 설정을 읽어 툴바를 "항상 위"로 둘지 정합니다. 창을 새로 만들 때 씁니다.
+/// 왜 실패해도 true인가: 설정 파일이 잠시 읽히지 않더라도 예전과 같은 동작(항상 위)이 가장 안전합니다.
+fn saved_toolbar_on_top(app: &tauri::AppHandle) -> bool {
+    let Ok(_guard) = STORE_LOCK.lock() else { return true };
+    open_store(app)
+        .ok()
+        .and_then(|store| normalized(store.get("settings")).ok())
+        .map_or(true, |settings| toolbar_on_top(&settings))
+}
+/// 툴바를 맨 앞(항상 위) 또는 맨 뒤(보통 창)로 둡니다.
+/// 맨 앞으로 바꿀 때는 이미 떠 있는 다른 "항상 위" 창들보다 앞으로 올립니다.
+/// 맨 뒤로 바꿀 때는 "항상 위"만 풀어 다른 창에 가려질 수 있게 합니다 — 툴바를 누르면 다시 앞으로 옵니다.
+fn apply_toolbar_layer(win: &tauri::WebviewWindow, on_top: bool) {
+    if on_top {
+        raise_above_other_topmost(win);
+    } else {
+        let _ = win.set_always_on_top(false);
+    }
 }
 pub fn is_timer(label: &str) -> bool {
     KINDS
@@ -321,7 +374,7 @@ pub fn is_work_window(label: &str) -> bool {
 /// 툴바에서 여는 "작업 창"(타이머 제외). 크기 조절·작업표시줄 표시·항상 위 기본 꺼짐을 함께 따릅니다.
 /// 왜 한 곳에 모으는가: 예전에는 창 만들기의 세 설정이 목록을 따로 들고 있어, 새 도구를 한 곳만 빠뜨리는 실수가 쉬웠습니다.
 fn is_tool_role(role: &str) -> bool {
-    matches!(role, "roster" | "noticeboard" | "picker" | "tournament" | "focus-bell" | "dice" | "clock" | "thermometer" | "vote" | "vote-teacher" | "seating" | "seating-teacher" | "seating-display")
+    matches!(role, "roster" | "noticeboard" | "picker" | "tournament" | "focus-bell" | "dice" | "clock" | "thermometer" | "thermometer-display" | "vote" | "vote-teacher" | "seating" | "seating-teacher" | "seating-display")
         || SCOREBOARD_ROLES.contains(&role)
 }
 
@@ -359,6 +412,7 @@ fn work_window_size(role: &str) -> Option<WorkWindowSize> {
         "scoreboard-personal" => ((1280.0, 820.0), (720.0, 520.0), WIDE, (1680.0, 1040.0)),
         "scoreboard-group" | "scoreboard-custom" => ((1180.0, 800.0), (640.0, 480.0), WIDE, (1680.0, 1040.0)),
         // 온도계는 화면 한쪽에 세워 두는 도구라 세로형입니다. 두 개일 때는 create_window가 thermometer_pair_size()를 씁니다.
+        "thermometer-display" => ((400.0, 560.0), (280.0, 220.0), (0.0, 0.0), (400.0, 560.0)),
         "thermometer" => ((760.0, 820.0), (380.0, 520.0), TALL, (1120.0, 1040.0)),
         // 투표판은 뒷자리에서 후보 이름을 읽어야 해서 넓게 엽니다(후보 9명 3×3이 760×560까지 들어감).
         "seating" | "seating-display" => ((1280.0, 840.0), (800.0, 600.0), WIDE, (1680.0, 1040.0)),
@@ -399,13 +453,13 @@ fn placed_offset(area: f64, size: f64, offset: f64) -> f64 {
     (room / 2.0 + offset).clamp(0.0, room)
 }
 
-fn create_window(app: &tauri::AppHandle, role: &str) -> Result<String, String> {
+pub(crate) fn create_window(app: &tauri::AppHandle, role: &str) -> Result<String, String> {
     if QUITTING.load(Ordering::SeqCst) || crate::noticeboard_quit::pending() {
         return Err("앱을 종료하고 있어요.".into());
     }
     let _guard = WINDOW_LOCK.lock().map_err(|_| "창 잠금 오류")?;
     let timer = KINDS.contains(&role);
-    if !timer && !is_tool_role(role) && !["toolkit", "toolkit-menu", "toolkit-scoreboard-menu", "toolkit-external-menu", "toolkit-context-menu", "toolkit-settings"].contains(&role) {
+    if !timer && !is_tool_role(role) && !["toolkit", "toolkit-menu", "toolkit-scoreboard-menu", "toolkit-external-menu", "toolkit-more-menu", "toolkit-context-menu", "toolkit-settings"].contains(&role) {
         return Err("알 수 없는 도구입니다.".into());
     }
     let id = NEXT_WINDOW.fetch_add(1, Ordering::SeqCst);
@@ -439,6 +493,8 @@ fn create_window(app: &tauri::AppHandle, role: &str) -> Result<String, String> {
         (264.0, 222.0, 264.0, 222.0)
     } else if role == "toolkit-external-menu" {
         (244.0, 162.0, 244.0, 114.0)
+    } else if role == "toolkit-more-menu" {
+        (264.0, 480.0, 244.0, 114.0)
     } else if role == "toolkit-context-menu" {
         // 우클릭 메뉴 — JS windows.js의 MENU_WINDOWS.context와 같은 크기
         (340.0, 640.0, 320.0, 240.0)
@@ -456,6 +512,7 @@ fn create_window(app: &tauri::AppHandle, role: &str) -> Result<String, String> {
         "scoreboard-group" => "모둠 점수판",
         "scoreboard-custom" => "커스텀 점수판",
         "thermometer" => "학급 온도계",
+        "thermometer-display" => "미니 온도계",
         "seating" => "자리 배치",
         "seating-teacher" => "자리 배치 · 선생님 설정",
         "seating-display" => "우리 반 자리",
@@ -478,7 +535,8 @@ fn create_window(app: &tauri::AppHandle, role: &str) -> Result<String, String> {
             .transparent(true)
             .shadow(false)
             .resizable(timer || role == "toolkit-settings" || is_tool_role(role))
-            .always_on_top(!timer && !is_tool_role(role))
+            // 툴바는 설정의 "맨 앞으로 / 맨 뒤로"를 따르고, 메뉴·설정 창은 툴바 옆에 뜨는 팝업이라 늘 위에 둡니다.
+            .always_on_top(!timer && !is_tool_role(role) && (role != "toolkit" || saved_toolbar_on_top(app)))
             .skip_taskbar(!timer && !is_tool_role(role))
             .visible(false)
             .build()
@@ -526,7 +584,7 @@ pub async fn toolkit_set_enabled(app: tauri::AppHandle, enabled: bool) -> Result
     if enabled {
         create_window(&app, "toolkit")?;
     } else {
-        for label in ["toolkit-menu", "toolkit-scoreboard-menu", "toolkit-external-menu", "toolkit-context-menu", "toolkit-settings", "toolkit"] {
+        for label in ["toolkit-menu", "toolkit-scoreboard-menu", "toolkit-external-menu", "toolkit-more-menu", "toolkit-context-menu", "toolkit-settings", "toolkit"] {
             if let Some(win) = app.get_webview_window(label) {
                 let _ = win.destroy();
             }
@@ -548,9 +606,13 @@ pub fn open_from_tray(app: &tauri::AppHandle) {
     // 설정 저장(파일 쓰기)과 창 생성이 트레이 메뉴 클릭을 붙잡지 않도록 뒤로 넘깁니다.
     tauri::async_runtime::spawn(async move {
         request_center(anchor);
-        if let Err(e) = toolkit_patch(app.clone(), "toolkit".into(), json!({"enabled": true, "collapsed": false})) {
-            log::warn!("툴킷 펼침 설정을 저장하지 못했습니다: {e}");
-        }
+        let on_top = match toolkit_patch(app.clone(), "toolkit".into(), json!({"enabled": true, "collapsed": false})) {
+            Ok(settings) => toolbar_on_top(&settings),
+            Err(e) => {
+                log::warn!("툴킷 펼침 설정을 저장하지 못했습니다: {e}");
+                saved_toolbar_on_top(&app)
+            }
+        };
         if let Some(win) = app.get_webview_window("toolkit") {
             let _ = win.unminimize();
             // 아직 화면(JS)이 뜨는 중인 창이면 곧 저장 위치 복원·크기 맞춤이 지금 옮긴 자리를 덮어쓰므로,
@@ -560,7 +622,10 @@ pub fn open_from_tray(app: &tauri::AppHandle) {
             }
             center_on_monitor_at(&app, &win, anchor);
             let _ = win.show();
-            raise_above_other_topmost(&win);
+            // "맨 뒤로"로 둔 툴바도 트레이로 부르면 앞에 보여야 하므로, 항상 위만 걸지 않고 초점으로 앞에 가져옵니다.
+            if on_top {
+                raise_above_other_topmost(&win);
+            }
             let _ = win.set_focus();
             // 툴바 화면(JS)에 "불려 왔다"고 알려 잠깐 깜빡이게 합니다. 이 이벤트는 툴바 창만 듣습니다.
             let _ = app.emit("toolkit-summoned", ());
@@ -654,6 +719,22 @@ mod tests {
         for invalid in [json!(-1), json!(5), json!(1.5), json!("2"), Value::Null] {
             assert!(merge(old.clone(), "toolkit", json!({"toolbarSize":invalid})).is_err());
             assert_eq!(normalized(Some(json!({"schemaVersion":6,"toolkit":{"toolbarSize":invalid}}))).unwrap()["toolkit"]["toolbarSize"], json!(2));
+        }
+    }
+    #[test]
+    fn toolbar_layer_defaults_to_front_and_persists() {
+        use super::*;
+        // 이 설정이 생기기 전 파일(값 없음)은 예전처럼 맨 앞(항상 위)입니다.
+        let old = normalized(Some(json!({"schemaVersion":12,"toolkit":{}}))).unwrap();
+        assert_eq!(old["toolkit"]["alwaysOnTop"], json!(true));
+        assert!(toolbar_on_top(&old));
+        let back = merge(old.clone(), "toolkit", json!({"alwaysOnTop":false})).unwrap();
+        let reloaded = normalized(Some(back)).unwrap();
+        assert_eq!(reloaded["toolkit"]["alwaysOnTop"], json!(false));
+        assert!(!toolbar_on_top(&reloaded));
+        for invalid in [json!(0), json!("false"), Value::Null] {
+            assert!(merge(old.clone(), "toolkit", json!({"alwaysOnTop":invalid})).is_err());
+            assert_eq!(normalized(Some(json!({"schemaVersion":12,"toolkit":{"alwaysOnTop":invalid}}))).unwrap()["toolkit"]["alwaysOnTop"], json!(true));
         }
     }
     #[test]
@@ -751,6 +832,47 @@ mod tests {
             assert!(merge(defaults(), "digital", json!({key:42})).is_err());
         }
         assert!(merge(defaults(), "stopwatch", json!({"warningEnabled":true})).is_err());
+    }
+    #[test]
+    fn timer_sounds_default_to_the_previous_sound_and_only_known_ids_are_saved() {
+        // 업데이트 전에 울리던 소리가 그대로 기본값이어야 사용자가 고르기 전에는 소리가 바뀌지 않습니다.
+        let base = defaults();
+        for (kind, tick, warning, end) in [
+            ("digital", "clock-closeup", "double-beep", "winning-chimes"),
+            ("analog", "small-tick", "buzzer", "clock-gong"),
+            ("hourglass", "water-drop", "signal", "happy-bells"),
+        ] {
+            assert_eq!(base["preferences"][kind]["tickSound"], tick);
+            assert_eq!(base["preferences"][kind]["warningSound"], warning);
+            assert_eq!(base["preferences"][kind]["endSound"], end);
+        }
+        assert_eq!(base["preferences"]["stopwatch"], json!({"tickEnabled":true,"tickSound":"button-click"}));
+        for list in [&TICK_SOUNDS[..], &WARNING_SOUNDS[..], &END_SOUNDS[..]] {
+            let unique: std::collections::HashSet<_> = list.iter().collect();
+            assert_eq!(unique.len(), list.len(), "소리 id가 중복되었습니다");
+        }
+        let chosen = merge(defaults(), "digital", json!({"tickSound":"grandfather-clock","warningSound":"time-signal","endSound":"singing-bowl"})).unwrap();
+        let reloaded = normalized(Some(chosen)).unwrap();
+        assert_eq!(reloaded["preferences"]["digital"]["tickSound"], "grandfather-clock");
+        assert_eq!(reloaded["preferences"]["digital"]["warningSound"], "time-signal");
+        assert_eq!(reloaded["preferences"]["digital"]["endSound"], "singing-bowl");
+        assert_eq!(reloaded["preferences"]["analog"]["tickSound"], "small-tick");
+        assert!(merge(defaults(), "stopwatch", json!({"tickSound":"metronome"})).is_ok());
+        // 다른 역할의 id, 모르는 id, 문자열이 아닌 값, 스톱워치의 경고·종료음은 거부합니다.
+        for (scope, patch) in [
+            ("digital", json!({"tickSound":"time-signal"})),
+            ("digital", json!({"warningSound":"cheer"})),
+            ("digital", json!({"endSound":"unknown"})),
+            ("analog", json!({"tickSound":1})),
+            ("stopwatch", json!({"warningSound":"time-signal"})),
+            ("stopwatch", json!({"endSound":"cheer"})),
+        ] {
+            assert!(merge(defaults(), scope, patch).is_err());
+        }
+        // 파일에 모르는 값이 있어도(다른 버전·손상) 읽기는 성공하고 기본 소리로 둡니다.
+        let broken = normalized(Some(json!({"schemaVersion":12,"preferences":{"hourglass":{"endSound":"from-the-future","tickSound":"metronome"}}}))).unwrap();
+        assert_eq!(broken["preferences"]["hourglass"]["endSound"], "happy-bells");
+        assert_eq!(broken["preferences"]["hourglass"]["tickSound"], "metronome");
     }
     #[test]
     fn future_version_is_not_overwritten() {

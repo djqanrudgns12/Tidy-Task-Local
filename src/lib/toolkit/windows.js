@@ -29,11 +29,12 @@ const MENU_WINDOWS = {
   timer: { label: 'toolkit-menu', width: 244, height: 250 },
   // 점수판 드롭다운 — 항목 3개(아이콘·이름·한 줄 설명). 크기는 Rust toolkit.rs와 같습니다.
   scoreboard: { label: 'toolkit-scoreboard-menu', width: 264, height: 222 },
+  more: { label: 'toolkit-more-menu', width: 264, height: 480 },
   external: { label: 'toolkit-external-menu', width: 244, height: 162 },
   // 우클릭 메뉴 — 높이는 ToolkitMenu의 context 항목 높이(CSS)와 맞춘 값입니다.
   context: { label: 'toolkit-context-menu', width: 340, height: 640 },
 };
-/** @param {'timer'|'scoreboard'|'external'|'context'} [kind] */
+/** @param {'timer'|'scoreboard'|'external'|'more'|'context'} [kind] */
 export async function dismissMenu(kind) {
   if (native) {
     const menus = kind
@@ -49,7 +50,7 @@ export async function dismissMenu(kind) {
 }
 /**
  * @param {HTMLElement} trigger
- * @param {'timer'|'scoreboard'|'external'} kind
+ * @param {'timer'|'scoreboard'|'external'|'more'} kind
  * @param {number} [entryCount]
  */
 export async function showToolkitMenu(trigger, kind, entryCount) {

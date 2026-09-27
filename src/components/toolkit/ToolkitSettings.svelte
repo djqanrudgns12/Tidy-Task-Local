@@ -3,7 +3,7 @@
   import { flip } from 'svelte/animate';
   import { cubicOut } from 'svelte/easing';
   import { sortToolRows } from '../../lib/toolkit/sortTools.js';
-  import { X, MoveHorizontal, MoveVertical, ChevronDown, GripVertical, Type } from 'lucide-svelte';
+  import { X, MoveHorizontal, MoveVertical, ChevronDown, GripVertical, Type, BringToFront, SendToBack } from 'lucide-svelte';
   import {
     readSettings,
     patchSettings,
@@ -258,6 +258,37 @@
             <span class:chosen={config.toolbarSize === index}>{size.label}</span>
           {/each}
         </div>
+      </div>
+      <!-- 툴바가 늘 위에 떠 있어 다른 창을 가린다는 의견이 있어, 다른 창 뒤로 보낼 수 있게 합니다. -->
+      <div class="toolbar-layer-control" role="radiogroup" aria-labelledby="toolbar-layer-title">
+        <div class="toolbar-size-heading">
+          <strong id="toolbar-layer-title">툴바 위치</strong>
+          <span>{config.alwaysOnTop ? '항상 위' : '다른 창 뒤'}</span>
+        </div>
+        <div class="orientation-options">
+          <button
+            role="radio"
+            class:chosen={config.alwaysOnTop}
+            aria-checked={config.alwaysOnTop}
+            onclick={() => change({ alwaysOnTop: true })}
+            ><span class="orientation-icon"><BringToFront size={20} /></span><span>맨 앞으로</span
+            ><i aria-hidden="true"></i></button
+          ><button
+            role="radio"
+            class:chosen={!config.alwaysOnTop}
+            aria-checked={!config.alwaysOnTop}
+            onclick={() => change({ alwaysOnTop: false })}
+            ><span class="orientation-icon"><SendToBack size={20} /></span><span>맨 뒤로</span
+            ><i aria-hidden="true"></i></button
+          >
+        </div>
+        <p class="toolbar-layer-hint">
+          {#if config.alwaysOnTop}
+            툴바가 다른 창에 가려지지 않고 늘 위에 보여요.
+          {:else}
+            다른 창이 툴바를 덮을 수 있어요. 툴바를 누르거나 트레이의 'Tidy 툴킷 열기'로 다시 앞으로 불러요.
+          {/if}
+        </p>
       </div>
     </section>
     <section class="settings-section tools-setting-card">

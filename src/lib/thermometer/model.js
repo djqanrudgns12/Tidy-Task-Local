@@ -13,6 +13,8 @@ export const LIMITS = Object.freeze({
   stages: 10,
   chips: 8,
   chipText: 6,
+  // 기록에 붙는 사유. 칩(버튼)은 짧게 두지만, 칸에 직접 쓰는 사유는 "수학 문제 다 풂"처럼 조금 더 길 수 있어 따로 둡니다.
+  reason: 12,
   log: 300,
   dailyDays: 120,
   stampDates: 100,
@@ -116,7 +118,7 @@ export function normalizeThermometer(raw) {
   /** @type {LogEntry[]} */ const log = [];
   for (const e of Array.isArray(raw.log) ? raw.log.slice(-LIMITS.log) : [])
     if (Number.isFinite(e?.at) && Number.isFinite(e?.delta) && Number.isFinite(e?.value))
-      log.push({ id: idOf(e.id) ?? newId(), at: e.at, delta: Math.round(e.delta), value: Math.round(e.value), kind: ['auto', 'restart'].includes(e.kind) ? e.kind : 'manual', reason: cleanLabel(e.reason, LIMITS.chipText) });
+      log.push({ id: idOf(e.id) ?? newId(), at: e.at, delta: Math.round(e.delta), value: Math.round(e.value), kind: ['auto', 'restart'].includes(e.kind) ? e.kind : 'manual', reason: cleanLabel(e.reason, LIMITS.reason) });
   /** @type {Record<string, {up:number,down:number,auto:number}>} */ const daily = {};
   if (raw.daily && typeof raw.daily === 'object')
     for (const key of Object.keys(raw.daily).filter(isDateKey).sort().slice(-LIMITS.dailyDays)) {

@@ -1,7 +1,9 @@
 import { TOOLKIT_THEMES } from './themes.js';
 import { defaultClockPreferences, normalizeClockPreferences, isValidClockField } from '../clock/clockPreferences.js';
-/** @typedef {{tickEnabled:boolean,warningEnabled?:boolean,endEnabled?:boolean,warningLeadSeconds?:number,warningDurationSeconds?:number|null,dialRangeMinutes?:number,showRemainingTime?:boolean}} Preferences */
-/** @typedef {{schemaVersion:number,revision:number,toolkit:{theme:string,darkMode:boolean,uiFontFamily:string,enabled:boolean,externalToolsEnabled:boolean,orientation:string,toolbarSize:number,collapsed:boolean,visibleToolIds:string[],toolOrderIds:string[],hiddenPlatformIds:string[],position:Record<string,number>|null},preferences:Record<string,Preferences>}} Settings
+import { DEFAULT_SOUNDS, SOUND_KEYS, isSoundId } from '../timers/soundLibrary.js';
+/** @typedef {{tickEnabled:boolean,tickSound?:string,warningEnabled?:boolean,warningSound?:string,endEnabled?:boolean,endSound?:string,warningLeadSeconds?:number,warningDurationSeconds?:number|null,dialRangeMinutes?:number,showRemainingTime?:boolean}} Preferences
+ * tickSound·warningSound·endSound: 고른 소리 id(목록: src/lib/timers/soundLibrary.js). 스톱워치는 tickSound만 있습니다. */
+/** @typedef {{schemaVersion:number,revision:number,toolkit:{theme:string,darkMode:boolean,uiFontFamily:string,enabled:boolean,externalToolsEnabled:boolean,orientation:string,toolbarSize:number,alwaysOnTop:boolean,collapsed:boolean,visibleToolIds:string[],toolOrderIds:string[],hiddenPlatformIds:string[],position:Record<string,number>|null},preferences:Record<string,Preferences>}} Settings
  * preferences.clock은 타이머와 모양이 다른 시계 설정(clockPreferences.js)입니다. 읽을 때는 normalizeClockPreferences를 거칩니다. */
 export const TOOLBAR_SIZES = [
   { label: '매우 작게', scale: 0.9 },
@@ -57,17 +59,28 @@ export const TIMER_NAMES = {
   hourglass: '모래시계',
   stopwatch: '스톱워치',
 };
-export const PRESETS = [1, 2, 3, 5, 10, 15, 20, 30, 40];
+// 분 단위입니다. 0.5분은 빠른 설정에서 30초로 표시합니다.
+export const PRESETS = [0.5, 1, 2, 3, 5, 10, 15, 20, 30, 40];
 export const WARNING_LEADS = [5, 10, 20, 30, 40, 50, 60, 90, 120];
 export const WARNING_DURATIONS = [null, 2, 5, 10, 20];
+/** 설정 키 → 소리 역할(tickSound → tick). */
+const SOUND_ROLE_BY_KEY = /** @type {Record<string, import('../timers/soundLibrary.js').SoundRole>} */ (
+  Object.fromEntries(Object.entries(SOUND_KEYS).map(([role, key]) => [key, role]))
+);
 /** @param {string} kind @returns {Preferences} */
 export function defaultPreferences(kind) {
   if (!TIMER_KINDS.includes(kind)) throw new Error('알 수 없는 타이머입니다.');
-  if (kind === 'stopwatch') return { tickEnabled: true };
+  // 소리 기본값은 타이머마다 예전부터 울리던 소리입니다. 업데이트 뒤에도 사용자가 고르기 전에는 소리가 바뀌지 않습니다.
+  // Rust toolkit.rs의 defaults()와 같아야 합니다.
+  const sounds = /** @type {Record<string,string>} */ (DEFAULT_SOUNDS[kind]);
+  if (kind === 'stopwatch') return { tickEnabled: true, tickSound: sounds.tick };
   return {
     tickEnabled: true,
+    tickSound: sounds.tick,
     warningEnabled: true,
+    warningSound: sounds.warning,
     endEnabled: true,
+    endSound: sounds.end,
     warningLeadSeconds: 5,
     warningDurationSeconds: null,
     ...(kind === 'analog' ? { dialRangeMinutes: 60 } : {}),
@@ -87,6 +100,8 @@ export function defaults() {
       uiFontFamily: DEFAULT_UI_FONT,
       orientation: 'horizontal',
       toolbarSize: 2,
+      // 툴바를 다른 창보다 늘 위에 둘지(맨 앞으로) 여부. 예전 동작이 항상 위였으므로 기본은 true입니다.
+      alwaysOnTop: true,
       collapsed: false,
       visibleToolIds: [...DEFAULT_VISIBLE_TOOL_IDS],
       toolOrderIds: [...DEFAULT_TOOL_ORDER],
@@ -113,6 +128,9 @@ export function normalizePreferences(kind, input = {}) {
       Object.assign(result, { [key]: value });
     if (key === 'dialRangeMinutes' && [30, 60].includes(value))
       Object.assign(result, { [key]: value });
+    // 소리 id는 그 역할(시계음·경고음·종료음) 목록에 있을 때만 받습니다. 다른 역할의 id나 모르는 값은 기본 소리로 둡니다.
+    const role = SOUND_ROLE_BY_KEY[key];
+    if (role && isSoundId(role, value)) Object.assign(result, { [key]: value });
   }
   return result;
 }
@@ -122,7 +140,7 @@ export function normalizeSettings(input) {
     throw new Error('더 최신 버전의 툴킷 설정입니다.');
   const out = defaults();
   out.revision = Number.isSafeInteger(input?.revision) ? input.revision : 0;
-  for (const key of /** @type {const} */ (['enabled', 'collapsed', 'externalToolsEnabled', 'darkMode']))
+  for (const key of /** @type {const} */ (['enabled', 'collapsed', 'externalToolsEnabled', 'darkMode', 'alwaysOnTop']))
     if (typeof input?.toolkit?.[key] === 'boolean') out.toolkit[key] = input.toolkit[key];
   if (TOOLKIT_THEMES.some(t => t.id === input?.toolkit?.theme)) out.toolkit.theme = input.toolkit.theme;
   if (isValidUiFontName(input?.toolkit?.uiFontFamily)) out.toolkit.uiFontFamily = input.toolkit.uiFontFamily;

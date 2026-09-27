@@ -50,3 +50,7 @@ redistributing items on their own, as stock, in a tool/template, or with source
 files. These files are not CC0 assets; check distribution terms before publishing
 the assets/source or distributing the application. This change does not publish
 or upload them.
+
+Timer sound library (2026-09-27): 30 selectable tick/warning/end sounds from BigSoundBank
+(CC0), Kenney (CC0), Google Material Design sounds (CC BY 4.0) and the Android Open Source
+Project (Apache-2.0). Credits and changes: timer-sounds/LICENSE.txt.

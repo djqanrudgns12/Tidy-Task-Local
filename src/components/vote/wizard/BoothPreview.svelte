@@ -8,7 +8,7 @@
   const firstAgenda = $derived(config.agendas[0]?.text?.trim() || '안건을 적어 주세요');
 </script>
 
-<div class="vt-preview-board" aria-label="학생 화면 구성 미리보기">
+<div class="vt-preview-board" class:no-shrink={yesno} aria-label="학생 화면 구성 미리보기">
   <div class="vt-preview-top">
     <strong>{yesno ? firstAgenda : config.title.trim() || '투표 제목을 적어 주세요'}</strong>
     <p>{yesno ? '찬성 또는 반대의 번호를 누릅니다' : `고르고 싶은 ${config.type === 'opinion' ? '항목' : '후보'}의 번호를 누릅니다`}</p>
@@ -39,23 +39,27 @@
 </div>
 
 <style>
-  .vt-preview-board { display:grid; flex:none; align-content:start; gap:10px; min-width:0; padding:14px; border:1px solid var(--vt-line); border-radius:16px; background:var(--vt-card); }
+  /* 옆 칸 아래의 학생 안내 설정이 스크롤 없이 보이도록, 높이가 모자라면 이 미리보기의 목록이 먼저 줄어듭니다(목록은 안에서 스크롤).
+     찬반 카드는 줄이면 겹치므로 줄이지 않습니다(no-shrink — Tailwind 전역 .fixed와 겹치지 않는 이름). */
+  .vt-preview-board { display:grid; flex:0 1 auto; grid-template-rows:auto minmax(0, 1fr) auto; align-content:start; gap:10px; min-width:0; min-height:190px; padding:14px; border:1px solid var(--vt-line); border-radius:16px; background:var(--vt-card); }
+  .vt-preview-board.no-shrink { flex:none; }
   .vt-preview-top { display:grid; gap:6px; text-align:center; }
   .vt-preview-top strong { overflow-wrap:anywhere; font-size:clamp(19px, 1.7cqi, 24px); line-height:1.35; }
   .vt-preview-top p { margin:0; color:var(--vt-muted); font-size:14px; font-weight:600; line-height:1.5; word-break:keep-all; }
-  .vt-preview-list { display:grid; gap:6px; max-height:min(28dvh, 240px); overflow:auto; padding:3px; }
+  .vt-preview-list { display:grid; align-content:start; gap:6px; min-height:0; max-height:min(28dvh, 240px); overflow:auto; padding:3px; }
   .vt-preview-item { display:flex; align-items:center; gap:10px; min-width:0; min-height:60px; padding:6px 9px; border:1px solid var(--preview-line); border-radius:12px; background:color-mix(in srgb, var(--preview-bg) 58%, var(--vt-card)); }
   .vt-preview-number { display:grid; place-items:center; flex:none; width:32px; height:36px; border-radius:10px; background:var(--vt-card); font-size:20px; font-variant-numeric:tabular-nums; }
   .vt-preview-item > span:last-child { display:grid; gap:2px; min-width:0; }
   .vt-preview-item strong { overflow:hidden; font-size:16px; font-weight:800; text-overflow:ellipsis; white-space:nowrap; }
   .vt-preview-item small { overflow:hidden; color:var(--vt-muted); font-size:12px; text-overflow:ellipsis; white-space:nowrap; }
   .vt-preview-choices { display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); gap:10px; }
-  .vt-preview-choice { display:grid; justify-items:center; align-content:center; gap:8px; min-height:178px; border:1px solid; border-radius:18px; }
+  /* 옆 칸 아래 학생 안내 설정과 함께 스크롤 없이 보이도록 번호·기호·글자를 한 줄로 놓아 높이를 낮춥니다. */
+  .vt-preview-choice { display:flex; align-items:center; justify-content:center; gap:10px; min-height:88px; padding:0 10px; border:1px solid; border-radius:18px; }
   .vt-preview-choice.yes { color:#1f6e57; background:#d7f4e9; border-color:#9dddc4; }
   .vt-preview-choice.no { color:#96491a; background:#ffdfcc; border-color:#f4b68f; }
-  .vt-preview-choice b { justify-self:start; margin-left:14px; padding:3px 9px; border-radius:9px; background:#fff; font-size:18px; }
-  .vt-preview-symbol { font-family:Arial,sans-serif; font-size:62px; line-height:1; }
-  .vt-preview-choice strong { font-size:22px; }
+  .vt-preview-choice b { flex:none; padding:3px 9px; border-radius:9px; background:#fff; font-size:18px; }
+  .vt-preview-symbol { font-family:Arial,sans-serif; font-size:40px; line-height:1; }
+  .vt-preview-choice strong { font-size:22px; white-space:nowrap; }
   .vt-preview-empty { margin:0; padding:30px 14px; border:1px dashed var(--vt-line); border-radius:14px; color:var(--vt-muted); text-align:center; font-size:15px; }
   .vt-preview-guide { display:flex; justify-content:center; flex-wrap:wrap; gap:8px 16px; padding-top:13px; border-top:1px solid var(--vt-line); color:var(--vt-muted); font-size:13px; font-weight:700; }
   .vt-preview-guide b { display:inline-grid; place-items:center; width:22px; height:22px; margin-right:3px; border:1px solid var(--vt-line); border-radius:6px; background:var(--vt-card); color:var(--vt-ink); }

@@ -31,7 +31,7 @@
 - **저장소 사실 (tauri-plugin-store 2.x):** 같은 파일을 여는 모든 창은 Rust 쪽 메모리 하나를 공유하므로 `get()`이 항상 최신입니다. `reload()`는 디스크 값으로 메모리를 덮어써 다른 창의 미저장 변경을 되돌리므로 **쓰지 않습니다**(유일한 예외: 읽기 실패 감지 시 `_ensureStoreLoaded`).
 - **데이터 안전장치:** Rust `setup`에서 시작 시 `tidy-task-config.json`을 백업(`.backup.json`, `.backup-prev.json`)하고, 손상 시 백업에서 복구합니다. `store_health` 명령으로 "파일엔 데이터가 있는데 저장소가 비어 있음"을 감지하면 저장을 잠급니다.
 
-### 3.2.1. 모듈 지도 (v5.0.5)
+### 3.2.1. 모듈 지도 (v5.6.2)
 | 위치 | 역할 |
 |---|---|
 | `src/lib/appState.svelte.js` | 상태(`$state`)와 공개 메서드를 가진 창구(facade). 컴포넌트는 여기만 부릅니다 |
@@ -53,6 +53,7 @@
 | `src-tauri/src/scores.rs` | 점수판·온도계 저장 파일 — 구역별 revision, 원자적 쓰기, 백업·손상 복구, 업데이트 직전 사본 |
 | `src-tauri/src/classroom/intent.rs` | 다른 창이 학급 명단 창에 할 일(학급 만들기·학생 추가)을 넘기는 10초짜리 전달함 |
 | `src/lib/vote/` | 학급 투표 순수 로직 — 자료 모양·정규화(`model`), 부스 상태 기계(`ballot`), 표 변경 함수(`ballots`), 집계·당선 확실(`tally`), 개표 걸음(`reveal`), 기록함·결선(`archive`), 결과 모델·이미지(`result`·`resultImage`), 효과음(`audio`)·음량 측정(`loudness`)·배경 음악(`music` — 화면→곡·교차 넘김·이어 붙이기) |
+| `src/lib/timers/soundLibrary.js` | **타이머 소리 목록**(시계음·종료 경고음·종료음 id·이름·묶음·파일, 타이머별 기본 소리)의 단일 원천. 재생은 `audio.js`(`select`·`preview`), 새 음원 가공은 `scripts/prepare-timer-sound-library.mjs` |
 
 순수 로직 모듈은 모두 `node --test` 단위 테스트가 있습니다(`npm test`). 타입·접근성 검사는 `npm run check`.
 
@@ -104,6 +105,12 @@
 - 저장소는 `tidy-task-meal.json`이며 설정을 필드별 키로 저장합니다. 메인 모양/커스텀 글꼴은 기존 저장소를 읽기만 합니다. 내장 글꼴 목록은 `src/lib/builtinFonts.js`를 공유하고 appState가 기존 export를 유지합니다.
 - 개발 시 `?meal-design`으로 실제 컴포넌트 시안을, `?meal-matrix`로 크기·배율 검수 화면을 엽니다. 시안 데이터는 실제 조회 결과와 구분합니다.
 - 인증키 주입·검수와 남은 네이티브 확인 사항은 `docs/급식창-구현-검수.md`를 참고하세요.
+
+### 타이머 소리 (시계음·종료 경고음·종료음)
+- 설정 키는 `tickSound`·`warningSound`·`endSound`(스톱워치는 `tickSound`만). 목록은 `soundLibrary.js`의 `SOUND_LIBRARY` 하나이고, Rust `toolkit.rs`의 `TICK_SOUNDS`·`WARNING_SOUNDS`·`END_SOUNDS`와 같아야 합니다(`soundLibrary.test.js`가 대조). 모르는 값은 저장을 거부하고, 읽을 때는 그 타이머의 기본 소리로 둡니다.
+- 기본값은 타이머마다 예전부터 울리던 소리입니다(`DEFAULT_SOUNDS`). 업데이트로 사용자의 소리가 바뀌지 않게, 기본값을 바꾸지 마세요.
+- 반복음(시계음·경고음)은 정확히 1초(또는 2초) 길이여야 초가 바뀌는 순간에 맞춰 울립니다. 새 음원은 손으로 자르지 말고 가공 스크립트에 원본(SHA-256)·가공 방법을 적어 `node scripts/prepare-timer-sound-library.mjs`로 만듭니다(매니페스트·`timer-sounds/LICENSE.txt` 자동 갱신). CC BY·Apache 원본은 저작자 표시가 필요합니다.
+- 드롭다운(`ToolkitSelect`)은 body로 옮겨 그리고 창 가장자리에서 뒤집힙니다. 목록이 열린 채 누른 Esc는 bits-ui가 `preventDefault`로 표시하므로, 창 전체 Esc 처리(최대화 풀기·패널 접기)는 `e.defaultPrevented`면 건너뜁니다(`TimerApp.keys`). 검수 기록은 `docs/QA-timer-sound-library.md`.
 
 ### 시계 창 (툴킷 `clock`)
 - 화면 시각 = PC 시각 + 표준시 보정값. 표준시를 매초 받아 오지 않습니다(끊기면 시계가 멈추므로). 한국 시간은 UTC+9 고정(`src/lib/clock/clockTime.js`)이며 PC 시간대·Intl에 기대지 않습니다.

@@ -1,7 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import vm from 'node:vm';
-import fs from 'node:fs';
+import { createTimerAudio } from './audio.js';
 
 test('audio schedules one end source, loops short cues, and cancels every source', async () => {
   /** @type {any[]} */ const events = [];
@@ -38,15 +37,11 @@ test('audio schedules one end source, loops short cues, and cancels every source
       return s;
     }
   }
-  const code = fs
-    .readFileSync(new URL('./audio.js', import.meta.url), 'utf8')
-    .replace('export function createTimerAudio', 'function createTimerAudio');
-  const scope = {
+  const platform = /** @type {any} */ ({
     AudioContext: FakeContext,
     fetch: async () => ({ ok: true, arrayBuffer: async () => new ArrayBuffer(1) }),
-  };
-  vm.createContext(scope);
-  const audio = vm.runInContext(code + '\ncreateTimerAudio()', scope);
+  });
+  const audio = createTimerAudio(undefined, undefined, platform);
   assert.equal(await audio.ready(), true);
   audio.schedule({ tick: true, end: true, endIn: 3, warningIn: 1, warningFor: 2 });
   assert.deepEqual(

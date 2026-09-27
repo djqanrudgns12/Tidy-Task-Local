@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount, tick } from 'svelte';
-  import { X, ArrowUpRight, ArrowRight, BookOpen, ZoomIn, Check, GripHorizontal, Sparkles, History, ExternalLink } from 'lucide-svelte';
+  import { X, ArrowUpRight, ArrowRight, BookOpen, ZoomIn, Check, GripHorizontal, Sparkles, History, ExternalLink, Play, Smartphone } from 'lucide-svelte';
   import { getCurrentWindow } from '@tauri-apps/api/window';
   import { WebviewWindow } from '@tauri-apps/api/webviewWindow';
   import { LazyStore } from '@tauri-apps/plugin-store';
@@ -19,7 +19,15 @@
   let dialog: HTMLDivElement | undefined = $state();
   let previousFocus: HTMLElement | null = null;
   const base = '/images/update-5.6/';
-  const tabs = ['5.6.0 새 소식', '툴킷 전체', '지난 업데이트', '롤링 썬더'];
+  // 화면의 버전 글자는 공지 ID 하나에서 만듭니다. 다음에 공지를 올릴 때 한 곳만 고치면 되게.
+  const version = RELEASE_NEWS_ID.replace(/^v/, '');
+  const tabs = [`${version} 새 소식`, '툴킷 전체', '지난 업데이트', '롤링 썬더'];
+  // 5.6.0 공지를 이미 본 사용자에게 같은 내용만 다시 보이지 않도록, 이번 패치에서 달라진 점을 첫 탭 맨 위에 둡니다.
+  const patchNotes = [
+    {title:'타이머 소리 고르기', text:'시계음·종료 경고음·종료음을 10가지씩 더했어요. 고르기 전에는 원래 소리 그대로예요.'},
+    {title:'미니 온도계', text:'온도계를 작은 창으로 띄워 두고, 그 자리에서 바로 올리고 내려요.'},
+    {title:'토너먼트 학급 명단', text:'학급 명단에서 참가자를 고르고 경기 자리까지 정해요.'},
+  ];
   const toolGroups = [
     {title:'시간과 집중', ids:['timer','clock','focus-bell']},
     {title:'뽑기와 놀이', ids:['picker','tournament','dice']},
@@ -128,7 +136,26 @@
   <div class="rn-page">
     {#if tab === 0}
       <section class="rn-intro">
-        <div class="rn-intro-row"><img class="rn-welcome-icon" src="/images/toolkit/toolkit-icon.png" alt=""/><div><span class="rn-kicker">Tidy Task 5.6.0</span><h1>작은 도구함에, 새로운 즐거움.</h1><p>우리 반을 위한 여섯 가지 도구가 찾아왔어요.</p></div><button class="rn-primary" disabled={busy} onclick={launch}>툴킷 열기 <ArrowUpRight size={16}/></button></div>
+        <div class="rn-intro-row"><img class="rn-welcome-icon" src="/images/toolkit/toolkit-icon.png" alt=""/><div><span class="rn-kicker">Tidy Task {version}</span><h1>작은 도구함에, 새로운 즐거움.</h1><p>우리 반을 위한 여섯 가지 도구가 찾아왔어요.</p></div><button class="rn-primary" disabled={busy} onclick={launch}>툴킷 열기 <ArrowUpRight size={16}/></button></div>
+      </section>
+      <div class="rn-videos" role="group" aria-label="Tidy Task 소개 영상">
+        <button class="rn-video rn-video-featured" onclick={() => external('https://www.youtube.com/watch?v=O_snQZp20_k')}>
+          <span class="rn-video-copy"><span class="rn-video-label"><span class="rn-youtube"><Play size={10} fill="currentColor"/></span> YouTube · 소개 영상</span><strong>영상으로 먼저 만나 보세요</strong><span class="rn-video-description">우리 반 도구함, 어떻게 쓸까요?</span><span class="rn-video-action">소개 영상 보기 <ArrowUpRight size={14}/></span></span>
+          <span class="rn-video-play" aria-hidden="true"><Play size={25} fill="currentColor"/></span>
+        </button>
+        <button class="rn-video rn-video-shorts" onclick={() => external('https://www.youtube.com/shorts/cruV-jDR49Q')}>
+          <span class="rn-video-copy"><span class="rn-video-label"><Smartphone size={13}/> YouTube Shorts</span><strong>짧게, 한눈에!</strong><span class="rn-video-description">숏츠로 가볍게 살펴봐요</span><span class="rn-video-action">숏츠 보기 <ArrowUpRight size={14}/></span></span>
+          <span class="rn-video-phone" aria-hidden="true"><Play size={17} fill="currentColor"/></span>
+        </button>
+      </div>
+      <button class="rn-community" onclick={() => external('https://indischool.com/boards/libClass/37569890')}>
+        <span class="rn-community-icon" aria-hidden="true"><BookOpen size={19}/></span>
+        <span class="rn-community-copy"><b>인디스쿨에서 글로 읽어 보세요</b><span>Tidy Task 소개 글</span></span>
+        <ArrowUpRight size={18}/>
+      </button>
+      <section class="rn-patch" aria-labelledby="rn-patch-title">
+        <h2 id="rn-patch-title">{version}에서 더 좋아졌어요</h2>
+        <ul>{#each patchNotes as note}<li><b>{note.title}</b><span>{note.text}</span></li>{/each}</ul>
       </section>
       <div class="rn-section-heading"><span>새로 만나는 도구 <b>6</b></span><span>사진을 누르면 크게 볼 수 있어요</span></div>
       <section class="rn-features" aria-label="새로 추가된 여섯 도구">
@@ -178,6 +205,24 @@
         <div class="rn-rolling-heading"><img src="/images/toolkit/rollinthunder.png" alt=""/><div><span>함께 응원하는 추첨</span><h1>롤링 썬더<span>지금의 이름, 롤린썬더</span></h1></div></div>
         <h2>기다리는 순간도 즐거운 추첨</h2>
         <p class="rn-rolling-lead">이름을 넣고 시작하면, 구르고 부딪히는 칩들이 교실의 작은 경기를 만들어요.</p>
+        <div class="rn-videos rn-videos-rolling" role="group" aria-label="롤링썬더 소개 영상">
+          <button class="rn-video rn-video-featured" onclick={() => external('https://www.youtube.com/watch?v=rUkiBAN1Go4')}>
+            <span class="rn-video-copy"><span class="rn-video-label"><span class="rn-youtube"><Play size={10} fill="currentColor"/></span> YouTube · 60초</span><strong>어떤 추첨인지 궁금하다면?</strong><span class="rn-video-description">롤링썬더를 영상으로 만나 보세요</span><span class="rn-video-action">60초 영상 보기 <ArrowUpRight size={14}/></span></span>
+            <span class="rn-video-play" aria-hidden="true"><Play size={25} fill="currentColor"/></span>
+          </button>
+          <button class="rn-video rn-video-detail" onclick={() => external('https://www.youtube.com/watch?v=jm5UKRxObp8&t=13s')}>
+            <span class="rn-video-copy"><span class="rn-video-label"><Play size={13}/> YouTube · 3분 30초</span><strong>조금 더 자세히</strong><span class="rn-video-action">소개 영상 보기 <ArrowUpRight size={14}/></span></span>
+          </button>
+          <button class="rn-video rn-video-shorts" onclick={() => external('https://www.youtube.com/shorts/v1bytPpxqrk')}>
+            <span class="rn-video-copy"><span class="rn-video-label"><Smartphone size={13}/> YouTube Shorts</span><strong>짧게, 한눈에!</strong><span class="rn-video-action">숏츠 보기 <ArrowUpRight size={14}/></span></span>
+            <span class="rn-video-phone" aria-hidden="true"><Play size={17} fill="currentColor"/></span>
+          </button>
+        </div>
+        <button class="rn-community" onclick={() => external('https://indischool.com/boards/libRecreation/37589551')}>
+          <span class="rn-community-icon" aria-hidden="true"><BookOpen size={19}/></span>
+          <span class="rn-community-copy"><b>인디스쿨에서 글로 읽어 보세요</b><span>롤린썬더 소개 글</span></span>
+          <ArrowUpRight size={18}/>
+        </button>
         <div class="rn-rolling-art"><img src="/images/toolkit/rollinthunder.png" alt="롤린썬더 서비스 아이콘"/><div><span>READY, SET, ROLL.</span><strong>선생님은 시작을.<br/>아이들은 응원을.</strong><div class="rn-rolling-chips" aria-hidden="true"><i>01</i><i>02</i><i>03</i><i>04</i><i>05</i></div></div></div>
         <div class="rn-rolling-grid"><article><span>01 / RACE</span><h3>물리 엔진 레이스</h3><p>구르고 부딪히며 순위가 바뀌는 추첨을 함께 지켜봐요.</p></article><article><span>02 / ARENA</span><h3>서바이벌 아레나</h3><p>마지막까지 남을 칩을 응원하며 또 다른 경기를 즐겨요.</p></article><article><span>03 / CLASSROOM</span><h3>교실의 다양한 순간</h3><p>발표 순서, 모둠 활동, 작은 경품까지 즐겁게 정해 보세요.</p></article></div>
         <div class="rn-rolling-cta"><button class="rn-primary" onclick={() => external('https://www.rollinthunder.net/')}>롤린썬더 시작하기 <ArrowUpRight size={19}/></button><button class="rn-text-button" onclick={() => external('https://www.rollinthunder.net/guide')}>활용 가이드 <ArrowRight size={17}/></button></div>

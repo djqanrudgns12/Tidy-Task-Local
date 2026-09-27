@@ -13,7 +13,7 @@
   import { readRoster, subscribeRoster } from '../../lib/classroom/repository.js';
   import { newId } from '../../lib/ids.js';
   import { normalizeMain, makeSet, copySet, presetThermometer, switchMood, DEFAULT_SET, LIMITS } from '../../lib/thermometer/model.js';
-  import { bump, restart, repeatPeriod, tagReason, newStampBoard, applySettings, catchUp, ackNotices } from '../../lib/thermometer/rules.js';
+  import { bump, restart, repeatPeriod, tagReason, renameThermometer, newStampBoard, applySettings, catchUp, ackNotices } from '../../lib/thermometer/rules.js';
   import { dateKey, addDays } from '../../lib/thermometer/calendar.js';
   import { moodOf, unitMark } from '../../lib/thermometer/moods.js';
   import ToolIcon from '../toolkit/ToolIcon.svelte';
@@ -22,6 +22,8 @@
   import ThermoSettings from './ThermoSettings.svelte';
   import HistoryPanel from './HistoryPanel.svelte';
   import './thermometer.css';
+  import { openThermometerDisplay, hideFromThermometerDisplay, watchThermometerDisplay } from '../../lib/thermometer/displayWindow.js';
+  import { normalizeDisplay, isInMini, displaySetKey } from '../../lib/thermometer/display.js';
 
   // ── 저장소 ──
   let data = $state.raw(normalizeMain(undefined));
@@ -179,8 +181,18 @@
     audio.play('tick');
     clearTimeout(chipTimer);
     chips = null;
-    showToast(`사유 “${reason}”을 붙였어요`, undefined, 2000);
+    // "사유를"로 조사를 고정합니다 — 직접 쓴 사유는 받침이 제각각이라 "“배려”을"처럼 틀리기 쉽습니다.
+    showToast(`“${reason}” 사유를 붙였어요`, undefined, 2000);
   }
+  // 칩 줄의 "직접 입력" 칸에 쓰는 동안은 4초 뒤 사라지기를 멈추고, 칸에서 나오면 다시 4초를 셉니다.
+  function holdChips(id: string, holding: boolean) {
+    if (!chips || chips.id !== id) return;
+    clearTimeout(chipTimer);
+    if (!holding) chipTimer = setTimeout(() => (chips = null), 4000);
+  }
+  // 제목 줄에서 이름을 바로 고칠 때: 치는 대로 저장합니다(미니 온도계도 같은 구역을 지켜봐 곧바로 바뀜).
+  // 설정 서랍의 제목 칸처럼 되돌리기 기록은 남기지 않습니다 — 글자마다 기록이 쌓이면 Ctrl+Z가 온도 대신 글자를 되돌립니다.
+  const renameT = (id: string, title: string) => updateT(id, (x) => renameThermometer(x, title));
   function selectT(id: string) {
     if (set && set.selectedId !== id) updateSet((s) => ({ ...s, selectedId: id }));
   }
@@ -307,6 +319,37 @@
     });
   });
 
+  // ── 미니 온도계(작은 보기 전용 창) 토글 ──
+  // 설정은 미니 창과 같은 display 구역을 읽고, 창이 떠 있는지는 따로 지켜봅니다(판정 규칙: display.js isInMini).
+  let displayPrefs = $state.raw(normalizeDisplay(undefined));
+  const displayClient = createSection({ store: 'thermometer', section: 'display', normalize: normalizeDisplay, onChange: (d) => (displayPrefs = d) });
+  let miniWindowOpen = $state(false);
+  const miniWatch = watchThermometerDisplay((open) => (miniWindowOpen = open));
+  // 개발 미리보기에서는 다른 탭의 창을 알 수 없어 "자동 열기"를 떠 있는 것으로 봅니다.
+  const miniOpen = $derived(native ? miniWindowOpen : displayPrefs.autoOpen);
+  // 누르는 즉시 스위치가 넘어가도록 저장이 끝날 때까지 바라는 값을 따로 들고 있습니다.
+  let miniPending = $state<Record<string, boolean>>({});
+  const inMini = (id: string) => miniPending[id] ?? isInMini(displayPrefs, data, { open: miniOpen, setKey, id });
+  async function toggleMini(id: string) {
+    if (id in miniPending) return;
+    const on = !inMini(id);
+    miniPending = { ...miniPending, [id]: on };
+    try {
+      const ids = thermos.map((x) => x.id);
+      if (on) {
+        await client.settle();
+        await openThermometerDisplay({ setKey, id, ids, showingThisSet: miniOpen && displaySetKey(displayPrefs, data) === setKey });
+      } else await hideFromThermometerDisplay({ id, ids });
+      await displayClient.load().catch(() => {});
+      await miniWatch.refresh();
+    } catch {
+      error = on ? '미니 온도계를 띄우지 못했어요. 다시 시도해 주세요.' : '미니 온도계를 끄지 못했어요. 다시 시도해 주세요.';
+    } finally {
+      const { [id]: _, ...rest } = miniPending;
+      miniPending = rest;
+    }
+  }
+
   // ── 창 ──
   let pinned = $state(false);
   let fullscreen = $state(false);
@@ -384,7 +427,11 @@
     void (async () => {
       try {
         await client.load();
-        offs.push(await subscribeStore('thermometer', ({ revision }) => void client.external(revision)));
+        offs.push(await subscribeStore('thermometer', ({ section, revision }) => {
+          if (section === 'main') void client.external(revision);
+          else if (section === 'display') void displayClient.external(revision);
+        }));
+        await displayClient.load().catch(() => {});
         offs.push(await subscribeRoster(() => void refreshRoster()));
         await refreshRoster();
       } catch {
@@ -397,6 +444,7 @@
     })();
     const focus = () => {
       void refreshRoster();
+      void miniWatch.refresh();
       catchUpAll();
     };
     window.addEventListener('focus', focus);
@@ -414,6 +462,8 @@
       clearTimeout(toastTimer);
       clearTimeout(chipTimer);
       client.dispose();
+      displayClient.dispose();
+      miniWatch.dispose();
       audio.dispose();
     };
   });
@@ -472,12 +522,13 @@
         {#each shown as t (t.id)}
           <ThermoColumn {t} {today} layout={shown.length === 1 && mainW >= 640 ? 'split' : 'stack'} compact={shown.length > 1 && colW < 380}
             selected={t.id === selectedId} selectable={shown.length > 1} {reduced} fx={fx[t.id] ?? null} chipsFor={chips && chips.id === t.id ? chips.logId : null}
+            mini={inMini(t.id)} miniBusy={t.id in miniPending} onmini={() => toggleMini(t.id)}
             onbump={(dir) => bumpT(t.id, dir)} onrestart={() => restartT(t.id)}
             onextend={() => updateT(t.id, (x) => applySettings(x, { deadline: addDays(today, 7) }), true)}
             onrepeat={() => updateT(t.id, (x) => repeatPeriod(x, when()), true)}
             onenddeadline={() => updateT(t.id, (x) => ({ ...x, deadline: null, deadlineOutcome: null }))}
             onnewboard={() => { updateT(t.id, newStampBoard); audio.play('toc'); }}
-            onselect={() => selectT(t.id)} onreason={(r) => tag(t.id, r)}
+            onselect={() => selectT(t.id)} onreason={(r) => tag(t.id, r)} onreasonhold={(h) => holdChips(t.id, h)} onrename={(title) => renameT(t.id, title)}
             onremove={() => ask(`${t.title}를 삭제할까요?`, '10초 안에 되돌릴 수 있어요.', '삭제', () => removeThermo(t.id))}
             onreset={() => ask(`${t.title}를 0으로 초기화할까요?`, '도장·기록은 그대로 남고, 되돌리기로 되살릴 수 있어요.', '초기화', () => restartT(t.id))} />
         {/each}

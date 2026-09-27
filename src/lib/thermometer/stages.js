@@ -8,16 +8,18 @@ import { unitMark } from './moods.js';
 /** 단계를 둘 수 있는 개수: 최대 10개, 그리고 (최대 − 1)개 이하 @param {number} max */
 export const stageLimit = (max) => Math.max(0, Math.min(LIMITS.stages, max - 1));
 
-/** @param {Stage[]} stages @param {number} value @param {number} max
+/** keepReached: 칭찬 온도계는 한 번 받은 보상을 온도를 내려도 "달성"으로 둡니다(display.js goalCards와 같은 규칙).
+ * 왜: 관 스티커는 지금 값, 목표 패널은 달성 이력을 따르면 같은 5°가 한쪽은 "1° 남음", 다른 쪽은 "달성"으로 어긋났습니다.
+ * @param {Stage[]} stages @param {number} value @param {number} max @param {{ keepReached?: boolean }} [o]
  * @returns {(Stage & {status:'reached'|'next'|'future', remain:number, hidden:boolean})[]} */
-export function stageStatus(stages, value, max) {
+export function stageStatus(stages, value, max, { keepReached = false } = {}) {
   let nextFound = false;
   return [...stages]
     .sort((a, b) => a.at - b.at)
     .map((s) => {
       const hidden = s.at >= max;
       let status = /** @type {'reached'|'next'|'future'} */ ('future');
-      if (!hidden && value >= s.at) status = 'reached';
+      if (!hidden && (value >= s.at || (keepReached && s.reached))) status = 'reached';
       else if (!hidden && !nextFound) {
         status = 'next';
         nextFound = true;

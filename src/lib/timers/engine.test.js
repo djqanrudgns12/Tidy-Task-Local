@@ -172,5 +172,6 @@ test('persistent schema excludes all session data and refuses future versions', 
   for (const key of ['laps', 'remainingMs', 'title', 'alwaysOnTop'])
     assert.throws(() => applySettingsPatch(defaults(), 'digital', { [key]: 123 }));
   assert.throws(() => normalizeSettings({ schemaVersion: defaults().schemaVersion + 1 }));
-  assert.deepEqual(Object.keys(defaults().preferences.stopwatch), ['tickEnabled']);
+  // 스톱워치는 시계음 켜기/끄기와 시계음 종류만 저장합니다(경고음·종료음 없음).
+  assert.deepEqual(Object.keys(defaults().preferences.stopwatch), ['tickEnabled', 'tickSound']);
 });

@@ -225,11 +225,10 @@
   min-width: 0;
   white-space: nowrap;
 }
-.th-ribbon strong {
-  overflow: hidden;
+/* 온도계 이름 — 누르면 그 자리에서 고치는 칸(ThermoTitle). 글자 크기·굵기는 여기서 정하고 칸은 물려받습니다. */
+.th-ribbon .th-title {
   font-size: clamp(16px, 2.2cqi, 22px);
   font-weight: 900;
-  text-overflow: ellipsis;
 }
 .th-ribbon-icon {
   display: grid;
@@ -585,7 +584,7 @@
   animation: none;
 }
 
-/* 큰 숫자·다음 줄·오늘 요약 */
+/* 큰 숫자·도장 */
 .th-number {
   display: flex;
   align-items: baseline;
@@ -607,43 +606,6 @@
   color: var(--th-accent);
   font-size: 0.42em;
   font-weight: 900;
-}
-.th-next {
-  margin: 0;
-  overflow: hidden;
-  color: var(--tk-ink);
-  font-size: clamp(14px, 1.6cqi, 19px);
-  font-weight: 800;
-  text-align: center;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.th-next.urgent {
-  color: var(--th-accent);
-}
-.th-meta {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: center;
-  gap: 6px 12px;
-  color: var(--tk-muted);
-  font-size: 13px;
-  white-space: nowrap;
-}
-.th-today b.up {
-  color: var(--th-accent);
-}
-.th-today b.down {
-  color: var(--tk-muted);
-}
-.th-stamps {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-}
-.th-stamp-label {
-  font-weight: 700;
 }
 .th-stamp-row {
   display: inline-grid;
@@ -667,10 +629,6 @@
 @keyframes th-stamp {
   0% { transform: translateY(-10px) scale(1.6); opacity: 0; }
   100% { transform: none; opacity: 1; }
-}
-.th-stamp-count {
-  font-variant-numeric: tabular-nums;
-  font-weight: 700;
 }
 .th-stamp-goal {
   display: flex;
@@ -698,59 +656,13 @@
 .th-stamp-goal.complete {
   border-color: var(--th-accent);
 }
-.th-ladder {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  margin: 2px 0 0;
-  padding: 8px;
-  list-style: none;
-  border-radius: 14px;
-  background: color-mix(in srgb, var(--tk-panel) 75%, transparent);
-}
-.th-ladder li {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-width: 0;
-  padding: 4px 6px;
-  border-radius: 10px;
-  white-space: nowrap;
-}
-.th-ladder b {
-  flex: none;
-  min-width: 40px;
-  font-variant-numeric: tabular-nums;
-}
-.th-ladder span {
-  overflow: hidden;
-  font-weight: 700;
-  text-overflow: ellipsis;
-}
-.th-ladder small {
-  flex: none;
-  margin-left: auto;
-  color: var(--th-accent);
-  font-weight: 800;
-}
-.th-ladder li[data-status='reached'] {
-  background: var(--th-accent);
-  color: #fff;
-}
-.th-ladder li[data-status='next'] {
-  box-shadow: inset 0 0 0 2px var(--th-accent);
-}
-.th-ladder li[data-status='future'] {
-  opacity: 0.7;
-}
 
 /* 사유 칩 */
 .th-chips {
   display: flex;
+  flex-wrap: wrap;
   justify-content: center;
   gap: 6px;
-  overflow-x: auto;
-  scrollbar-width: none;
   animation: th-pop 0.2s ease-out;
 }
 .th-chips button {
@@ -767,6 +679,66 @@
 .th-chips button:hover {
   background: color-mix(in srgb, var(--th-accent) 14%, var(--tk-panel));
 }
+/* 칩 옆 "직접 입력" 칸 — 칩과 같은 높이의 알약 모양. 점선 테두리로 "고르는 칩이 아니라 쓰는 칸"임을 알립니다.
+   줄이 넘치면 옆으로 숨기지 않고 다음 줄로 내립니다(좁은 칸에서 입력 칸이 안 보이면 쓸 수 없으므로). */
+.th-chip-custom {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 5px;
+  height: 30px;
+  padding: 0 12px 0 10px;
+  border: 1.5px dashed color-mix(in srgb, var(--th-accent) 50%, var(--tk-line));
+  border-radius: 999px;
+  background: var(--tk-panel);
+  color: var(--tk-muted);
+  cursor: text;
+}
+.th-chip-custom:has(.th-chip-ok) { padding-right: 4px; }
+.th-chip-custom:focus-within {
+  border-style: solid;
+  border-color: var(--th-accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--th-accent) 16%, transparent);
+  color: var(--th-accent);
+}
+.th-chip-custom svg { flex: none; }
+.th-chip-custom input {
+  field-sizing: content;
+  width: auto;
+  min-width: 4.8em;
+  max-width: 12em;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: var(--tk-ink);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 800;
+}
+/* 알약 테두리가 초점 표시를 맡으므로 툴킷 공용 초점 테두리(.tk-root … :focus-visible)는 칸 안에서 끕니다. */
+.th-chips .th-chip-custom input:focus-visible { outline: none; }
+.th-chip-custom input::placeholder {
+  color: var(--tk-muted);
+  font-weight: 700;
+  opacity: 1;
+}
+@supports not (field-sizing: content) {
+  .th-chip-custom input { width: 7em; }
+}
+.th-chips .th-chip-ok {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: var(--th-accent);
+  color: #fff;
+}
+.th-chips .th-chip-ok:hover { background: color-mix(in srgb, var(--th-accent) 82%, #000); }
 
 /* 버튼 */
 .th-actions {
@@ -838,7 +810,7 @@
 }
 
 /* 낮은 창(두 개를 520~620px 높이로 띄울 때 등): 관이 설 자리를 넓히려고 덜 급한 것부터 줄입니다.
-   도장 줄 → 개수만, "다음 단계" 줄 → 이어 할 일 버튼이 떠 있으면 숨김(버튼이 같은 뜻을 말함), 여백·버튼 높이 살짝. */
+   여백·버튼 높이를 살짝 줄입니다. 도장은 접힌 "도장 모아 보기" 패널 안에 있어 따로 숨기지 않습니다(펼쳤을 때 비어 보이지 않게). */
 @media (max-height: 620px) {
   .th-col {
     gap: 6px;
@@ -853,12 +825,6 @@
   }
   .th-col[data-layout='stack'] .th-number {
     font-size: clamp(40px, min(16cqi, 9.5vh), 120px);
-  }
-  .th-stamp-row {
-    display: none;
-  }
-  .th-info:has(.th-followup) .th-next {
-    display: none;
   }
   .th-actions button {
     height: 42px;
@@ -1779,4 +1745,354 @@
   border: 0;
   background: transparent;
   color: inherit;
+}
+
+/* 현재 목표 → 다음 목표 → 달성 이력. 좁은 창에서는 내용 영역만 스크롤합니다. */
+.th-col { overflow-y: auto; }
+.th-main { flex: 1 0 auto; min-height: 280px; }
+.th-col[data-layout='stack'] .th-tube-area { min-height: 125px; }
+.th-col[data-layout='split'] .th-tube-area { min-height: 300px; }
+.th-col[data-layout='split'] .th-info { padding: 18px 0; }
+/* 미니 온도계 스위치 — 알약 모양 패널 안에 [아이콘 · 이름 · 스위치]를 담습니다.
+   꺼짐은 차분한 회색, 켜짐은 온도계 색으로 패널까지 물들여 "지금 떠 있다"가 멀리서도 보이게 합니다. */
+.th-mini {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 7px;
+  height: 32px;
+  padding: 0 5px 0 10px;
+  border: 1px solid var(--tk-line);
+  border-radius: 999px;
+  background: var(--tk-panel);
+  color: var(--tk-muted);
+  font-size: 12.5px;
+  font-weight: 800;
+  cursor: pointer;
+  transition: background-color 0.18s, border-color 0.18s, color 0.18s;
+}
+.th-mini:hover {
+  border-color: color-mix(in srgb, var(--th-accent) 40%, var(--tk-line));
+  color: var(--tk-ink);
+}
+.th-mini:focus-visible {
+  outline: 2px solid var(--th-accent);
+  outline-offset: 2px;
+}
+.th-mini-label { white-space: nowrap; }
+.th-mini-track {
+  position: relative;
+  flex: none;
+  width: 32px;
+  height: 20px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--tk-muted) 32%, var(--tk-panel));
+  transition: background-color 0.18s;
+}
+.th-mini-track i {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.28);
+  transition: transform 0.2s cubic-bezier(0.3, 1.4, 0.5, 1);
+}
+.th-mini[aria-checked='true'] {
+  border-color: color-mix(in srgb, var(--th-accent) 50%, var(--tk-line));
+  background: color-mix(in srgb, var(--th-accent) 11%, var(--tk-panel));
+  color: var(--th-accent);
+}
+.th-mini[aria-checked='true'] .th-mini-track { background: var(--th-accent); }
+.th-mini[aria-checked='true'] .th-mini-track i { transform: translateX(12px); }
+/* 창을 띄우는 동안(짧게) 스위치는 이미 넘어가 있고, 손잡이만 살짝 흐리게 해 "처리 중"을 알립니다. */
+.th-mini[aria-busy='true'] { cursor: progress; }
+.th-mini[aria-busy='true'] .th-mini-track i { opacity: 0.7; }
+.th-app.reduced .th-mini,
+.th-app.reduced .th-mini-track,
+.th-app.reduced .th-mini-track i { transition: none; }
+.th-col.compact .th-mini-label { display: none; }
+.th-col.compact .th-mini { padding-left: 8px; }
+.th-ribbon { flex-wrap: wrap; }
+/* 오늘의 변화 — 큰 숫자 바로 밑 가운데 한 줄 글자(패널 없음). 숫자와 한 덩어리로 읽히게 위는 붙이고, 목표 패널과는 띄웁니다.
+   색은 버튼과 같은 뜻: 올린 만큼은 온도계 색, 칭찬 온도계에서 내린 만큼은 내리기 버튼의 빨강. */
+.th-today {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: center;
+  gap: 2px 12px;
+  margin: -2px 0 8px;
+  color: var(--tk-muted);
+  font-size: clamp(14px, 1.6cqi, 17px);
+  font-weight: 800;
+}
+.th-today b { color: var(--tk-ink); font-size: 1.25em; font-weight: 900; font-variant-numeric: tabular-nums; }
+.th-today b.up { color: var(--th-accent); }
+.th-today b.down { color: #c53740; }
+.th-col[data-mood='negative'] .th-today b.down { color: var(--tk-ink); }
+.th-today small { font-size: 0.9em; font-weight: 700; }
+
+/* 목표 패널 — 한 장 안에서 구역으로만 나눕니다: 지금 목표 → 다음 목표 → 이미 달성한 목표(기본 접힘).
+   일관성 규칙: 모든 구역이 같은 가로 여백(--g-pad) · 같은 머리글(.th-ghead) · 같은 목록 줄(.th-glist)을 씁니다.
+   강조는 바탕색이 아니라 글자 크기와 온도계 색으로만 합니다(줄마다 바탕을 칠하니 따로 떨어진 카드처럼 보였습니다). */
+.th-goals {
+  --g-pad: 20px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1.5px solid color-mix(in srgb, var(--th-accent) 32%, var(--tk-line));
+  border-radius: 16px;
+  background: var(--tk-panel);
+  box-shadow: 0 3px 0 color-mix(in srgb, var(--th-accent) 10%, transparent);
+}
+.th-gsec { padding: 14px var(--g-pad); }
+.th-gsec + .th-gsec { border-top: 1px solid var(--tk-line); }
+.th-gsec-focus { display: grid; gap: 10px; padding-block: 16px 18px; }
+/* 달성 구역은 머리글 전체가 누르는 자리라 위아래 여백을 머리글 버튼이 가집니다. */
+.th-gsec-done { padding-block: 0; }
+
+/* 구역 머리글: 왼쪽 작은 제목, 오른쪽 정보(남은 온도 · 펼치기). 도장 패널 머리글도 같은 규칙입니다. */
+.th-ghead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-width: 0;
+  color: var(--tk-muted);
+  font-size: 14px;
+  font-weight: 800;
+  line-height: 1.3;
+}
+.th-ghead > span:first-child {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+}
+.th-gsec-focus .th-ghead { color: var(--th-accent); }
+.th-gpill {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--th-accent) 13%, var(--tk-panel));
+  color: var(--th-accent);
+  font-size: 14px;
+  font-style: normal;
+  font-weight: 900;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* 지금 목표: 패널에서 가장 큰 글자 */
+.th-gfocus {
+  display: flex;
+  align-items: baseline;
+  gap: 14px;
+  min-width: 0;
+}
+.th-gfocus b {
+  flex: none;
+  color: var(--th-accent);
+  font-size: clamp(32px, 4.2cqi, 46px);
+  font-weight: 900;
+  line-height: 1;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+}
+.th-gfocus strong {
+  min-width: 0;
+  color: var(--tk-ink);
+  font-size: clamp(22px, 2.9cqi, 32px);
+  font-weight: 900;
+  line-height: 1.2;
+  word-break: keep-all;
+  overflow-wrap: anywhere;
+}
+/* 목표를 달성해 다음 목표로 바뀔 때만 살짝 올라옵니다(처음 그릴 때는 가만히). */
+.th-gfocus.enter { animation: th-goal-in 0.45s cubic-bezier(0.2, 0.8, 0.3, 1); }
+@keyframes th-goal-in {
+  from { opacity: 0; transform: translateY(10px); }
+}
+.th-gbar {
+  height: 8px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--th-accent) 13%, var(--tk-panel));
+}
+.th-gbar i {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--th-accent);
+  transition: width 0.45s cubic-bezier(0.2, 0.8, 0.3, 1);
+}
+
+/* 목록 줄(다음 목표 · 이미 달성): 온도 칸을 subgrid로 맞춰 자릿수가 달라도 이름이 한 세로줄에서 시작합니다. */
+.th-glist {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  column-gap: 14px;
+  row-gap: 8px;
+  margin: 10px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.th-glist li {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: subgrid;
+  align-items: baseline;
+}
+.th-glist b {
+  color: var(--tk-ink);
+  font-size: clamp(17px, 2cqi, 21px);
+  font-weight: 900;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.th-glist span {
+  min-width: 0;
+  color: color-mix(in srgb, var(--tk-ink) 86%, var(--tk-muted));
+  font-size: clamp(17px, 2cqi, 21px);
+  font-weight: 800;
+  line-height: 1.3;
+  word-break: keep-all;
+  overflow-wrap: anywhere;
+}
+.th-glist.done { margin: -4px 0 0; padding-bottom: 14px; }
+.th-glist.done b { color: var(--th-accent); }
+.th-glist.done span { color: var(--tk-muted); }
+
+/* 이미 달성한 목표: 머리글 한 줄 전체가 펼치기 버튼입니다. */
+.th-gdone-head {
+  width: 100%;
+  padding: 14px 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 800;
+  text-align: left;
+  cursor: pointer;
+}
+.th-gdone-head:hover,
+.th-gdone-head:hover .th-gfold { color: var(--th-accent); }
+.th-gdone-head:focus-visible {
+  outline: 2px solid var(--th-accent);
+  outline-offset: -2px;
+  border-radius: 8px;
+}
+.th-gmark {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--th-accent);
+  color: #fff;
+}
+.th-gcount {
+  min-width: 24px;
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--th-accent) 13%, var(--tk-panel));
+  color: var(--th-accent);
+  font-size: 13px;
+  font-weight: 900;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+/* 새로 달성하면 개수가 톡 튀어 "여기로 내려갔다"를 알립니다. */
+.th-gcount.pop { animation: th-count-pop 0.55s cubic-bezier(0.3, 1.6, 0.5, 1); }
+@keyframes th-count-pop {
+  35% { transform: scale(1.4); }
+}
+.th-gfold {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 3px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--tk-muted);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 800;
+  cursor: pointer;
+}
+button.th-gfold:hover { color: var(--th-accent); }
+.th-gfold svg { transition: transform 0.2s ease; }
+[aria-expanded='true'] > .th-gfold svg,
+.th-gfold[aria-expanded='true'] svg,
+details[open] > summary .th-gfold svg { transform: rotate(180deg); }
+.th-app.reduced .th-gfocus.enter,
+.th-app.reduced .th-gcount.pop { animation: none; }
+.th-app.reduced .th-gbar i,
+.th-app.reduced .th-gfold svg { transition: none; }
+
+/* 좁은 칸(두 개 · 좁은 창): 같은 규칙에서 여백만 줄입니다. */
+.th-col[data-layout='stack'] .th-goals { --g-pad: 16px; }
+.th-col[data-layout='stack'] .th-gsec { padding-block: 10px; }
+.th-col[data-layout='stack'] .th-gsec-focus { gap: 8px; padding-block: 12px 14px; }
+.th-col[data-layout='stack'] .th-gsec-done { padding-block: 0; }
+.th-col[data-layout='stack'] .th-gdone-head { padding-block: 11px; }
+.th-col[data-layout='stack'] .th-glist.done { padding-bottom: 11px; }
+/* 좁은 칸은 관 옆 스티커가 단계 이름까지 보여 주므로, 낮은 창에서는 "다음 목표" 구역을 빼 버튼이 칸 밖으로 밀리지 않게 합니다. */
+@media (max-height: 760px) {
+  .th-col[data-layout='stack'] .th-gsec-next { display: none; }
+}
+
+/* 도장 패널 — 목표 패널과 같은 모서리 · 여백 · 머리글을 씁니다. */
+.th-stamp-panel {
+  flex: none;
+  margin-top: auto;
+  padding: 0 20px;
+  border: 1px solid var(--tk-line);
+  border-radius: 16px;
+  background: var(--tk-panel);
+}
+.th-col[data-layout='stack'] .th-stamp-panel { padding: 0 16px; }
+.th-stamp-panel summary {
+  padding: 14px 0;
+  cursor: pointer;
+  list-style: none;
+}
+.th-col[data-layout='stack'] .th-stamp-panel summary { padding-block: 11px; }
+.th-stamp-panel summary::-webkit-details-marker { display: none; }
+.th-stamp-panel summary:hover,
+.th-stamp-panel summary:hover .th-gfold { color: var(--th-accent); }
+.th-fold-label::after { content: '펼치기'; }
+details[open] > summary .th-fold-label::after { content: '접기'; }
+.th-stamp-content { padding: 2px 0 14px; display: grid; gap: 12px; }
+.th-stamp-content .th-stamp-row { flex-wrap: wrap; gap: 8px; }
+.th-stamp-content .th-stamp-row i { width: 28px; height: 28px; }
+.th-sticker[data-status='reached'] { color: var(--tk-muted); border-color: var(--tk-line); background: var(--tk-panel); }
+.th-sticker[data-status='reached'] b { color: var(--tk-muted); background: transparent; }
+@media (max-height: 680px) { .th-col[data-layout='split'] .th-info { padding: 6px 0; } .th-gsec-focus { gap: 8px; padding-block: 12px 14px; } .th-gfocus strong { font-size: 22px; } }
+
+.th-col { container-type: inline-size; }
+@container (max-width: 420px) {
+  .th-ribbon { flex-wrap: nowrap; gap: 6px; }
+  .th-ribbon-icon, .th-reset span { display: none; }
+  .th-ribbon .th-title { font-size: 16px; }
+  .th-mini-label { display: none; }
+  .th-mini { padding-left: 8px; gap: 6px; }
+  .th-reset { padding: 0; width: 28px; min-width: 28px; }
+  .th-remove { width: 28px; min-width: 28px; }
+  .th-goals { --g-pad: 14px; }
+  .th-stamp-panel { padding: 0 14px; }
+  .th-gfocus { gap: 10px; }
+}
+@media (max-height: 700px) and (max-width: 560px) {
+  .th-col[data-layout='stack'] .th-tube-area { display: none; }
+  .th-col[data-layout='stack'] .th-number { font-size: 52px; padding: 4px 0; }
 }

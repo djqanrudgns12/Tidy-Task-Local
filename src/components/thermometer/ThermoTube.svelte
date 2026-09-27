@@ -56,7 +56,7 @@
   const stickerX = $derived(tubeX + tubeW + 20);
   const stickerSpace = $derived(width - stickerX - 6);
   // 스티커는 위(높은 온도)에서 아래로 배치해야 겹침 밀어내기가 올바르게 됩니다.
-  const statuses = $derived(stageStatus(t.stages, t.value, t.max).filter((s) => !s.hidden).reverse());
+  const statuses = $derived(stageStatus(t.stages, t.value, t.max, { keepReached: t.mood === 'positive' }).filter((s) => !s.hidden).reverse());
   const placed = $derived.by(() => {
     const lay = layoutStickers(statuses.map((s) => vy(s.at)), stickerH + 4, yTop - stickerH / 2 + 4, yZero);
     return { ys: lay.ys, compact: !stickerLabels || lay.compact || stickerSpace < 96 };

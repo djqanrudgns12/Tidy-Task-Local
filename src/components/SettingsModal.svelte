@@ -495,7 +495,7 @@
         </div>
       </div>
 
-      <button onclick={showNews} class="news-entry"><span><b>새로운 소식</b><small>5.6.0 업데이트 · 지난 소식 · 롤링 썬더</small></span><span aria-hidden="true">↗</span></button>
+      <button onclick={showNews} class="news-entry"><span><b>새로운 소식</b><small>5.6.2 업데이트 · 지난 소식 · 롤링 썬더</small></span><span aria-hidden="true">↗</span></button>
       {#if newsError}<p role="alert">{newsError}</p>{/if}
       <!-- ✨ [앱 업데이트] 사용자가 직접 확인하고 싶을 때 쓰는 자리입니다.
            왜 설정 안에 두는가: 자동 알림을 "나중에/건너뛰기"로 넘긴 사용자도
@@ -628,7 +628,7 @@
         </div>
         <!-- 버전을 코드에 박아두면 배포 때 갱신을 빠뜨려 실제 버전과 어긋납니다.
              appState.appVersion은 tauri.conf.json의 version을 그대로 읽어옵니다. -->
-        <span class="text-[9px] font-medium opacity-30 select-none uppercase tracking-widest" style="color: {localIsDarkMode ? '#ffffff' : '#000000'};">v.{appState.appVersion || '5.6.0'}</span>
+        <span class="text-[9px] font-medium opacity-30 select-none uppercase tracking-widest" style="color: {localIsDarkMode ? '#ffffff' : '#000000'};">v.{appState.appVersion || '5.6.2'}</span>
       </div>
 
       <div class="flex items-center justify-center gap-1 pt-3 text-[9px]" style="color: {localIsDarkMode ? '#94a3b8' : '#64748b'};">

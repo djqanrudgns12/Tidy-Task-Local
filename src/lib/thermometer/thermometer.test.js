@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { makeThermometer, normalizeMain, normalizeThermometer, switchMood, copySet, presetThermometer, LIMITS } from './model.js';
-import { bump, moveTo, restart, repeatPeriod, catchUp, applySettings, tagReason, newStampBoard, ackNotices } from './rules.js';
+import { bump, moveTo, restart, repeatPeriod, catchUp, applySettings, tagReason, renameThermometer, newStampBoard, ackNotices } from './rules.js';
 import { stageStatus, nextLine, layoutStickers, rulerCells, evenStages, fitStagesToMax, stageLimit } from './stages.js';
 import { niceTicks, valueToY } from './scale.js';
 import { faceOf } from './face.js';
@@ -173,6 +173,28 @@ test('settings clamp value without firing events; reasons attach to a log entry'
   assert.equal(applySettings(on, { autoCool: { ...on.autoCool, mode: /** @type {const} */ ('off') } }, '2026-09-28').lastCooledOn, null);
 });
 
+test('custom reasons are trimmed, capped and survive a reload', () => {
+  const r = bump(makeThermometer(), 1, day(WED));
+  const logId = /** @type {string} */ (r.events.logId);
+  // 칸에 직접 쓴 사유: 앞뒤 빈칸을 걷고, 칩 길이(6)가 아니라 사유 길이(12)까지 받습니다.
+  const tagged = tagReason(r.t, logId, '  수학 문제 다 풀었어요!!  ');
+  assert.equal(tagged.log.at(-1)?.reason, '수학 문제 다 풀었어요');
+  assert.equal([...(tagged.log.at(-1)?.reason ?? '')].length, LIMITS.reason);
+  assert.equal(normalizeThermometer(tagged)?.log.at(-1)?.reason, '수학 문제 다 풀었어요');
+  // 빈 글은 붙이지 않고, 없는 기록 ID는 아무것도 바꾸지 않습니다.
+  assert.equal(tagReason(r.t, logId, '   '), r.t);
+  assert.equal(tagReason(r.t, 'missing', '협동').log.at(-1)?.reason, '');
+});
+
+test('rename keeps a title: trims, caps and ignores empty input', () => {
+  const t = makeThermometer();
+  assert.equal(renameThermometer(t, ' 우리 반 칭찬 ').title, '우리 반 칭찬');
+  assert.equal([...renameThermometer(t, '가나다라마바사아자차카타파하').title].length, LIMITS.title);
+  // 다 지운 순간(빈 글)이나 같은 이름이면 그대로 돌려줘 저장이 일어나지 않습니다.
+  assert.equal(renameThermometer(t, '   '), t);
+  assert.equal(renameThermometer(t, t.title), t);
+});
+
 test('stamp board completes once and waits for a new board', () => {
   /** @type {Thermometer} */
   let t = { ...makeThermometer(), stamps: { size: 5, count: 4, rewardText: '영화', completedBoards: 0, dates: [] } };
@@ -194,6 +216,9 @@ test('stages: status, next line, limits, layout, even spread and refit', () => {
   assert.equal(nextLine('positive', [], 10, 10, 'deg'), '목표 달성!');
   assert.equal(nextLine('positive', [], 4, 10, 'point'), '목표까지 6점');
   assert.equal(stageStatus([{ id: 'x', at: 12, label: '', reached: false }], 1, 10)[0].hidden, true);
+  const earned = [{ id: 'a', at: 3, label: '', reached: true }, { id: 'b', at: 5, label: '', reached: true }, { id: 'c', at: 8, label: '', reached: false }];
+  assert.deepEqual(stageStatus(earned, 4, 10).map((s) => s.status), ['reached', 'next', 'future'], '기본은 지금 값 기준');
+  assert.deepEqual(stageStatus(earned, 4, 10, { keepReached: true }).map((s) => s.status), ['reached', 'reached', 'next'], '칭찬 온도계는 받은 보상을 유지하고 다음 목표는 8°');
   assert.equal(stageLimit(10), 9);
   assert.equal(stageLimit(100), LIMITS.stages);
   const lay = layoutStickers([100, 105, 108, 300], 30, 50, 320);

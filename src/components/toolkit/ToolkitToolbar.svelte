@@ -3,6 +3,7 @@
   import { flip } from 'svelte/animate';
   import { cubicOut } from 'svelte/easing';
   import ToolIcon from './ToolIcon.svelte';
+  import { Ellipsis } from 'lucide-svelte';
   import {
     native,
     readSettings,
@@ -29,7 +30,7 @@
   let config = $state(defaults().toolkit),
     ready = $state(false),
     error = $state(''),
-    previewMenu = $state<'' | 'timer' | 'scoreboard' | 'external' | 'context'>('');
+    previewMenu = $state<'' | 'timer' | 'scoreboard' | 'external' | 'more' | 'context'>('');
   const visiblePlatforms = $derived(
     PLATFORM_TOOLS.filter((tool) => config.externalToolsEnabled && !config.hiddenPlatformIds.includes(tool.id)),
   );
@@ -39,6 +40,11 @@
     id === 'external' ? visiblePlatforms.length > 0 : config.visibleToolIds.includes(id),
   ));
   let bar = $state<HTMLDivElement>();
+  let menuTrigger: HTMLButtonElement | undefined;
+  function closePreviewMenu() {
+    previewMenu = '';
+    menuTrigger?.focus();
+  }
   let fittedSize = '';
   let fitQueue = Promise.resolve();
   async function fit() {
@@ -93,12 +99,13 @@
       error = '설정을 저장하지 못했어요.';
     }
   }
-  async function menu(trigger: HTMLButtonElement, kind: 'timer' | 'scoreboard' | 'external') {
+  async function menu(trigger: HTMLButtonElement, kind: 'timer' | 'scoreboard' | 'external' | 'more') {
+    menuTrigger = trigger;
     try {
       if (!(await showToolkitMenu(trigger, kind, kind === 'external' ? visiblePlatforms.length : undefined)))
         previewMenu = previewMenu === kind ? '' : kind;
     } catch {
-      error = `${kind === 'timer' ? '타이머' : kind === 'scoreboard' ? '점수판' : '외부 툴'} 메뉴를 열지 못했어요.`;
+      error = `${kind === 'timer' ? '타이머' : kind === 'scoreboard' ? '점수판' : kind === 'more' ? '더보기' : '외부 툴'} 메뉴를 열지 못했어요.`;
     }
   }
   // 항목이 여럿인 도구(타이머·점수판)는 드롭다운을 열고, 나머지는 바로 창을 엽니다.
@@ -218,6 +225,11 @@
   });
 </script>
 
+<svelte:window onpointerdown={(event) => {
+  if (!native && previewMenu && event.target instanceof Element &&
+      !event.target.closest('.toolkit-preview-menu') && !event.target.closest('.toolkit-tool')) previewMenu = '';
+}} />
+
 {#if ready}<div class="toolkit-wrap" role="presentation" oncontextmenu={contextMenu}>
     <div
       bind:this={bar}
@@ -251,6 +263,12 @@
             ><span class="toolkit-tool-icon"><ToolIcon kind={id} /></span
             ><span class="toolkit-tool-copy"><strong>{id === 'external' ? '외부 툴' : toolsById[id].label}</strong></span></button>
         {/each}
+        <button class="toolkit-tool toolkit-more" class:menu-open={previewMenu === 'more'}
+          aria-haspopup="menu" aria-expanded={previewMenu === 'more'}
+          onclick={(e) => menu(e.currentTarget, 'more')}>
+          <span class="toolkit-tool-icon"><Ellipsis size={28} /></span>
+          <span class="toolkit-tool-copy"><strong>더보기</strong></span>
+        </button>
         <button
           class="toolkit-settings"
           aria-label="툴킷 설정"
@@ -263,6 +281,6 @@
     {#if error}<p role="alert" class="tk-error">{error}</p>{/if}{#if previewMenu}<div
         class="toolkit-preview-menu"
       >
-        {#key previewMenu}<ToolkitMenu kind={previewMenu} ondone={() => (previewMenu = '')} />{/key}
+        {#key previewMenu}<ToolkitMenu kind={previewMenu} ondone={closePreviewMenu} />{/key}
       </div>{/if}
   </div>{/if}

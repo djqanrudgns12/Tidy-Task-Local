@@ -3,7 +3,14 @@
   import ToolkitSwitch from '../toolkit/ToolkitSwitch.svelte';
   import ToolkitSelect from '../toolkit/ToolkitSelect.svelte';
   import { PRESETS, WARNING_LEADS, WARNING_DURATIONS } from '../../lib/toolkit/preferences.js';
-  let { id, kind, prefs, phase, remaining, dialRange, onchange, onset, onpreview } = $props<{
+  import {
+    DEFAULT_SOUNDS,
+    SOUND_GROUPS,
+    SOUND_LIBRARY,
+    selectedSounds,
+    type SoundRole,
+  } from '../../lib/timers/soundLibrary.js';
+  let { id, kind, prefs, phase, remaining, dialRange, onchange, onset, onpreview, onsound } = $props<{
     id?: string;
     kind: string;
     prefs: Record<string, any>;
@@ -13,7 +20,24 @@
     onchange: (patch: Record<string, unknown>) => void;
     onset: (ms: number) => void;
     onpreview: (name: string) => void;
+    onsound: (role: SoundRole, id: string) => void;
   }>();
+  // 선택 상자 항목: 같은 성격끼리 묶고, 이 타이머에 원래 있던 소리에는 "기본"을 붙여 되돌아가기 쉽게 합니다.
+  const soundOptions = $derived(
+    Object.fromEntries(
+      (['tick', 'warning', 'end'] as SoundRole[]).map((role) => [
+        role,
+        SOUND_LIBRARY[role].map((option) => ({
+          value: option.id,
+          label: option.label,
+          group: SOUND_GROUPS[role][option.group],
+          note: DEFAULT_SOUNDS[kind]?.[role] === option.id ? '기본' : undefined,
+        })),
+      ]),
+    ) as Record<SoundRole, { value: string; label: string; group: string; note?: string }[]>,
+  );
+  // 저장값이 목록에 없으면(다른 버전·손상) 실제로 울리는 기본 소리를 보여 줍니다.
+  const currentSounds = $derived(selectedSounds(kind, prefs));
   let minutes = $state<number | string>(5),
     seconds = $state<number | string>(0),
     inputError = $state('');
@@ -46,7 +70,8 @@
     inputError = '';
     onset((m * 60 + s) * 1000);
   }
-  const soundRows = $derived(
+  type SoundRow = { key: string; name: string; description: string; sound: SoundRole };
+  const soundRows = $derived<SoundRow[]>(
     kind === 'stopwatch'
       ? [
           {
@@ -129,7 +154,7 @@
             disabled={phase === 'running'}
             class:selected={Math.round(remaining) === minute * 60000}
             aria-pressed={Math.round(remaining) === minute * 60000}
-            onclick={() => onset(minute * 60000)}>{minute}<span>분</span></button
+            onclick={() => onset(minute * 60000)}>{minute < 1 ? minute * 60 : minute}<span>{minute < 1 ? '초' : '분'}</span></button
           >{/each}
       </div>
     </section>{/if}
@@ -196,28 +221,36 @@
               onchange={(v) => onchange({ [row.key]: v })}
             />
           </div>
-          <!-- 세부 옵션은 이름 칸에 맞춰 들여 써서 "종료 경고음에 딸린 설정"임을 보여 주고,
-               선택 상자는 위 토글과 같은 오른쪽 끝에 맞춥니다. -->
-          {#if row.sound === 'warning' && prefs.warningEnabled}<div class="warning-options">
-              <div class="warning-option"><span>알림 시점</span><ToolkitSelect
-                  label="종료 경고 시점"
-                  value={String(prefs.warningLeadSeconds)}
-                  options={WARNING_LEADS.map((n) => ({ value: String(n), label: `${n}초 전` }))}
-                  onchange={(v) => onchange({ warningLeadSeconds: Number(v) })}
+          <!-- 세부 옵션은 이름 칸에 맞춰 들여 써서 "이 소리에 딸린 설정"임을 보여 주고,
+               선택 상자는 위 토글과 같은 오른쪽 끝에 맞춥니다. 가장 자주 바꾸는 "소리 종류"가 맨 위입니다.
+               꺼 둔 소리는 세부 옵션을 접어 카드가 짧게 유지됩니다. -->
+          {#if prefs[row.key]}<div class="setting-options">
+              <div class="setting-option"><span>소리</span><ToolkitSelect
+                  label={`${row.name} 종류`}
+                  value={currentSounds[row.sound]?.id ?? ''}
+                  options={soundOptions[row.sound]}
+                  contentClass="sound-select-content"
+                  onchange={(v) => onsound(row.sound, v)}
                 /></div
-              ><div class="warning-option"><span>울림 시간</span><ToolkitSelect
-                  label="종료 경고 지속"
-                  value={prefs.warningDurationSeconds == null
-                    ? 'continuous'
-                    : String(prefs.warningDurationSeconds)}
-                  options={WARNING_DURATIONS.map((n) => ({
-                    value: n == null ? 'continuous' : String(n),
-                    label: n == null ? '계속 울림' : `${n}초 지속`,
-                  }))}
-                  onchange={(v) =>
-                    onchange({ warningDurationSeconds: v === 'continuous' ? null : Number(v) })}
-                /></div
-              >
+              >{#if row.sound === 'warning'}<div class="setting-option"><span>알림 시점</span><ToolkitSelect
+                    label="종료 경고 시점"
+                    value={String(prefs.warningLeadSeconds)}
+                    options={WARNING_LEADS.map((n) => ({ value: String(n), label: `${n}초 전` }))}
+                    onchange={(v) => onchange({ warningLeadSeconds: Number(v) })}
+                  /></div
+                ><div class="setting-option"><span>울림 시간</span><ToolkitSelect
+                    label="종료 경고 지속"
+                    value={prefs.warningDurationSeconds == null
+                      ? 'continuous'
+                      : String(prefs.warningDurationSeconds)}
+                    options={WARNING_DURATIONS.map((n) => ({
+                      value: n == null ? 'continuous' : String(n),
+                      label: n == null ? '계속 울림' : `${n}초 지속`,
+                    }))}
+                    onchange={(v) =>
+                      onchange({ warningDurationSeconds: v === 'continuous' ? null : Number(v) })}
+                  /></div
+                >{/if}
             </div>{/if}
         </div>
       {/each}

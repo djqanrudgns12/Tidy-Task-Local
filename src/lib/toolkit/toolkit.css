@@ -718,6 +718,22 @@
 }
 .toolbar-size-labels > span { width: 53px; text-align: center; white-space: nowrap; }
 .toolbar-size-labels > .chosen { color: var(--tk-accent); font-weight: 700; }
+/* 툴바 위치(맨 앞으로 / 맨 뒤로) — 크기 조절과 같은 구분선·제목 모양을 씁니다. */
+.toolbar-layer-control {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--tk-line);
+}
+.toolbar-layer-control > .toolbar-size-heading {
+  margin-bottom: 8px;
+}
+.toolbar-layer-hint {
+  margin: 8px 2px 0;
+  color: var(--tk-muted);
+  font-size: 11px;
+  line-height: 1.5;
+  word-break: keep-all;
+}
 .settings-icon-label {
   display: flex;
   align-items: center;
@@ -1634,39 +1650,99 @@
 .secondary-action:hover {
   background: var(--tk-soft);
 }
-.time-adjustments {
-  display: flex;
-  justify-content: center;
-  gap: 9px;
-  margin-top: 13px;
+.time-adjustment-panel {
+  --time-increase: light-dark(#286950, #9bdfbc);
+  --time-increase-soft: light-dark(#e5f0e9, #263e35);
+  width: min(100%, 540px);
+  margin: 16px auto 0;
+  padding: 12px;
+  border: 1px solid var(--tk-line);
+  border-radius: 16px;
+  background: var(--tk-bg);
 }
-.time-adjustments > div {
+.time-adjustment-heading {
   display: flex;
   align-items: center;
-  gap: 4px;
-  height: 32px;
-  border-radius: 10px;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+.time-adjustment-heading h2 {
+  margin: 0;
+  color: var(--tk-ink);
+  font-size: 13px;
+  font-weight: 700;
+}
+.time-adjustment-legend,
+.time-adjustment-legend > span {
+  display: flex;
+  align-items: center;
+}
+.time-adjustment-legend {
+  gap: 12px;
+  font-size: 11px;
+}
+.time-adjustment-legend > span {
+  gap: 3px;
+}
+.time-adjustment-panel .decrease {
+  color: var(--tk-danger);
+}
+.time-adjustment-panel .increase {
+  color: var(--time-increase);
+}
+.time-adjustments {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 6px;
+}
+.time-adjustment-step {
+  flex: 1 1 70px;
+  max-width: 100px;
+  min-width: 0;
+  padding: 8px 2px 5px;
+  border: 1px solid color-mix(in srgb, var(--tk-line) 70%, transparent);
+  border-radius: 11px;
   background: var(--tk-panel);
+}
+.time-adjustment-label {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 13px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+  color: var(--tk-ink);
+}
+.time-adjustment-buttons {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
 }
 .time-adjustments button {
   display: grid;
   place-items: center;
-  width: 29px;
-  height: 30px;
+  flex: 0 0 32px;
+  width: 32px;
+  height: 32px;
   padding: 0;
-  border: 0;
+  border: 1px solid transparent;
   border-radius: 8px;
-  background: transparent;
-  color: var(--tk-muted);
 }
-.time-adjustments button:hover {
-  background: var(--tk-soft);
+.time-adjustments .decrease {
+  background: var(--tk-danger-soft);
 }
-.time-adjustments span {
-  font-size: 12px;
-  min-width: 24px;
-  text-align: center;
-  color: var(--tk-muted);
+.time-adjustments .increase {
+  background: var(--time-increase-soft);
+}
+.time-adjustments button:hover:not(:disabled) {
+  border-color: currentColor;
+  box-shadow: 0 2px 5px color-mix(in srgb, currentColor 12%, transparent);
+}
+.time-adjustments button:focus-visible {
+  outline-color: currentColor;
 }
 /* 타이머 설정 패널
    - 글자는 12px 이상: 교실 화면·배율이 낮은 모니터에서도 읽히게 합니다.
@@ -2013,22 +2089,23 @@
 .timer-settings-panel .tk-switch[data-state='checked'] .tk-switch-thumb {
   transform: translateX(18px);
 }
-/* 종료 경고음의 세부 옵션: 이름 칸(아이콘 36 + 간격 12)에 맞춰 들여 쓰고, 선택 상자는 토글과 같은 오른쪽 끝에 둡니다. */
-.warning-options {
+/* 소리 카드의 세부 옵션(소리 종류, 종료 경고의 시점·울림 시간): 이름 칸(아이콘 36 + 간격 12)에 맞춰 들여 쓰고,
+   선택 상자는 토글과 같은 오른쪽 끝에 둡니다. */
+.setting-options {
   display: grid;
-  gap: 8px;
-  margin: 12px 0 0 48px;
-  padding-top: 12px;
+  gap: 6px;
+  margin: 10px 0 0 48px;
+  padding-top: 10px;
   border-top: 1px solid color-mix(in srgb, var(--tk-line) 70%, transparent);
 }
-.warning-option {
+.setting-option {
   display: flex;
   min-width: 0;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
 }
-.warning-option > span {
+.setting-option > span {
   color: color-mix(in srgb, var(--tk-ink) 80%, var(--tk-muted));
   font-size: 13px;
   font-weight: 650;
@@ -2051,10 +2128,12 @@
   flex: 1;
   cursor: pointer;
 }
-/* 두 선택 상자의 너비를 같게 맞춰야 오른쪽 끝과 글자 시작점이 함께 정렬됩니다. */
+/* 선택 상자(소리 종류·알림 시점·울림 시간)의 너비를 같게 맞춰야 오른쪽 끝과 글자 시작점이 함께 정렬됩니다.
+   150px은 가장 긴 소리 이름("실로폰 카운트다운")이 13px 글자로 잘리지 않는 폭입니다. 좁은 패널에서는 줄어들고,
+   그래도 넘치면 말줄임표로 끝납니다(.tk-select-value). */
 .timer-settings-panel .tk-select {
-  flex: 0 1 128px;
-  min-width: 104px;
+  flex: 0 1 150px;
+  min-width: 112px;
   min-height: 34px;
   padding: 0 9px 0 12px;
   color: var(--tk-ink);
@@ -2079,7 +2158,7 @@
   .time-apply svg {
     display: none;
   }
-  .warning-options {
+  .setting-options {
     margin-left: 0;
   }
   .dial-settings-section {
@@ -2113,6 +2192,54 @@
 .tk-select-item[data-highlighted] {
   outline: none;
   background: var(--tk-bg);
+}
+/* 목록 위·아래에 더 볼 항목이 있다는 표시(bits-ui가 스크롤 막대를 숨기므로 대신 보여 줌). */
+.tk-select-scroll {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  height: 20px;
+  border-radius: 7px;
+  color: var(--tk-muted);
+  cursor: default;
+}
+.tk-select-scroll:hover {
+  background: var(--tk-bg);
+  color: var(--tk-ink);
+}
+/* 묶음이 있는 목록(타이머 소리 등): 묶음 제목은 작게, 묶음 사이는 가는 선으로 나눠 길어도 훑어보기 쉽게 합니다. */
+.tk-select-group + .tk-select-group {
+  margin-top: 4px;
+  padding-top: 4px;
+  border-top: 1px solid color-mix(in srgb, var(--tk-line) 70%, transparent);
+}
+.tk-select-group-heading {
+  padding: 6px 10px 3px;
+  color: var(--tk-muted);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  cursor: default;
+  user-select: none;
+}
+/* 타이머 소리 목록은 13~14개라 큰 창에서도 400px에서 멈추고 안에서 스크롤합니다.
+   창이 낮으면 남은 높이(available-height)까지만 커져 창 밖으로 잘리지 않습니다. */
+.tk-select-content.sound-select-content {
+  max-height: min(var(--bits-select-content-available-height, 320px), 400px);
+}
+/* 목록 끝에서 휠을 더 굴려도 뒤의 설정 패널이 따라 스크롤되지 않게 합니다(스크롤은 안쪽 viewport가 맡음). */
+.tk-select-content [data-select-viewport] {
+  overscroll-behavior: contain;
+}
+/* 이 타이머에 원래 있던 소리 표시("기본"): 작은 알약 모양으로 이름과 구분합니다. */
+.sound-select-content .tk-option-note {
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--tk-soft);
+  color: var(--tk-accent);
+  font-size: 10.5px;
+  font-weight: 700;
 }
 .lap-panel {
   display: flex;
@@ -2477,15 +2604,8 @@
   .primary-action {
     min-width: 128px;
   }
-  .time-adjustments {
+  .time-adjustment-panel {
     margin-top: 12px;
-    gap: 8px;
-  }
-  .time-adjustments span {
-    font-size: 11px;
-  }
-  .time-adjustments button {
-    width: 28px;
   }
   .timer-settings-panel {
     overflow: visible;
@@ -2536,6 +2656,7 @@
   }
   .timer-main {
     padding: 10px 12px 12px;
+    overflow-y: auto;
   }
   /* 낮은 창: 시계 칸을 지키려고 설명 칸이 자랄 수 있는 한도를 좁힙니다(2~3줄).
      1줄까지 줄이면 다음 줄 윗부분이 칸 아래에 비쳐 답답해 보이므로 2줄은 지킵니다.
@@ -2571,7 +2692,7 @@
     height: 39px;
     padding: 0 13px;
   }
-  .time-adjustments {
+  .time-adjustment-panel {
     margin-top: 8px;
   }
   .analog-clock {
@@ -2660,51 +2781,52 @@
     width: 232px;
   }
 }
-/* 낮은 화면(예: 1366×768 노트북)에서 아날로그는 "한 바퀴 기준" 묶음이 하나 더 있어 가장 깁니다.
-   글자 크기는 그대로 두고 여백만 줄여, 스크롤 없이 소리 설정까지 보이게 합니다. */
+/* 낮은 화면(예: 1366×768 노트북): 소리마다 "소리 종류" 줄이 생겨 모든 타이머 패널이 길어졌습니다
+   (아날로그는 "한 바퀴 기준" 묶음까지 있어 가장 깁니다). 글자 크기는 그대로 두고 여백만 줄여
+   스크롤을 최소로 합니다. 스톱워치 겹침 패널은 자기 여백 규칙(.stopwatch-settings)을 그대로 씁니다. */
 @media (min-width: 900px) and (max-height: 720px) {
-  .timer-settings-panel.analog-settings {
+  .timer-settings-panel {
     padding: 14px 16px 12px;
   }
-  .analog-settings .settings-section + .settings-section {
+  .timer-settings-panel .settings-section + .settings-section {
     margin-top: 10px;
     padding-top: 10px;
   }
-  .analog-settings .settings-section-heading {
+  .timer-settings-panel .settings-section-heading {
     margin-bottom: 10px;
   }
-  .analog-settings .time-inputs {
+  .timer-settings-panel .time-inputs {
     margin-bottom: 12px;
   }
-  .analog-settings .time-field,
-  .analog-settings .time-apply {
+  .timer-settings-panel .time-field,
+  .timer-settings-panel .time-apply {
     min-height: 52px;
   }
-  .analog-settings .time-inputs input {
+  .timer-settings-panel .time-inputs input {
     height: 50px;
     font-size: 25px;
   }
-  .analog-settings .preset-heading {
+  .timer-settings-panel .preset-heading {
     margin-bottom: 6px;
   }
-  .analog-settings .time-presets button {
+  .timer-settings-panel .time-presets button {
     min-height: 36px;
   }
   .analog-settings .dial-settings-section .settings-section-heading p {
     display: none;
   }
-  .analog-settings .setting-card-list {
+  .timer-settings-panel .setting-card-list {
     gap: 6px;
   }
-  .analog-settings .setting-card {
+  .timer-settings-panel .setting-card {
     padding: 8px 12px;
   }
-  .analog-settings .warning-options {
+  .timer-settings-panel .setting-options {
     gap: 6px;
     margin-top: 8px;
     padding-top: 8px;
   }
-  .analog-settings .tk-select {
+  .timer-settings-panel .tk-select {
     min-height: 32px;
   }
 }
@@ -3040,3 +3162,11 @@
 
 /* 작은 작업 영역에서는 일반 선택 메뉴도 항목을 스크롤해 접근할 수 있습니다. */
 .toolkit-menu:not(.context-menu) { overflow-y:auto; }
+
+.toolkit-more .toolkit-tool-icon { color: var(--tk-muted); }
+.toolkit-preview-menu:has(.more-menu) { left:auto; right:7px; width:264px; }
+.toolkit-preview-menu .more-menu { max-height:min(474px, calc(100vh - 120px)); }
+.more-description, .more-empty { margin:4px 10px 12px; color:var(--tk-muted); font-size:12px; line-height:1.6; }
+.more-empty { padding:20px 0; }
+.toolkit-menu.more-menu button:nth-of-type(n) .menu-icon { background:var(--tk-bg); color:var(--tk-ink); }
+.toolkit-menu.more-menu .more-back { font-size:12px; color:var(--tk-muted); }

@@ -40,6 +40,7 @@
   } from "../../lib/tournament/storage.js";
   import Trophy from "./Trophy.svelte";
   import WinnerCelebration from "./WinnerCelebration.svelte";
+  import RosterPicker from "./RosterPicker.svelte";
   import { createTournamentAudio } from "../../lib/tournament/audio.js";
   import {
     fitTournamentZoom,
@@ -58,8 +59,8 @@
   let screen = $state("home"),
     bulk = $state(""),
     roster = $state<any>(null),
-    classId = $state(""),
-    source = $state("students");
+    rosterPicking = $state(false),
+    rosterLoading = $state(false);
   let zoom = $state(1),
     focus = $state("all"),
     pinned = $state(false),
@@ -321,16 +322,23 @@
   }
   async function applyEntries(entries: any[]) {
     try {
-      const next = draft();
-      next.slots = placeEntries(entries, current.size);
-      next.winners = {};
-      if (await persist(next)) {
-        bulk = "";
-        notice = `${entries.length}명의 참가자를 배치했어요.`;
-      }
+      return await applySlots(placeEntries(entries, current.size));
     } catch (e) {
       error = message(e);
+      return false;
     }
+  }
+  async function applySlots(slots: any[]) {
+    const next = draft();
+    next.slots = slots;
+    next.winners = {};
+    if (await persist(next)) {
+      bulk = "";
+      swap = -1;
+      notice = `${slots.filter(Boolean).length}명의 참가자를 배치했어요.`;
+      return true;
+    }
+    return false;
   }
   async function paste() {
     try {
@@ -343,19 +351,17 @@
     }
   }
   async function importRoster() {
+    if (rosterLoading || busy) return;
+    rosterLoading = true;
+    error = "";
     try {
       roster = await readRoster();
-      classId = roster.defaultClassId ?? roster.classes[0]?.id ?? "";
+      if (current?.phase === "edit" && screen === "board") rosterPicking = true;
     } catch (e) {
       error = message(e);
+    } finally {
+      rosterLoading = false;
     }
-  }
-  function rosterEntries() {
-    const c = roster?.classes.find((c: any) => c.id === classId);
-    return (c?.[source] ?? []).map((e: any) => ({
-      id: crypto.randomUUID(),
-      name: source === "students" ? `${e.number}. ${e.name}` : e.name,
-    }));
   }
   async function shuffle() {
     const next = draft();
@@ -738,26 +744,9 @@
             class="tn-secondary"
             disabled={busy || !bulk.trim()}
             onclick={paste}><List size={16} /> 명단 적용</button
-          ><button class="tn-secondary" disabled={busy} onclick={importRoster}
-            ><UsersRound size={16} /> 학급 명단 불러오기</button
+          ><button class="tn-secondary" disabled={busy || rosterLoading} onclick={importRoster}
+            ><UsersRound size={16} /> {rosterLoading ? "명단 불러오는 중…" : "학급 명단 불러오기"}</button
           >
-          {#if roster}<div class="tn-roster">
-              {#if !roster.classes.length}<p>
-                  등록된 학급이 없어요. 툴킷의 학급 명단에서 먼저 등록해 주세요.
-                </p>{:else}<select aria-label="학급" bind:value={classId}
-                  >{#each roster.classes as c}<option value={c.id}
-                      >{c.name}</option
-                    >{/each}</select
-                ><select aria-label="참가 단위" bind:value={source}
-                  ><option value="students">학생</option><option value="groups"
-                    >모둠</option
-                  ></select
-                ><button
-                  disabled={busy || !rosterEntries().length}
-                  onclick={() => applyEntries(rosterEntries())}
-                  >선택한 명단 적용</button
-                >{/if}
-            </div>{/if}
           <details class="tn-editor-tip">
             <summary>자리 바꾸는 방법</summary>
 
@@ -973,6 +962,15 @@
           >{/if}
       </div>
     </footer>
+  {/if}
+  {#if rosterPicking && current && roster}
+    <RosterPicker
+      {roster}
+      size={current.size}
+      replacing={count > 0}
+      onapply={applySlots}
+      onclose={() => (rosterPicking = false)}
+    />
   {/if}
   <dialog class="tn-confirm" bind:this={confirmDialog}>
     <h2>{confirmTitle}</h2>

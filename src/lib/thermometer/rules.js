@@ -4,6 +4,7 @@
  * 문턱 근처에서 +1 −1을 반복해도 축하·경고가 여러 번 울리지 않고, 표시가 저장되므로 재실행해도 다시 울리지 않습니다.
  * 자동 식힘으로 내려간 단계만 표시를 풀어 다시 알립니다(새 날의 경고는 다시 알려야 하므로). */
 import { newId } from '../ids.js';
+import { cleanLabel } from '../scoreboard/model.js';
 import { LIMITS } from './model.js';
 import { addDays, daysBetween, mondayPassed, schoolDaysBetween } from './calendar.js';
 
@@ -117,8 +118,20 @@ export function repeatPeriod(t, when) {
   return { ...restart(t, when), deadline: addDays(base, 7) };
 }
 
-/** 방금 변화에 사유 붙이기 @param {Thermometer} t @param {string} logId @param {string} reason */
-export const tagReason = (t, logId, reason) => ({ ...t, log: t.log.map((e) => (e.id === logId ? { ...e, reason } : e)) });
+/** 방금 변화에 사유 붙이기. 칩뿐 아니라 직접 쓴 글도 받으므로 여기서 다듬습니다(빈 글이면 그대로).
+ * @param {Thermometer} t @param {string} logId @param {string} reason */
+export function tagReason(t, logId, reason) {
+  const clean = cleanLabel(reason, LIMITS.reason);
+  if (!clean) return t;
+  return { ...t, log: t.log.map((e) => (e.id === logId ? { ...e, reason: clean } : e)) };
+}
+
+/** 이름 바꾸기(제목 줄·미니 온도계에서 바로). 빈 이름은 받지 않고 그대로 둡니다 — 다 지운 순간에도 이름이 사라지지 않게.
+ * @param {Thermometer} t @param {string} title */
+export function renameThermometer(t, title) {
+  const clean = cleanLabel(title, LIMITS.title);
+  return clean && clean !== t.title ? { ...t, title: clean } : t;
+}
 
 /** [새 도장판] @param {Thermometer} t */
 export const newStampBoard = (t) => ({ ...t, stamps: { ...t.stamps, count: 0 } });

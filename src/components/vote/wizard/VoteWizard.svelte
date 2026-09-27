@@ -1,5 +1,5 @@
 <script lang="ts">
-  // 만들기 마법사(PRD 4절): ① 방식 ② 내용 ③ 규칙 ④ 개표·안내. 위 단계 표시 · 아래 [이전][다음]은 항상 같은 자리.
+  // 만들기 마법사(PRD 4절): ① 방식 ② 내용 ③ 규칙 ④ 개표(학생 안내는 옆 칸에서 언제나). 위 단계 표시 · 아래 [이전][다음]은 항상 같은 자리.
   // 바꾼 내용은 0.4초 뒤 draft 구역에 저장되어, 창을 닫아도 홈의 "만들던 투표 이어 만들기"로 돌아옵니다.
   // [다음]은 항상 눌립니다: 빠진 것이 있으면 첫 문제 칸으로 스크롤하고 그 아래에 이유를 보여 줍니다(비활성 버튼은 이유를 말하지 못하므로).
   import { onDestroy, tick, untrack } from 'svelte';
@@ -13,7 +13,7 @@
   import StepRules from './StepRules.svelte';
   import StepReveal from './StepReveal.svelte';
   import BoothPreview from './BoothPreview.svelte';
-  import ConfigSummary from './ConfigSummary.svelte';
+  import TutorialPanel from './TutorialPanel.svelte';
   import { WIZARD_STEPS } from './steps.js';
   let { draft, prefs, reduced, speechAvailable, fontFamily, audio, onchange, onexit, oncreate } = $props<{
     draft: any; prefs: any; reduced: boolean; speechAvailable: boolean; fontFamily: string; audio: any;
@@ -120,7 +120,7 @@
     <div class="vt-wizard-topline">
       <div class="vt-wizard-identity"><span>투표 만들기</span><small>{step + 1} / 4단계 · {WIZARD_STEPS[step].label}</small></div>
       <div class="vt-wizard-head-actions">
-        {#if step > 0}<button class="vt-btn ghost vt-preview-toggle" aria-expanded={previewOpen} aria-controls="vt-student-preview" onclick={() => (previewOpen = !previewOpen)}><Eye size={18} />학생 화면</button>{/if}
+        {#if step > 0}<button class="vt-btn ghost vt-preview-toggle" aria-expanded={previewOpen} aria-controls="vt-student-preview" onclick={() => (previewOpen = !previewOpen)}><Eye size={18} />학생 화면·안내</button>{/if}
         <button class="vt-btn vt-wizard-exit" title="만들던 내용은 저장되어 홈에서 이어 만들 수 있어요" onclick={exit}><span class="vt-exit-mark" aria-hidden="true"><X size={14} strokeWidth={2.6} /></span>나가기</button>
       </div>
     </div>
@@ -147,14 +147,14 @@
       {:else if step === 2}
         <StepRules {config} showProblems={tried[2]} {problems} onchange={update} />
       {:else}
-        <StepReveal {config} {speechAvailable} {reduced} onchange={update} />
+        <StepReveal {config} {reduced} onchange={update} />
       {/if}
     </div>
     {#if step > 0}
-      <aside id="vt-student-preview" class="vt-wizard-preview" class:open={previewOpen} aria-label="학생 화면 구성 미리보기">
+      <aside id="vt-student-preview" class="vt-wizard-preview" class:open={previewOpen} aria-label="학생 화면 미리보기와 안내 설정">
         <div class="vt-preview-heading"><b><Eye size={18} aria-hidden="true" />학생 화면 미리보기</b><button class="vt-preview-close" aria-label="미리보기 닫기" onclick={() => (previewOpen = false)}><X size={19} /></button></div>
         <BoothPreview {config} />
-        <ConfigSummary {config} {speechAvailable} />
+        <TutorialPanel {config} {speechAvailable} onchange={update} />
       </aside>
     {/if}
   </div>
@@ -287,7 +287,8 @@
   }
   :global(.vt-root.reduced) .vt-exit-mark { transition: none; }
   :global(.vt-root.reduced) .vt-wizard-exit:hover .vt-exit-mark { transform: none; }
-  .vt-preview-toggle {
+  /* 공용 .vt-root .vt-btn(inline-flex)과 우선순위가 같아 CSS 순서에 따라 넓은 창에서도 보였으므로, 한 단계 더 좁혀 씁니다. */
+  .vt-wizard-head-actions .vt-preview-toggle {
     display: none;
   }
   .vt-wizard-body {
@@ -326,7 +327,7 @@
     .vt-wizard-body.with-preview {
       grid-template-columns: 1fr;
     }
-    .vt-preview-toggle {
+    .vt-wizard-head-actions .vt-preview-toggle {
       display: inline-flex;
     }
     .vt-wizard-preview {

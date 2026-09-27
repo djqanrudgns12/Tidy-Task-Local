@@ -912,7 +912,8 @@
     if (isDataWindow(currentWindow.label)) {
       try {
         const autostartEnabled = await isEnabled();
-        if (!autostartEnabled) {
+        const explicitStartup = await invoke('thermometer_windows_start');
+        if (!autostartEnabled && explicitStartup !== false) {
           await enable();
           console.log("윈도우 시작프로그램에 등록되었습니다!");
         }

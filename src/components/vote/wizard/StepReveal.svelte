@@ -1,12 +1,12 @@
 <script lang="ts">
-  // ④ 개표 방식·안내: 공개 범위와 개표 장면, 학생 안내를 설정합니다.
-  import { Eye, Clapperboard, Presentation } from 'lucide-svelte';
+  // ④ 개표 방식: 공개 범위와 개표 장면을 설정합니다.
+  // 학생 안내(슬라이드·속도·음성)는 오른쪽 옆 칸(TutorialPanel)으로 옮겼습니다 — 같은 설정을 두 곳에 두지 않습니다.
+  import { Eye, Clapperboard } from 'lucide-svelte';
   import StepHeading from './StepHeading.svelte';
-  import ToolkitSwitch from '../../toolkit/ToolkitSwitch.svelte';
   import ModeArt from '../art/ModeArt.svelte';
   import { MODES, VISIBILITIES, availableModes, modeBlockedReason, modeName } from '../../../lib/vote/model.js';
   import type { VoteType } from '../../../lib/vote/model.js';
-  let { config, speechAvailable, reduced, onchange } = $props<{ config: any; speechAvailable: boolean; reduced: boolean; onchange: (c: any) => void }>();
+  let { config, reduced, onchange } = $props<{ config: any; reduced: boolean; onchange: (c: any) => void }>();
   const yesno = $derived(config.type === 'yesno');
   const VIS: Record<string, { title: string; say: string }> = {
     all: { title: '모두 공개', say: '득표수 · 비율' },
@@ -29,7 +29,6 @@
     onchange({ ...config, reveal: { visibility: v, mode: ok.includes(config.reveal.mode) ? config.reveal.mode : ok.includes('reverse') ? 'reverse' : 'instant' } });
   }
   const setMode = (m: string) => onchange({ ...config, reveal: { ...config.reveal, mode: m } });
-  const setTutorial = (patch: Record<string, unknown>) => onchange({ ...config, tutorial: { ...config.tutorial, ...patch } });
 </script>
 
 <section class="vt-step">
@@ -58,29 +57,6 @@
           <span><b>{MODE_INFO[m].title}</b><small>{blocked ? '공개 범위 제한' : MODE_INFO[m].say}</small></span>
         </button>
       {/each}
-    </div>
-  </div>
-
-  <div class="vt-step-panel vt-reveal-section">
-    <div class="vt-reveal-heading"><h2><Presentation size={19} aria-hidden="true" />학생 안내</h2></div>
-    <div class="vt-tut">
-    <div class="vt-tut-row">
-      <span><b>안내 슬라이드</b></span>
-      <ToolkitSwitch checked={config.tutorial.enabled} label="안내 슬라이드" onchange={(v) => setTutorial({ enabled: v })} />
-    </div>
-    {#if config.tutorial.enabled}
-      <div class="vt-tut-row">
-        <span><b>넘기는 속도</b></span>
-        <div class="vt-chips" role="radiogroup" aria-label="넘기는 속도">
-          <button class="vt-chip" role="radio" aria-checked={config.tutorial.speed === 'slow'} onclick={() => setTutorial({ speed: 'slow' })}>느리게</button>
-          <button class="vt-chip" role="radio" aria-checked={config.tutorial.speed === 'normal'} onclick={() => setTutorial({ speed: 'normal' })}>보통</button>
-        </div>
-      </div>
-      <div class="vt-tut-row">
-        <span><b>음성으로 읽어 주기</b>{#if !speechAvailable}<small>한국어 음성 없음</small>{/if}</span>
-        <ToolkitSwitch checked={config.tutorial.speech && speechAvailable} disabled={!speechAvailable} label="음성으로 읽어 주기" onchange={(v) => setTutorial({ speech: v })} />
-      </div>
-    {/if}
     </div>
   </div>
 
@@ -116,8 +92,7 @@
     font-size: 16px;
   }
   .vt-vis small,
-  .vt-mode small,
-  .vt-tut small {
+  .vt-mode small {
     color: var(--vt-muted);
     font-size: 13px;
     font-weight: 600;
@@ -161,36 +136,6 @@
   .vt-mode b {
     font-size: 15px;
   }
-  .vt-tut {
-    display: grid;
-    grid-template-columns:repeat(2,minmax(0,1fr));
-    gap:0 24px;
-  }
-  .vt-tut-row {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 16px;
-    min-height:44px;
-    padding: 5px 0;
-    border-bottom: 1px solid color-mix(in srgb, var(--vt-line) 80%, transparent);
-  }
-  .vt-tut-row:last-child {
-    border-bottom: 0;
-  }
-  .vt-tut-row:first-child { grid-column:1 / -1; }
-  .vt-tut-row:nth-child(n+2) { border-bottom:0; }
-  .vt-tut-row span {
-    display: grid;
-    gap: 3px;
-  }
-  .vt-tut-row b {
-    font-size: 16px;
-  }
-  .vt-chips {
-    display: flex;
-    gap: 6px;
-  }
-  @container (max-width: 760px) { .vt-mode-grid { grid-template-columns:repeat(2,minmax(0,1fr)); } .vt-tut { grid-template-columns:1fr; } }
+  @container (max-width: 760px) { .vt-mode-grid { grid-template-columns:repeat(2,minmax(0,1fr)); } }
   @container (max-width: 480px) { .vt-mode-grid, .vt-vis-grid { grid-template-columns:1fr; } }
 </style>

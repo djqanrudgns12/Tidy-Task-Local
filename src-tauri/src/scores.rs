@@ -69,7 +69,7 @@ fn file_for(store: &str) -> Result<&'static str, String> {
 fn section_allowed(store: &str, section: &str) -> bool {
     match store {
         "scoreboard" => matches!(section, "shared" | "personal" | "group" | "custom"),
-        "thermometer" => section == "main",
+        "thermometer" => matches!(section, "main" | "display"),
         "vote" => matches!(section, "session" | "archive" | "draft" | "prefs"),
         _ => false,
     }
@@ -272,6 +272,30 @@ pub fn scores_write(
 }
 
 /// 온도계 창의 첫 크기를 정할 때 씁니다: 마지막으로 본 학급의 온도계 수(1 또는 2).
+/// 자동 시작 여부만 읽습니다. 온도계 복구 안내(notice)는 열람판이 읽도록 남겨 둡니다.
+#[tauri::command(async)]
+pub fn thermometer_windows_start(app: tauri::AppHandle) -> Result<Option<bool>, String> {
+    let dir = data_dir(&app)?;
+    let _g = LOCK.lock().map_err(|_| "저장 잠금 오류")?;
+    with_cache(&dir, THERMOMETER_FILE, |loaded| loaded.doc["sections"]["display"]["data"]["windowsStart"].as_bool())
+}
+
+pub(crate) fn restore_thermometer_display(app: &tauri::AppHandle) {
+    let enabled = (|| -> Result<bool, String> {
+        let dir = data_dir(app)?;
+        let _g = LOCK.lock().map_err(|_| "저장 잠금 오류")?;
+        with_cache(&dir, THERMOMETER_FILE, |loaded| {
+            loaded.doc["sections"]["display"]["data"]["autoOpen"].as_bool().unwrap_or(false)
+        })
+    })().unwrap_or(false);
+    // 툴킷 활성화 여부와 독립적이며, 저장소 잠금을 놓은 뒤 창을 만듭니다.
+    if enabled {
+        if let Err(error) = crate::toolkit::create_window(app, "thermometer-display") {
+            log::warn!("온도계 열람판 복원 실패: {error}");
+        }
+    }
+}
+
 pub(crate) fn last_thermometer_count(app: &tauri::AppHandle) -> usize {
     let Ok(dir) = data_dir(app) else { return 1 };
     let Ok(_g) = LOCK.lock() else { return 1 };
@@ -311,6 +335,22 @@ mod tests {
     }
     // CACHE가 전역이라 테스트끼리 섞이지 않도록 한 줄로 세웁니다.
     static SERIAL: Mutex<()> = Mutex::new(());
+
+    #[test]
+    fn thermometer_display_preferences_survive_independently() {
+        let _s = SERIAL.lock().unwrap_or_else(|e| e.into_inner());
+        reset_cache();
+        let dir = temp_dir("thermometer-display");
+        let prefs = json!({"autoOpen":true,"hiddenIds":["second"],"geometry":{"x":-900,"y":80,"width":400,"height":560}});
+        write_in(&dir, "thermometer", "main", 0, json!({"value":28})).unwrap();
+        write_in(&dir, "thermometer", "display", 0, prefs.clone()).unwrap();
+        write_in(&dir, "thermometer", "main", 1, json!({"value":29})).unwrap();
+        reset_cache();
+        let read = read_in(&dir, "thermometer").unwrap();
+        assert_eq!(read.sections["display"]["data"], prefs);
+        assert_eq!(read.sections["main"]["data"]["value"], 29);
+        assert!(write_in(&dir, "thermometer", "display", 0, json!({})).unwrap_err().starts_with("CONFLICT:1"));
+    }
 
     #[test]
     fn writes_sections_and_rejects_stale_revision() {

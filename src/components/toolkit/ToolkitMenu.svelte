@@ -1,8 +1,10 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { onMount, tick } from 'svelte';
   import { getCurrentWindow } from '@tauri-apps/api/window';
   import { WebviewWindow } from '@tauri-apps/api/webviewWindow';
   import { TIMER_TOOLS, SCOREBOARD_TOOLS, PLATFORM_TOOLS } from '../../lib/toolkit/registry.js';
+  import { defaults } from '../../lib/toolkit/preferences.js';
+  import { moreTools } from '../../lib/toolkit/moreTools.js';
   import ToolIcon from './ToolIcon.svelte';
   import { contextPanel } from '../../lib/toolkit/contextPanel.js';
   import ToolkitQuickTools from './ToolkitQuickTools.svelte';
@@ -11,9 +13,14 @@
   import TimerIcon from './TimerIcon.svelte';
   import { ArrowUpRight, Minimize2, Maximize2, LocateFixed, Settings, Power, GripHorizontal } from 'lucide-svelte';
   // ondone: 브라우저 미리보기에서는 메뉴가 툴바 안에 그려지므로, 동작 뒤 닫기를 툴바에 맡깁니다.
-  let { kind = 'timer', ondone } = $props<{ kind?: 'timer' | 'scoreboard' | 'external' | 'context'; ondone?: () => void }>();
+  let { kind = 'timer', ondone } = $props<{ kind?: 'timer' | 'scoreboard' | 'external' | 'more' | 'context'; ondone?: () => void }>();
   // 점수판 메뉴: 마지막으로 연 항목에 초점을 두어 Enter 한 번으로 다시 열게 하고, 이미 열린 창에는 점을 찍습니다.
   // 왜 localStorage인가: 잃어도 첫 항목에 초점이 갈 뿐인 편의 값이라 저장소를 따로 두지 않습니다.
+  let config = $state(defaults().toolkit);
+  let groupId = $state('');
+  const archived = $derived(moreTools(config));
+  const group = $derived(archived.find((tool) => tool.id === groupId));
+  async function selectGroup(id: string) { groupId = id; await tick(); focusFirst(); }
   const LAST_KEY = 'tidy-scoreboard-menu-last';
   let openLabels = $state<string[]>([]);
   function lastScoreboard() {
@@ -40,10 +47,10 @@
   const visiblePlatforms = $derived(
     PLATFORM_TOOLS.filter((tool) => externalToolsEnabled && !hiddenPlatformIds.includes(tool.id)),
   );
-  const menuLabel = $derived(kind === 'timer' ? '타이머' : kind === 'scoreboard' ? '점수판' : kind === 'external' ? '외부 툴' : 'Tidy 툴킷');
-  async function launch(id: string) {
+  const menuLabel = $derived(kind === 'timer' ? '타이머' : kind === 'scoreboard' ? '점수판' : kind === 'external' ? '외부 툴' : kind === 'more' ? '더보기' : 'Tidy 툴킷');
+  async function launch(id: string, platform = false) {
     try {
-      if (kind === 'timer') await openTool(id);
+      if (kind === 'timer' || (kind === 'more' && !platform)) await openTool(id);
       else if (kind === 'scoreboard') {
         await openTool(id);
         try { localStorage.setItem(LAST_KEY, id); } catch {}
@@ -76,6 +83,11 @@
     if (e.key === 'Tab' || ['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(e.key)) {
       suppressInitialFocusRing = false;
     }
+    if (e.key === 'Escape' && kind === 'more' && group) {
+      e.preventDefault();
+      await selectGroup('');
+      return;
+    }
     if (e.key === 'Escape') {
       await dismissMenu(kind);
       ondone?.();
@@ -101,6 +113,9 @@
     if (kind !== 'timer' && kind !== 'scoreboard') {
       const apply = (settings: Awaited<ReturnType<typeof readSettings>>) => {
         if (disposed) return;
+        config = settings.toolkit;
+        if (groupId && !moreTools(config).some((tool) => tool.id === groupId)) groupId = '';
+        void tick().then(() => { if (!disposed && kind === 'more' && !list.contains(document.activeElement)) focusFirst(); });
         hiddenPlatformIds = settings.toolkit.hiddenPlatformIds;
         externalToolsEnabled = settings.toolkit.externalToolsEnabled;
         collapsed = settings.toolkit.collapsed;
@@ -146,6 +161,7 @@
   use:contextPanel={{ enabled: kind === 'context', ondrag: (active) => panelDragging = active }}
   role={kind === 'context' ? 'dialog' : 'menu'}
   aria-label={`${menuLabel} 선택`}
+  class:more-menu={kind === 'more'}
   class:external-menu={kind === 'external'}
   class:scoreboard-menu={kind === 'scoreboard'}
   class:context-menu={kind === 'context'}
@@ -157,7 +173,29 @@
       <span>{menuLabel}</span><span class="context-panel-grip"><GripHorizontal size={16}/><span>이동</span></span>
     </header>
   {:else}<p class="toolkit-menu-heading">{menuLabel}</p>{/if}
-  {#if kind === 'timer'}
+  {#if kind === 'more'}
+    {#if group}
+      <button role="menuitem" class="more-back" onclick={() => selectGroup('')}>← 더보기 목록</button>
+      <p class="toolkit-menu-heading">{group.label}</p>
+      {#each group.entries as entry}
+        <button role="menuitem" onclick={() => launch(entry.id)}>
+          <span class="menu-icon">{#if group.id === 'timer'}<TimerIcon kind={entry.id} />{:else}<ToolIcon kind={entry.id} size={26} />{/if}</span>
+          <span>{entry.label}</span><ArrowUpRight size={14} />
+        </button>
+      {/each}
+    {:else}
+      <p class="more-description">툴바에서 숨긴 도구를 여기서 열 수 있어요.</p>
+      {#each archived as tool (tool.id)}
+        <button role="menuitem" aria-haspopup={tool.entries.length ? 'menu' : undefined}
+          onclick={() => tool.entries.length ? selectGroup(tool.id) : launch(tool.id, tool.platform)}>
+          <span class="menu-icon"><ToolIcon kind={tool.platform ? 'external' : tool.id} size={26} /></span>
+          <span>{tool.label}</span>{#if tool.entries.length}<span aria-hidden="true">›</span>{:else}<ArrowUpRight size={14} />{/if}
+        </button>
+      {:else}
+        <p class="more-empty">모든 도구가 툴바에 표시되어 있어요.</p>
+      {/each}
+    {/if}
+  {:else if kind === 'timer'}
     {#each TIMER_TOOLS as tool}<button
       role="menuitem"
       onclick={() => launch(tool.id)}

@@ -1,13 +1,16 @@
 <script lang="ts">
-  // 온도계 한 칸(PRD 10.3): 제목 리본 → 목표/한계 스티커 → 관과 단계 스티커 → 큰 숫자 → 다음 단계 한 줄 → 오늘 요약·도장 → 버튼.
+  // 온도계 한 칸(PRD 10.3): 제목 리본 → 목표/한계 스티커 → 관과 단계 스티커 → 큰 숫자 → 오늘의 변화 한 줄 → 목표 패널 → 버튼 → 도장.
   // 온도계 1개·넓은 창이면 왼쪽 관 | 오른쪽 정보(split), 그 밖에는 위에서 아래로(stack).
   import { untrack } from 'svelte';
-  import { Heart, AlertTriangle, Cloud, Star, Shield, RotateCcw, CalendarPlus, Repeat, Flag, X } from 'lucide-svelte';
+  import { Heart, AlertTriangle, Cloud, Star, Shield, RotateCcw, CalendarPlus, Repeat, Flag, X, PictureInPicture2, Check, ChevronDown } from 'lucide-svelte';
   import RollingNumber from '../scores/RollingNumber.svelte';
   import ThermoTube from './ThermoTube.svelte';
   import Confetti from './Confetti.svelte';
+  import ThermoTitle from './ThermoTitle.svelte';
+  import ThermoReasons from './ThermoReasons.svelte';
   import { moodOf, unitMark } from '../../lib/thermometer/moods.js';
-  import { nextLine, stageStatus } from '../../lib/thermometer/stages.js';
+  import { slide } from 'svelte/transition';
+  import { goalPanel, NEXT_GOALS_SHOWN } from '../../lib/thermometer/display.js';
   import { deadlineText } from '../../lib/thermometer/calendar.js';
   import { todaySummary } from '../../lib/thermometer/history.js';
 
@@ -29,8 +32,13 @@
     onnewboard,
     onselect,
     onreason,
+    onreasonhold,
+    onrename,
     onremove,
     onreset,
+    mini = false,
+    miniBusy = false,
+    onmini,
   } = $props<{
     t: any;
     today: string;
@@ -49,19 +57,45 @@
     onnewboard: () => void;
     onselect: () => void;
     onreason: (reason: string) => void;
+    onreasonhold: (holding: boolean) => void;
+    onrename: (title: string) => void;
     onremove: () => void;
     onreset: () => void;
+    mini?: boolean;
+    miniBusy?: boolean;
+    onmini: () => void;
   }>();
 
   const mood = $derived(moodOf(t.mood));
   const u = $derived(unitMark(t.unit));
   const down = $derived(t.linkSteps ? t.upStep : t.downStep);
-  const next = $derived(nextLine(t.mood, t.stages, t.value, t.max, t.unit));
+  // ── 목표 패널: [지금 목표] → [다음 목표] → [이미 달성한 목표(기본 접힘)] ──
+  const goal = $derived(goalPanel(t));
+  const positive = $derived(t.mood === 'positive');
+  let nextOpen = $state(false);
+  let doneOpen = $state(false);
+  const nextShown = $derived(nextOpen ? goal.next : goal.next.slice(0, NEXT_GOALS_SHOWN));
+  // 새로 달성하면: 그 목표가 "이미 달성" 서랍으로 내려가므로 서랍을 접어 두고(목록이 길어져 버튼을 밀지 않게) 개수 뱃지를 톡 튀웁니다.
+  // 지금 목표 자리도 다음 목표로 바뀌며 살짝 올라옵니다. 처음 그릴 때는 움직이지 않습니다(seq가 0).
+  let doneCount = untrack(() => goal.done.length);
+  let focusId = untrack(() => goal.focus?.id);
+  let donePop = $state(0);
+  let focusSeq = $state(0);
+  $effect(() => {
+    const n = goal.done.length;
+    const id = goal.focus?.id;
+    untrack(() => {
+      if (n > doneCount) { donePop++; doneOpen = false; }
+      if (id !== focusId) focusSeq++;
+    });
+    doneCount = n;
+    focusId = id;
+  });
   const deadline = $derived(t.deadline ? deadlineText(t.deadline, today, { mood: t.mood, outcome: t.deadlineOutcome }) : null);
   const summary = $derived(todaySummary(t.daily, today));
   const showStamps = $derived(t.mood === 'positive' || !!t.deadline || t.stamps.count > 0 || !!t.stamps.rewardText);
   const atTop = $derived(t.value >= t.max);
-  const ladder = $derived(stageStatus(t.stages, t.value, t.max).filter((s) => !s.hidden).reverse());
+
 
   let areaW = $state(0);
   let areaH = $state(0);
@@ -116,7 +150,17 @@
   onpointerdown={() => selectable && onselect()} aria-label={`${t.title} ${t.value}${u}`}>
   <header class="th-ribbon">
     <span class="th-ribbon-icon" aria-hidden="true">{#if t.mood === 'positive'}<Heart size={16} fill="currentColor" />{:else}<AlertTriangle size={16} />{/if}</span>
-    <strong>{t.title}</strong>
+    <!-- 이름을 누르면 그 자리에서 바로 고칩니다(치는 대로 저장 → 미니 온도계에도 곧바로 비침). -->
+    <ThermoTitle class="th-title" value={t.title} label="온도계 이름" onrename={onrename} />
+    <!-- 미니 온도계: 이 온도계를 작은 보기 전용 창으로 띄워 두는 스위치. 켜 두면 다음에 앱을 켤 때도 다시 뜹니다.
+         왜 버튼이 아니라 스위치인가: "지금 떠 있는지"를 한눈에 보고, 같은 자리에서 끌 수 있어야 해서입니다. -->
+    <button class="th-mini" role="switch" aria-checked={mini} aria-busy={miniBusy} aria-label={`${t.title} 미니 온도계`}
+      title={mini ? '미니 온도계에서 빼기' : '작은 온도계를 화면에 띄워 둡니다 · 다음에 켤 때도 다시 떠요'}
+      onpointerdown={(e) => e.stopPropagation()} onclick={(e) => { e.stopPropagation(); onmini(); }}>
+      <PictureInPicture2 size={15} aria-hidden="true" />
+      <span class="th-mini-label">미니 온도계</span>
+      <span class="th-mini-track" aria-hidden="true"><i></i></span>
+    </button>
     {#if selectable && selected}<span class="th-selected-tag">선택됨</span>{/if}
     <!-- 이미 0이면 되돌릴 것도 없으니 누를 수 없게 둡니다(빈 확인창·빈 되돌리기 기록이 생기지 않게). -->
     <button class="th-reset" title={`${t.title} 0으로 초기화`} aria-label={`${t.title} 0으로 초기화`} disabled={t.value === 0}
@@ -137,37 +181,50 @@
 
     <div class="th-info">
       <div class="th-number" class:cold={t.value < 0} aria-live="polite"><RollingNumber value={t.value} {reduced} /><span class="th-unit">{u}</span></div>
-      <p class="th-next" class:urgent={t.mood === 'negative' && t.max - t.value <= 1}>{next}</p>
-      <div class="th-meta">
-        <!-- 0인 항목은 빼고 보여 줍니다("+0°"처럼 뜻 없는 숫자가 눈에 걸리지 않게). -->
-        <span class="th-today">오늘 {#if summary.empty}0{u}{:else}{#if summary.up}<b class="up">+{summary.up}{u}</b>{/if}{#if summary.up && summary.down} · {/if}{#if summary.down}<b class="down">−{summary.down}{u}</b>{/if}{#if summary.auto}{summary.up || summary.down ? ' ' : ''}<small>자동 −{summary.auto}{u}</small>{/if}{/if}</span>
-        {#if showStamps}
-          <span class="th-stamps" title={`${t.mood === 'positive' ? '도장' : '약속 지킴'} ${t.stamps.count}/${t.stamps.size}`}>
-            <span class="th-stamp-label">{t.mood === 'positive' ? '도장' : '약속 지킴'}</span>
-            <span class="th-stamp-row" style:--n={t.stamps.size}>
-              {#each Array.from({ length: t.stamps.size }, (_, i) => i) as i (i)}
-                <i class:on={i < t.stamps.count}>{#if i < t.stamps.count}{#if t.mood === 'positive'}<Star size={10} fill="currentColor" />{:else}<Shield size={10} fill="currentColor" />{/if}{/if}</i>
-              {/each}
-            </span>
-            <span class="th-stamp-count">{t.stamps.count}/{t.stamps.size}</span>
-          </span>
-        {/if}
-      </div>
-      {#if t.stamps.rewardText}
-        <div class="th-stamp-goal" class:complete={t.stamps.count >= t.stamps.size}>
-          <span>도장판 목표</span><strong>{t.stamps.rewardText}</strong>
-        </div>
-      {/if}
-      {#if layout === 'split' && ladder.length}
-        <ol class="th-ladder" aria-label={mood.stageName}>
-          {#each ladder as s (s.id)}<li data-status={s.status}><b>{s.at}{u}</b><span>{s.label || mood.stageName}</span>{#if s.status === 'next'}<small>{s.remain}{u} 남음</small>{/if}</li>{/each}
-        </ol>
+      <!-- 오늘의 변화는 큰 숫자 밑 한 줄 글자로 둡니다. 패널로 감싸면 목표 패널과 무게가 같아져 어디를 볼지 흐려졌습니다. -->
+      <p class="th-today"><span>오늘의 변화</span>{#if summary.empty}<b>0{u}</b>{:else}{#if summary.up}<b class="up">+{summary.up}{u}</b>{/if}{#if summary.down}<b class="down">−{summary.down}{u}</b>{/if}{#if summary.auto}<small>자동 −{summary.auto}{u}</small>{/if}{/if}</p>
+      {#if goal.focus}
+        <!-- 목표는 한 패널 안에서 구역으로만 나눕니다: 지금 목표 → 다음 목표 → 이미 달성한 목표(기본 접힘).
+             세 구역이 같은 머리글(작은 제목 + 오른쪽 정보)·같은 여백을 써서 따로 떨어진 카드가 아니라 한 덩어리로 읽힙니다. -->
+        <section class="th-goals" class:finished={goal.finished} aria-label={positive ? '목표' : mood.stageName}>
+          <div class="th-gsec th-gsec-focus">
+            <div class="th-ghead">
+              <span>{goal.finished ? (positive ? '최종 목표 달성' : '한계에 닿았어요') : (positive ? '지금 도전하는 목표' : '다음 경고 단계')}</span>
+              {#if goal.finished}<em class="th-gpill"><Check size={14} strokeWidth={3.2} aria-hidden="true" />{positive ? '달성' : '도달'}</em>{:else}<em class="th-gpill">{goal.remain}{u} 남음</em>{/if}
+            </div>
+            {#key focusSeq}
+              <div class="th-gfocus" class:enter={focusSeq > 0}><b>{goal.focus.at}{u}</b><strong>{goal.focus.label || mood.stageName}</strong></div>
+            {/key}
+            <div class="th-gbar" role="progressbar" aria-label={positive ? '지금 목표까지 온 정도' : '다음 경고 단계까지 온 정도'} aria-valuemin={0} aria-valuemax={goal.focus.at} aria-valuenow={Math.max(0, Math.min(goal.focus.at, t.value))}><i style:width={`${goal.progress * 100}%`}></i></div>
+          </div>
+          {#if goal.next.length}
+            <div class="th-gsec th-gsec-next">
+              <div class="th-ghead">
+                <span>{positive ? '다음 목표' : '그다음 경고'}</span>
+                {#if goal.next.length > NEXT_GOALS_SHOWN}
+                  <button class="th-gfold" aria-expanded={nextOpen} onclick={(e) => { e.stopPropagation(); nextOpen = !nextOpen; }}>{nextOpen ? '접기' : `${goal.next.length - NEXT_GOALS_SHOWN}개 더 보기`}<ChevronDown size={15} aria-hidden="true" /></button>
+                {/if}
+              </div>
+              <ol class="th-glist">{#each nextShown as s (s.id)}<li><b>{s.at}{u}</b><span>{s.label || mood.stageName}</span></li>{/each}</ol>
+            </div>
+          {/if}
+          {#if goal.done.length}
+            <div class="th-gsec th-gsec-done">
+              <button class="th-ghead th-gdone-head" aria-expanded={doneOpen} onclick={(e) => { e.stopPropagation(); doneOpen = !doneOpen; }}>
+                <span><i class="th-gmark" aria-hidden="true">{#if positive}<Check size={12} strokeWidth={3.6} />{:else}<AlertTriangle size={11} strokeWidth={3} />{/if}</i>{positive ? '이미 달성한 목표' : '이미 넘은 경고'}{#key donePop}<b class="th-gcount" class:pop={donePop > 0}>{goal.done.length}</b>{/key}</span>
+                <span class="th-gfold">{doneOpen ? '접기' : '펼치기'}<ChevronDown size={15} aria-hidden="true" /></span>
+              </button>
+              {#if doneOpen}
+                <ol class="th-glist done" transition:slide={{ duration: reduced ? 0 : 200 }}>{#each goal.done as s (s.id)}<li><b>{s.at}{u}</b><span>{s.label || mood.stageName}</span></li>{/each}</ol>
+              {/if}
+            </div>
+          {/if}
+        </section>
       {/if}
 
-      {#if chipsFor && t.reasons.show && t.reasons.chips.length}
-        <div class="th-chips" role="group" aria-label="사유 붙이기">
-          {#each t.reasons.chips as c (c)}<button onclick={(e) => { e.stopPropagation(); onreason(c); }}>{c}</button>{/each}
-        </div>
+      <!-- 칩을 모두 지웠어도 "직접 입력" 칸은 남으므로 칩 개수와 상관없이 띄웁니다. -->
+      {#if chipsFor && t.reasons.show}
+        <ThermoReasons chips={t.reasons.chips} {onreason} onhold={onreasonhold} />
       {/if}
 
       <div class="th-actions">
@@ -181,11 +238,22 @@
       {:else if atTop}
         <div class="th-followup"><button class="strong" onclick={onrestart}><RotateCcw size={15} />새로 시작</button></div>
       {/if}
-      {#if t.stamps.count >= t.stamps.size && showStamps}
-        <div class="th-followup"><button onclick={onnewboard}><Star size={15} />새 도장판</button></div>
-      {/if}
     </div>
   </div>
+
+  {#if showStamps}
+    <details class="th-stamp-panel">
+      <!-- 머리글은 목표 패널의 "이미 달성한 목표"와 같은 모양(제목 · 개수 · 펼치기)입니다. -->
+      <summary class="th-ghead"><span>{t.mood === 'positive' ? '도장 모아 보기' : '약속 지킴 도장'}<b class="th-gcount">{t.stamps.count} / {t.stamps.size}</b></span><span class="th-gfold"><span class="th-fold-label"></span><ChevronDown size={15} aria-hidden="true" /></span></summary>
+      <div class="th-stamp-content">
+        <div class="th-stamp-row" style:--n={t.stamps.size}>
+          {#each Array.from({ length: t.stamps.size }, (_, i) => i) as i (i)}<i class:on={i < t.stamps.count}>{#if i < t.stamps.count}{#if t.mood === 'positive'}<Star size={16} fill="currentColor" />{:else}<Shield size={16} fill="currentColor" />{/if}{/if}</i>{/each}
+        </div>
+        {#if t.stamps.rewardText}<div class="th-stamp-goal" class:complete={t.stamps.count >= t.stamps.size}><span>도장판 목표</span><strong>{t.stamps.rewardText}</strong></div>{/if}
+        {#if t.stamps.count >= t.stamps.size}<div class="th-followup"><button onclick={onnewboard}><Star size={15} />새 도장판</button></div>{/if}
+      </div>
+    </details>
+  {/if}
 
   {#if banner}<div class="th-banner" data-tone={banner.tone} role="status">{banner.text}</div>{/if}
   {#key confetti}{#if confetti}<Confetti colors={confettiColors} ondone={() => (confetti = 0)} />{/if}{/key}

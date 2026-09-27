@@ -29,6 +29,7 @@
   } from '../../lib/timers/engine.js';
   import { createAlarmTracker, alarmPlan } from '../../lib/timers/alarmPlan.js';
   import { createTimerAudio } from '../../lib/timers/audio.js';
+  import { SOUND_KEYS, type SoundRole } from '../../lib/timers/soundLibrary.js';
   import { closeWindow } from '../../lib/toolkit/windows.js';
   import { dragRegion } from '../../lib/dragRegion.js';
   import TimerIcon from '../toolkit/TimerIcon.svelte';
@@ -40,6 +41,13 @@
   let { kind } = $props<{ kind: string }>();
   const timerKind = untrack(() => (TIMER_KINDS.includes(kind) ? kind : 'digital'));
   const stopwatch = timerKind === 'stopwatch';
+  const timeAdjustments = [
+    { label: '10초', ms: 10000 },
+    { label: '30초', ms: 30000 },
+    { label: '1분', ms: 60000 },
+    { label: '5분', ms: 300000 },
+    { label: '10분', ms: 600000 },
+  ];
   let model = $state(createTimer(timerKind)),
     view = $state(untrack(() => sampleTimer(model, performance.now())));
   let prefs = $state<import('../../lib/toolkit/preferences.js').Preferences>(
@@ -133,6 +141,10 @@
   async function changePreferences(patch: Record<string, unknown>) {
     prefs = { ...prefs, ...patch };
     if (patch.dialRangeMinutes) dialRange = Number(patch.dialRangeMinutes);
+    // 진행 중에 소리를 바꾸면 새 파일을 먼저 받아 둔 뒤 다시 예약합니다.
+    // 받기 전에 예약하면 그 소리 자리가 비어 시계음이 잠깐 끊깁니다(받는 동안은 이전 소리가 계속 울림).
+    if (audio.select(prefs) && model.phase === 'running') await audio.ready();
+    if (disposed) return;
     schedule();
     try {
       await patchSettings(timerKind, patch);
@@ -147,6 +159,13 @@
       return;
     }
     await audio.preview(name);
+  }
+  // 선택 상자에서 소리를 고르면 바로 적용하고, 멈춰 있을 때는 그 소리를 곧장 들려줍니다.
+  // 진행 중에는 예약된 소리를 끊지 않도록 미리 듣기를 하지 않습니다(새 소리는 다음 박부터 울림).
+  function chooseSound(role: SoundRole, id: string) {
+    const saving = changePreferences({ [SOUND_KEYS[role]]: id });
+    if (model.phase !== 'running') void audio.preview(role);
+    return saving;
   }
   async function pin() {
     try {
@@ -250,6 +269,9 @@
     }
   }
   async function keys(e: KeyboardEvent) {
+    // 선택 상자 목록처럼 먼저 Esc를 받아 닫힌 팝업이 있으면(bits-ui가 preventDefault로 표시) 여기서는 아무것도 하지 않습니다.
+    // 그러지 않으면 소리 목록을 닫으려고 누른 Esc에 설정 패널까지 접히거나 최대화가 풀립니다.
+    if (e.key === 'Escape' && e.defaultPrevented) return;
     if (e.key === 'Escape' && !confirmOpen) {
       e.preventDefault();
       if (native) {
@@ -305,6 +327,7 @@
         const settings = await readSettings();
         if (disposed) return;
         prefs = settings.preferences[timerKind];
+        audio.select(prefs);
         dialRange = prefs.dialRangeMinutes || 60;
         loaded = true;
         if (native) {
@@ -501,19 +524,33 @@
                 onclick={() => act('record')}><Flag size={18} /><span>기록</span></button
               >{/if}
           </div>
-          {#if !stopwatch}<div class="time-adjustments" aria-label="시간 증감">
-              {#each [1, 5, 10] as minute}<div>
-                  <button
-                    aria-label={`${minute}분 줄이기`}
-                    disabled={view.remainingMs === 0}
-                    onclick={() => act('adjust', -minute * 60000)}><Minus size={13} /></button
-                  ><span>{minute}분</span><button
-                    aria-label={`${minute}분 늘리기`}
-                    disabled={view.remainingMs >= 3600000}
-                    onclick={() => act('adjust', minute * 60000)}><Plus size={13} /></button
-                  >
-                </div>{/each}
-            </div>{/if}
+          {#if !stopwatch}<section class="time-adjustment-panel" aria-labelledby="time-adjustment-heading">
+              <header class="time-adjustment-heading">
+                <h2 id="time-adjustment-heading">시간 조절</h2>
+                <div class="time-adjustment-legend" aria-hidden="true">
+                  <span class="decrease"><Minus size={12} />줄이기</span>
+                  <span class="increase"><Plus size={12} />늘리기</span>
+                </div>
+              </header>
+              <div class="time-adjustments">
+                {#each timeAdjustments as adjustment}<div class="time-adjustment-step">
+                    <span class="time-adjustment-label">{adjustment.label}</span>
+                    <div class="time-adjustment-buttons">
+                      <button
+                        class="decrease"
+                        aria-label={`${adjustment.label} 줄이기`}
+                        disabled={!loaded || busy || view.remainingMs === 0}
+                        onclick={() => act('adjust', -adjustment.ms)}><Minus size={16} strokeWidth={2.5} /></button
+                      ><button
+                        class="increase"
+                        aria-label={`${adjustment.label} 늘리기`}
+                        disabled={!loaded || busy || view.remainingMs >= 3600000}
+                        onclick={() => act('adjust', adjustment.ms)}><Plus size={16} strokeWidth={2.5} /></button
+                      >
+                    </div>
+                  </div>{/each}
+              </div>
+            </section>{/if}
         </div>
       </section>
       {#if stopwatch}<LapTimeline laps={model.laps} />{/if}
@@ -527,6 +564,7 @@
           onchange={changePreferences}
           onset={(ms) => act('set', ms)}
           onpreview={preview}
+          onsound={chooseSound}
         />{/if}
     </div>
     {#if error}<div role="alert" class="timer-error">

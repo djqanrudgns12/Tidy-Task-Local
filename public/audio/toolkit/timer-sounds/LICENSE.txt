@@ -1,0 +1,54 @@
+Tidy toolkit timer sound library (tick, warning, end)
+
+Each file below was cut, re-timed into an exact loop or trimmed, filtered, faded and
+level-matched from the credited original (see "processing" in
+artwork/toolkit/audio/manifest.json). Changes were made; the originals' authors do not
+endorse this app. Source hashes and exact settings: artwork/toolkit/audio/manifest.json.
+Rebuild: node scripts/prepare-timer-sound-library.mjs
+
+Joseph SARDIN / BigSoundBank.com — CC0 1.0 (BigSoundBank "Free and Royalty Free")
+https://bigsoundbank.com/licenses.html
+  timer-sounds/tick/wall-clock.wav: "Clock" https://bigsoundbank.com/clock-s0007.html
+  timer-sounds/tick/grandfather-clock.wav: "Grandfather clock, ticking" https://bigsoundbank.com/grandfather-clock-ticking-s1567.html
+  timer-sounds/tick/alarm-clock.wav: "Tic Tac Mechanical Alarm Clock #3" https://bigsoundbank.com/tic-tac-mechanical-alarm-clock-3-s2656.html
+  timer-sounds/tick/stopwatch.wav: "Chronograph #2" https://bigsoundbank.com/stopwatch-2-s2138.html
+  timer-sounds/tick/kitchen-timer.wav: "Timer" https://bigsoundbank.com/timer-s0927.html
+  timer-sounds/tick/metronome.wav: "Mechanical metronome" https://bigsoundbank.com/metronome-a-120bpm-s0468.html
+  timer-sounds/tick/woodblock.wav: "Block "Meinl" in wood" https://bigsoundbank.com/block-meinl-in-wood-s0466.html
+  timer-sounds/warning/time-signal.wav: "Hourly bips #2" https://bigsoundbank.com/hourly-bips-2-s1628.html
+  timer-sounds/warning/xylophone.wav: "Metallophone, "jeu des milles euros" #2" https://bigsoundbank.com/metallophone-jeu-des-milles-euros-2-s3068.html
+  timer-sounds/warning/kalimba.wav: "Mbira, note #2" https://bigsoundbank.com/mbira-note-2-s2286.html
+  timer-sounds/warning/music-box.wav: "Music box, G #1 + Music box, C #2" https://bigsoundbank.com/music-box-g-1-s1871.html
+  timer-sounds/warning/heartbeat.wav: "Heartbeat #1" https://bigsoundbank.com/heartbeat-1-s0243.html
+  timer-sounds/warning/hurry-tick.wav: "Chronograph #1" https://bigsoundbank.com/stopwatch-1-s2137.html
+  timer-sounds/end/kitchen-bell.wav: "Timer" https://bigsoundbank.com/timer-s0927.html
+  timer-sounds/end/boxing-bell.wav: "Boxing bell #1" https://bigsoundbank.com/boxing-bell-1-s1926.html
+  timer-sounds/end/counter-bell.wav: "Counter Bell #5" https://bigsoundbank.com/counter-bell-5-s2533.html
+  timer-sounds/end/doorbell.wav: "Doorbell #8" https://bigsoundbank.com/doorbell-8-s2880.html
+  timer-sounds/end/singing-bowl.wav: "Tibetan bowl struck #3" https://bigsoundbank.com/tibetan-bowl-struck-3-s2554.html
+  timer-sounds/end/triangle.wav: "Triangle #3" https://bigsoundbank.com/triangle-3-s1689.html
+  timer-sounds/end/xylophone-finish.wav: "Metallophone, "jeu des milles euros" #1" https://bigsoundbank.com/metallophone-jeu-des-milles-euros-1-s3067.html
+  timer-sounds/end/cheer.wav: "Shouts and Applauses of Teens #1" https://bigsoundbank.com/shouts-and-applauses-of-teens-1-s0236.html
+
+Kenney (www.kenney.nl) — CC0 1.0
+https://creativecommons.org/publicdomain/zero/1.0/
+  timer-sounds/tick/digital-tick.wav: "Interface Sounds — tick_004.ogg" https://kenney.nl/assets/interface-sounds
+  timer-sounds/tick/glass-tink.wav: "Interface Sounds — glass_002.ogg" https://kenney.nl/assets/interface-sounds
+  timer-sounds/warning/game-beep.wav: "Digital Audio — tone1.ogg" https://kenney.nl/assets/digital-audio
+
+Google (Material Design sound resources) — CC BY 4.0
+https://creativecommons.org/licenses/by/4.0/
+  timer-sounds/tick/soft-tap.wav: "ui_tap-variant-01" https://m2.material.io/design/sound/sound-resources.html
+  timer-sounds/warning/soft-ding.wav: "notification_simple-01" https://m2.material.io/design/sound/sound-resources.html
+  timer-sounds/warning/chime-alert.wav: "alert_simple" https://m2.material.io/design/sound/sound-resources.html
+  timer-sounds/end/celebration.wav: "hero_decorative-celebration-01" https://m2.material.io/design/sound/sound-resources.html
+
+The Android Open Source Project — Apache-2.0
+https://www.apache.org/licenses/LICENSE-2.0
+  timer-sounds/warning/alarm-beep.wav: "Alarm_Beep_03.ogg" https://android.googlesource.com/platform/frameworks/base/+/refs/heads/main/data/sounds/
+  timer-sounds/end/phone-timer.wav: "alarms/material/ogg/Timer_48k.ogg" https://android.googlesource.com/platform/frameworks/base/+/refs/heads/main/data/sounds/alarms/material/ogg/
+
+Material Design sounds are used under CC BY 4.0: https://creativecommons.org/licenses/by/4.0/
+Android Open Source Project sounds are used under the Apache License 2.0; the full text is in
+public/licenses/timer-sounds/Apache-2.0.txt. Copyright (C) The Android Open Source Project.
+CC0 sources need no attribution; credits are kept for provenance.

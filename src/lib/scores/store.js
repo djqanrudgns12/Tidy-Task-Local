@@ -63,5 +63,19 @@ export async function subscribeStore(store, callback) {
     if (e.data?.store === store && e.data.origin !== origin) callback({ section: e.data.section, revision: e.data.revision });
   };
   channel()?.addEventListener('message', onMessage);
-  return () => channel()?.removeEventListener('message', onMessage);
+  // 일부 WebView/미리보기에서는 비활성 탭의 BroadcastChannel 전달이 늦습니다.
+  // 저장 이벤트도 받아 새 창·열람판이 구역별 최신 revision을 즉시 따라가게 합니다.
+  /** @param {StorageEvent} e */
+  const onStorage = (e) => {
+    if (e.key !== PREVIEW_PREFIX + store || !e.newValue) return;
+    try {
+      const sections = JSON.parse(e.newValue).sections ?? {};
+      for (const [section, value] of Object.entries(sections)) {
+        const revision = /** @type {any} */ (value)?.revision;
+        if (Number.isInteger(revision)) callback({ section, revision });
+      }
+    } catch { /* 반쯤 쓰인 외부 자료는 다음 정상 변경을 기다립니다. */ }
+  };
+  window.addEventListener('storage', onStorage);
+  return () => { channel()?.removeEventListener('message', onMessage); window.removeEventListener('storage', onStorage); };
 }

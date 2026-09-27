@@ -70,6 +70,17 @@ test('all five toolbar sizes survive saving, reloading and direction changes', (
   }
 });
 
+test('툴바 위치는 기본 맨 앞(항상 위)이고, 맨 뒤로 고른 값은 다시 읽어도 유지됩니다', () => {
+  // 이 설정이 생기기 전 파일에는 값이 없으므로 예전 동작(항상 위)을 그대로 따릅니다.
+  assert.equal(defaults().toolkit.alwaysOnTop, true);
+  for (const alwaysOnTop of [undefined, null, 0, 'false'])
+    assert.equal(normalizeSettings({ schemaVersion: 12, toolkit: { alwaysOnTop } }).toolkit.alwaysOnTop, true);
+  const back = applySettingsPatch(defaults(), 'toolkit', { alwaysOnTop: false });
+  assert.equal(normalizeSettings(JSON.parse(JSON.stringify(back))).toolkit.alwaysOnTop, false);
+  const front = applySettingsPatch(back, 'toolkit', { alwaysOnTop: true });
+  assert.equal(front.toolkit.alwaysOnTop, true);
+});
+
 test('external group toggle survives reload and preserves individual choices', () => {
   const selected = applySettingsPatch(defaults(), 'toolkit', { hiddenPlatformIds: ['clanner'] });
   const disabled = normalizeSettings(JSON.parse(JSON.stringify(
@@ -154,4 +165,27 @@ test('toolkit UI font is stored separately, survives reload and rejects bad name
     assert.equal(isValidUiFontName(bad), false);
     assert.equal(normalizeSettings({ schemaVersion: 11, toolkit: { uiFontFamily: bad } }).toolkit.uiFontFamily, DEFAULT_UI_FONT);
   }
+});
+
+test('타이머 소리 선택은 타이머마다 예전 소리가 기본이고, 다시 읽어도 유지되며, 잘못된 값은 기본 소리로 돌아갑니다', () => {
+  const base = defaults();
+  assert.deepEqual(
+    ['digital', 'analog', 'hourglass'].map((kind) => [base.preferences[kind].tickSound, base.preferences[kind].warningSound, base.preferences[kind].endSound]),
+    [['clock-closeup', 'double-beep', 'winning-chimes'], ['small-tick', 'buzzer', 'clock-gong'], ['water-drop', 'signal', 'happy-bells']],
+  );
+  assert.deepEqual(base.preferences.stopwatch, { tickEnabled: true, tickSound: 'button-click' });
+  // 예전 설정 파일(소리 선택 없음)은 기본 소리로 읽힙니다.
+  assert.equal(normalizeSettings({ schemaVersion: 12, preferences: { analog: { tickEnabled: false } } }).preferences.analog.tickSound, 'small-tick');
+  const chosen = applySettingsPatch(base, 'digital', { tickSound: 'wall-clock', warningSound: 'time-signal', endSound: 'cheer' });
+  const reloaded = normalizeSettings(JSON.parse(JSON.stringify(chosen)));
+  assert.deepEqual([reloaded.preferences.digital.tickSound, reloaded.preferences.digital.warningSound, reloaded.preferences.digital.endSound], ['wall-clock', 'time-signal', 'cheer']);
+  // 다른 타이머의 선택에는 영향이 없습니다.
+  assert.equal(reloaded.preferences.hourglass.endSound, 'happy-bells');
+  // 다른 역할의 id(종료음을 시계음 자리에)·모르는 값·문자열이 아닌 값은 받지 않습니다.
+  const broken = normalizeSettings({ schemaVersion: 12, preferences: { digital: { tickSound: 'cheer', warningSound: 42, endSound: 'triangle' } } });
+  assert.deepEqual([broken.preferences.digital.tickSound, broken.preferences.digital.warningSound, broken.preferences.digital.endSound], ['clock-closeup', 'double-beep', 'triangle']);
+  // 스톱워치는 시계음 종류만 저장할 수 있습니다.
+  assert.equal(applySettingsPatch(base, 'stopwatch', { tickSound: 'metronome' }).preferences.stopwatch.tickSound, 'metronome');
+  assert.throws(() => applySettingsPatch(base, 'stopwatch', { warningSound: 'time-signal' }));
+  assert.throws(() => applySettingsPatch(base, 'stopwatch', { endSound: 'cheer' }));
 });

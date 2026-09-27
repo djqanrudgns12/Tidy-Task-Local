@@ -82,6 +82,7 @@ async function start() {
         "scoreboard-group",
         "scoreboard-custom",
         "thermometer",
+        "thermometer-display",
         "vote",
         "vote-teacher",
         "seating",

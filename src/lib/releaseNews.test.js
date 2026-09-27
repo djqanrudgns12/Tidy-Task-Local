@@ -9,8 +9,9 @@ test('fresh install stays new after a crash has created main; old empty workspac
   assert.equal(classifyStartupProfile('new',{todos:[]},null),'new');
   assert.equal(classifyStartupProfile('existing',null,null),'existing');
 });
-test('retired notice hides do not suppress 5.6; expiry and permanent dismissal remain independent',()=>{
-  const values=new Map([['update-notice:v5.1.2:hidden-until',DISMISSED_FOREVER],['update-notice:v5.5.0:toolkit:hidden-until',DISMISSED_FOREVER]]);
+test('retired notice hides (including 5.6.0) do not suppress the current notice; expiry and permanent dismissal remain independent',()=>{
+  const values=new Map([['update-notice:v5.1.2:hidden-until',DISMISSED_FOREVER],['update-notice:v5.5.0:toolkit:hidden-until',DISMISSED_FOREVER],['update-notice:v5.6.0:hidden-until',DISMISSED_FOREVER]]);
+  assert.equal(RELEASE_NEWS_KEY,'update-notice:v5.6.2:hidden-until');
   assert.equal(shouldShowReleaseNews(values.get(RELEASE_NEWS_KEY),100),true);
   assert.equal(shouldShowReleaseNews(101,100),false);
   assert.equal(shouldShowReleaseNews(100,100),true);
