@@ -152,10 +152,10 @@
     <span class="th-ribbon-icon" aria-hidden="true">{#if t.mood === 'positive'}<Heart size={16} fill="currentColor" />{:else}<AlertTriangle size={16} />{/if}</span>
     <!-- 이름을 누르면 그 자리에서 바로 고칩니다(치는 대로 저장 → 미니 온도계에도 곧바로 비침). -->
     <ThermoTitle class="th-title" value={t.title} label="온도계 이름" onrename={onrename} />
-    <!-- 미니 온도계: 이 온도계를 작은 보기 전용 창으로 띄워 두는 스위치. 켜 두면 다음에 앱을 켤 때도 다시 뜹니다.
+    <!-- 미니 온도계: 이 온도계를 작은 보기 전용 창으로 띄워 두는 스위치. 다음에 앱을 켤 때 다시 열지는 미니 창 설정에서 직접 켭니다.
          왜 버튼이 아니라 스위치인가: "지금 떠 있는지"를 한눈에 보고, 같은 자리에서 끌 수 있어야 해서입니다. -->
     <button class="th-mini" role="switch" aria-checked={mini} aria-busy={miniBusy} aria-label={`${t.title} 미니 온도계`}
-      title={mini ? '미니 온도계에서 빼기' : '작은 온도계를 화면에 띄워 둡니다 · 다음에 켤 때도 다시 떠요'}
+      title={mini ? '미니 온도계에서 빼기' : '작은 온도계를 화면에 띄워 둡니다'}
       onpointerdown={(e) => e.stopPropagation()} onclick={(e) => { e.stopPropagation(); onmini(); }}>
       <PictureInPicture2 size={15} aria-hidden="true" />
       <span class="th-mini-label">미니 온도계</span>

@@ -1,0 +1,31 @@
+/* 글자 크기가 rem 간격까지 키워 목록과 제목의 기준선이 달라지지 않게,
+   메모 몸통의 장식·간격은 기본 10pt 때의 크기를 유지합니다. */
+.memo-body {
+  --spacing: 3.333333px;
+  --memo-gutter: 12px;
+  container-type: inline-size;
+}
+
+/* 두 제목은 같은 아이콘 칸·간격·줄 높이를 사용합니다.
+   좁은 창에서만 확대 폭을 줄여 제목과 우측 버튼을 한 줄에 모두 남깁니다. */
+.memo-section-heading {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px var(--memo-gutter, 12px) 3px;
+  min-width: 0;
+  flex-shrink: 0;
+  font-family: var(--ui-font-family, var(--global-font-family));
+  font-size: min(var(--ui-font-size, 10pt), max(10px, calc((100cqi - 76px) / 8)));
+  line-height: 1.45;
+  white-space: nowrap;
+}
+.memo-section-heading > .memo-section-icon {
+  width: clamp(11px, .9em, 16px);
+  height: clamp(11px, .9em, 16px);
+  flex: none;
+}
+.memo-section-heading > .section-title {
+  min-width: 0;
+  font-weight: 500;
+}

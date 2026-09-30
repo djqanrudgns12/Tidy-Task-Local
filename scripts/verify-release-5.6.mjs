@@ -6,6 +6,7 @@ import assert from 'node:assert/strict';
 const runtime=process.env.TIDY_RUNTIME_MODULES||path.join(os.homedir(),'.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules');
 const {chromium}=createRequire(path.join(runtime,'package.json'))('playwright');
 const base=process.env.TIDY_PREVIEW_URL||'http://127.0.0.1:5196';
+const packageVersion=JSON.parse(await fs.readFile(new URL('../package.json',import.meta.url),'utf8')).version;
 const out='output/qa/release-5.6';await fs.mkdir(out,{recursive:true});
 const browser=await chromium.launch({headless:true,channel:'msedge'});
 const context=await browser.newContext({deviceScaleFactor:2,locale:'ko-KR',timezoneId:'Asia/Seoul'});
@@ -71,7 +72,7 @@ try {
     await page.getByRole('button',{name:'사용하지 않기',exact:false}).click();
     await page.waitForFunction(()=>document.body.dataset.setupComplete==='true');
     const value=await page.evaluate(()=>JSON.parse(localStorage.getItem('initial-setup')));
-    assert.equal(value.completed,true);assert.equal(value.completionCount,1);assert.equal(value.appVersion,'5.6.3');assert.equal(value.choices.toolkitEnabled,false);
+    assert.equal(value.completed,true);assert.equal(value.completionCount,1);assert.equal(value.appVersion,packageVersion);assert.equal(value.choices.toolkitEnabled,false);
   }
   await page.setViewportSize({width:600,height:780});await page.goto(`${base}/?initial-setup-preview`);await page.evaluate(()=>localStorage.clear());await page.reload();
   await page.getByRole('textbox',{name:'학교 이름',exact:true}).waitFor();await page.screenshot({path:`${out}/setup-first.png`});

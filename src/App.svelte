@@ -14,12 +14,12 @@
   import { resolveSavedPosition } from "./lib/windows/windowPlacement.js";
   import { UPDATE_NOTICE_WINDOW_LABEL } from "./lib/updateNotice.js";
   import { startStartupNotices, captureStartupProfile } from "./lib/startupNotices.js";
+  import { createMemoLayoutController, connectMemoLayoutToWindow } from "./lib/layout/memoLayoutController.js";
+  import { DEFAULT_NOTES_H, TODOS_MIN_H, resolveNotesPreference, splitterWindowHeight } from "./lib/layout/memoLayout.js";
 
   import Titlebar from "./components/Titlebar.svelte";
   import MainToolbar from "./components/MainToolbar.svelte";
-  import TodoList from "./components/TodoList.svelte";
-  import ArchivedList from "./components/ArchivedList.svelte";
-  import NoteEditor from "./components/NoteEditor.svelte";
+  import MemoBody from "./components/MemoBody.svelte";
   import SettingsModal from "./components/SettingsModal.svelte";
   import FloatingRTE from "./components/FloatingRTE.svelte";
   import ReminderPopup from "./components/ReminderPopup.svelte";
@@ -32,8 +32,10 @@
   import { openMeal } from './lib/meal/mealWindows.js';
   import { convertFileSrc, invoke } from "@tauri-apps/api/core";
   import { getCurrentWindow } from "@tauri-apps/api/window";
-  import { enable, isEnabled } from "@tauri-apps/plugin-autostart";
-  import { listen, emit, emitTo } from "@tauri-apps/api/event";
+  import { ensureLaunchAtStartup } from "./lib/autostart.js";
+  import { handleSettings } from "./lib/headerWindows.js";
+  import { applySharedSettings } from "./lib/settings/settingsForm.js";
+  import { listen, emit } from "@tauri-apps/api/event";
   import { WebviewWindow } from "@tauri-apps/api/webviewWindow";
   import { LazyStore } from "@tauri-apps/plugin-store";
   import { save as saveDialog, open as openDialog } from "@tauri-apps/plugin-dialog";
@@ -47,7 +49,6 @@
   /** @type {(() => void) | undefined} */
   let unlistenHeaderDesign;
   let unlistenApplySettings,
-    unlistenResetData,
     unlistenResetConfig,
     unlistenClose,
     unlistenMove,
@@ -124,36 +125,46 @@
     }
   }
 
-  // ✨ 내부 스플리터 드래그 상태
-  let isDraggingSplitter = $state(false);
-  let startYPos = 0;
-  let startWindowLogicalHeight = 0;
-  let startWindowLogicalWidth = 0;
-  let splitterCurrentWindow = null;
-  let isRafPending = false;
-  let rafTargetYPos = 0;
-  let isSplitterReady = false;
-  let recentSplitterDragEnd = 0;
+  // ✨ 내부 스플리터 드래그 상태 (끄는 동안만 값이 있음)
+  /** @type {{ startY: number, targetY: number, startWindowH: number, startWindowW: number, startTodosH: number, lastH: number, frame: number } | null} */
+  let splitterDrag = null;
 
-  // ✨ 브라우저 리사이즈 상태 추적 
-  let prevScreenY = 0;
-  let prevInnerHeight = 0;
-  let prevInnerWidth = 0;
-  let prevPixelRatio = 1;
   let resizeSaveTimeout = null;
   // onMount 안쪽에서만 선언돼 있어서 onDestroy에서 참조 시 에러가 나던 변수를 위로 끌어올립니다.
   let moveSaveTimeout = null;
+  /** @type {(() => void) | null} */
+  let disconnectMemoLayout = null;
+  let layoutDestroyed = false;
 
-  // ── 최소 창 크기 상수 ──
-  // 왜 상수로 분리했는가:
-  //   예전에는 보관함(마감된 일)의 실제 콘텐츠 높이를 최소 창 높이에 그대로 더했습니다.
-  //   보관 항목이 20개면 최소 높이가 900px, 50개면 1600px이 되어 OS가 창을 그만큼 강제로
-  //   키워버리고(화면 밖으로 커짐) 더 이상 줄일 수도 없게 됐습니다.
-  //   이제 보관함은 내부 스크롤을 갖고, 최소 높이에는 머리글 한 줄만 반영합니다.
-  const CHROME_MIN_H = 210;      // 타이틀바 + 툴바 + 할 일 최소 영역
-  const SPLITTER_H = 6;
-  const ARCHIVE_HEADER_H = 34;   // 보관함 머리글 한 줄
-  const NOTES_MIN_H = 140;
+  // 저장된 창 크기를 화면 안으로 되돌릴 때의 최소 높이(제목줄·툴바 + 할 일 최소)
+  const CHROME_MIN_H = 210;
+
+  // ── 메모 창 세로 배치 ──
+  // 할 일·마감된 일·중요한 일 메모의 높이는 모두 layout/memoLayout.js 규칙 하나가 정합니다.
+  // (위쪽 테두리·스플리터 = 할 일만, 아래쪽 테두리 = 메모 빈 곳 → 할 일 빈 곳 → …, 창 최소 높이도 같은 규칙)
+  // 예전처럼 여기서 notesHeight를 직접 더하고 빼거나 CSS min/max-height로 높이를 정하지 마세요.
+  // 영역 마크업과 내용 측정은 components/MemoBody.svelte에 있습니다.
+  const memoLayout = createMemoLayoutController({
+    readNotesPreference: () => resolveNotesPreference(appState.notesPaneHeight, appState.notesHeight),
+    commitNotesPreference: (px) => {
+      if (appState.notesPaneHeight === px) return;
+      appState.notesPaneHeight = px;
+      appState.save();
+    },
+    applyMinHeight: (minH) => {
+      if (!isLayoutManagedWindow()) return;
+      getCurrentWindow().setMinSize(new LogicalSize(280, minH)).catch(() => {});
+    },
+    getWorkAreaHeight,
+    isProgrammaticResize: () => appState.isProgrammaticResize,
+    headerSelector: ".main-header",
+  });
+
+  // 이 배치를 쓰는 창(일반 메모 창)인지. Tiny Note·보조 창은 자기 배치를 따로 가집니다.
+  function isLayoutManagedWindow() {
+    const label = getCurrentWindow().label;
+    return label === "main" || label.startsWith("note-");
+  }
 
   // 작업 표시줄을 제외한 화면 세로/가로 크기. 값이 이상하면 안전한 기본값을 씁니다.
   function getWorkAreaHeight() {
@@ -176,9 +187,6 @@
       h: Math.min(Math.round(h), maxH),
     };
   }
-
-  let archivedHeight = $state(0);
-  let notesHeight = $state(0);
 
   // ─── 0. 위쪽 테두리 더블클릭 → 세로 최대화 토글 ───
   // 왜: Windows 기본 동작에서 아래쪽 테두리 더블클릭은 세로 스냅이 되지만,
@@ -266,91 +274,30 @@
     }
   }
 
-  // ─── 1. 창 크기 조절 (Resize) 동기화 엔진 ───
+  // ─── 1. 창 크기 저장 ───
+  // 영역 높이 배분은 여기서 하지 않습니다(layout/memoLayoutController.js가 창 이벤트로 직접 처리).
+  // 이 처리기는 창 크기를 기억하고, 사용자가 높이를 바꾸면 세로 스냅을 푸는 일만 합니다.
   function handleBrowserResize() {
-    // 최소화하면 창 안쪽 크기가 0으로 보고됩니다. 이 값을 반영하면 메모 영역 높이가 기본값으로 줄고
-    // 창 크기가 0으로 저장되므로, 최소화 중의 크기 변화는 무시합니다.
+    // 최소화하면 창 안쪽 크기가 0으로 보고됩니다. 이 값을 저장하면 다음 실행 때 창 크기가 0이 됩니다.
     if (window.innerWidth <= 0 || window.innerHeight <= 0) return;
-    // ✨ [TCREI: Persistence] 전체화면일 때는 크기 업데이트를 건너뗴니다.
+    // ✨ [TCREI: Persistence] 전체화면일 때는 크기 업데이트를 건너뜁니다.
     // 왜: 전체화면 진입 전 저장해둔 원래 창 크기(windowWidth/Height)를 보존하기 위함입니다.
     //     방어하지 않으면 모니터 해상도(1920×1080 등)가 일반 창 크기로 덮어쓰여집니다.
-    if (appState.isFullscreen) {
-      // prev 값들은 업데이트하여 전체화면 해제 후 첫 resize에서 거대한 delta 발생을 방지
-      prevScreenY = window.screenY;
-      prevInnerHeight = window.innerHeight;
-      prevInnerWidth = window.innerWidth;
-      prevPixelRatio = window.devicePixelRatio;
-      return;
-    }
-
-    if (isDraggingSplitter || Date.now() - recentSplitterDragEnd < 500) {
-      prevScreenY = window.screenY;
-      prevInnerHeight = window.innerHeight;
-      prevInnerWidth = window.innerWidth;
-      prevPixelRatio = window.devicePixelRatio;
-      return;
-    }
+    if (appState.isFullscreen) return;
 
     // ✨ [세로 스냅 자동 해제] 사용자가 수동으로 창 "높이"를 드래그하면 세로 스냅 상태를 해제합니다.
     // 왜: 너비(Width)만 조절할 때는 네이티브 OS처럼 세로 스냅 상태가 유지되어야 완벽합니다.
     if (appState.isVerticalSnapped && !appState.isProgrammaticResize) {
-      const currentHeight = window.innerHeight;
       // 현재 높이가 최대 가용 높이(작업표시줄 제외)와 달라졌다면 수동으로 높이를 변경한 것입니다. (DPI 오차 5px 허용)
-      if (Math.abs(currentHeight - window.screen.availHeight) > 5) {
+      if (Math.abs(window.innerHeight - window.screen.availHeight) > 5) {
         appState.isVerticalSnapped = false;
         appState.preSnapPosY = null;
         appState.preSnapHeight = null;
       }
     }
 
-    const currentScreenY = window.screenY;
-    const currentHeight = window.innerHeight;
-    const currentWidth = window.innerWidth;
-    const currentPixelRatio = window.devicePixelRatio;
-
-    if (currentPixelRatio !== prevPixelRatio) {
-      prevPixelRatio = currentPixelRatio;
-      prevScreenY = currentScreenY;
-      prevInnerHeight = currentHeight;
-      prevInnerWidth = currentWidth;
-      return;
-    }
-
-    const deltaY = currentScreenY - prevScreenY;
-    const deltaH = currentHeight - prevInnerHeight;
-    const deltaW = Math.abs(currentWidth - prevInnerWidth);
-
-    // ✨ 유령 메모장 크기를 제한하는 "물리적 한계치" 계산
-    const archiveH = appState.showArchived ? (archivedHeight || 28) : 0;
-    const splitterH = (appState.showNotes || appState.showArchived) ? 6 : 0;
-    const reservedH = 210 + archiveH + splitterH; // 앱의 기본 헤더 및 할일(145px) 최소 보장 높이
-    const maxAvailableNotesH = currentHeight - reservedH;
-
-    const isSnapOrMaximize = Math.abs(deltaH) > 50 || deltaW > 50;
-
-    if (appState.showNotes) {
-      if (!isSnapOrMaximize && Math.abs(deltaY) <= 3) {
-        // 하단 드래그 지속 시: 즉시 락을 해제
-        appState.isNotesLocked = false;
-      }
-
-      if (!appState.isNotesLocked && !isSnapOrMaximize && Math.abs(deltaY) <= 3) {
-        // 락이 풀린 상태에서만 메모장 크기 변경
-        let nextNotesH = appState.notesHeight + deltaH;
-        appState.notesHeight = Math.max(140, nextNotesH);
-      }
-      
-      if (appState.notesHeight > maxAvailableNotesH) {
-        // 유령 기억 퇴마 (상단 드래그 등 락/언락 여부 상관없이 한계 넘으면 강제 Clamp)
-        appState.notesHeight = Math.max(140, maxAvailableNotesH);
-      }
-    }
-
-    prevScreenY = currentScreenY;
-    prevInnerHeight = currentHeight;
-    prevInnerWidth = currentWidth;
-    appState.windowWidth = currentWidth;
-    appState.windowHeight = currentHeight;
+    appState.windowWidth = window.innerWidth;
+    appState.windowHeight = window.innerHeight;
 
     if (resizeSaveTimeout) clearTimeout(resizeSaveTimeout);
     resizeSaveTimeout = setTimeout(() => {
@@ -358,48 +305,32 @@
     }, 300);
   }
 
- $effect(() => {
+  // 글자 크기·글꼴이 바뀌면 메모 최소 높이(머리글 + 두 줄)와 목록 높이가 바뀝니다.
+  // CSS 변수가 적용된 다음 프레임에 다시 잽니다.
+  $effect(() => {
     if (!appState.isReady) return;
-    try {
-      const currentWindow = getCurrentWindow();
-      const label = currentWindow.label;
-
-      if (label === 'reminder' || label === 'settings' || label === 'welcome' || label === 'ctx-menu' || label.startsWith('tinynote-')) return;
-
-      const minW = 280;
-      let minH = CHROME_MIN_H;
-      if (appState.showNotes || appState.showArchived) minH += SPLITTER_H;
-      // 여기서 archivedHeight(실제 콘텐츠 높이)를 쓰면 창이 무한정 커집니다. 고정값만 사용합니다.
-      if (appState.showArchived) minH += ARCHIVE_HEADER_H;
-      if (appState.showNotes) minH += NOTES_MIN_H;
-
-      // 최후 방어선: 어떤 계산 결과가 나오든 화면 작업영역의 80%를 넘지 못하게 막습니다.
-      const hardCap = Math.max(CHROME_MIN_H, Math.floor(getWorkAreaHeight() * 0.8));
-      minH = Math.min(minH, hardCap);
-
-      currentWindow.setMinSize(new LogicalSize(minW, minH)).catch(() => {});
-    } catch (e) {}
+    void [appState.fontSize, appState.uiFontSize, appState.fontFamily, appState.uiFontFamily, appState.letterSpacing, appState.headerDesign];
+    memoLayout.requestRecomputeNextFrame();
   });
 
-  // ─── 2. 스플리터 엔진 (점프 버그 완벽 해결) ───
+  // ─── 2. 스플리터 ───
+  // 스플리터는 "할 일 높이"만 바꿉니다. 마감된 일·메모는 그대로 두고 창이 그만큼 아래로 늘고 줄어듭니다.
+  // 할 일은 최소(TODOS_MIN_H) 아래로 줄지 않습니다. 끄는 동안의 창 크기 변화는 배치 컨트롤러가
+  // "사용자의 아래쪽 끌기"가 아니라 hold로 처리하므로 메모·마감된 일이 흔들리지 않습니다.
   function startSplitterDrag(e) {
-    appState.isNotesLocked = true;
-    appState.saveNow();
+    if (e.button !== 0 || splitterDrag) return;
     e.preventDefault();
 
-    // ✨ 스플리터를 잡는 즉시, 보이지 않는 유령 크기가 남아있다면 바로 삭제
-    const archiveH = appState.showArchived ? (archivedHeight || 28) : 0;
-    const splitterH = (appState.showNotes || appState.showArchived) ? 6 : 0;
-    const reservedH = 210 + archiveH + splitterH;
-    const realVisibleNotesH = window.innerHeight - reservedH;
-
-    if (appState.notesHeight > realVisibleNotesH) {
-      appState.notesHeight = Math.max(140, realVisibleNotesH);
-    }
-
-    isDraggingSplitter = true;
-    isSplitterReady = true; 
-    startYPos = e.screenY;
+    const startTodosH = memoLayout.beginSplitterDrag();
+    splitterDrag = {
+      startY: e.screenY,
+      targetY: e.screenY,
+      startWindowH: window.innerHeight,
+      startWindowW: window.innerWidth,
+      startTodosH: startTodosH ?? TODOS_MIN_H,
+      lastH: window.innerHeight,
+      frame: 0,
+    };
 
     e.currentTarget.setPointerCapture(e.pointerId);
     window.addEventListener("pointermove", onSplitterDrag);
@@ -407,52 +338,35 @@
     window.addEventListener("pointercancel", endSplitterDrag);
     window.addEventListener("blur", endSplitterDrag);
     document.body.style.cursor = "row-resize";
-
-    splitterCurrentWindow = getCurrentWindow();
-    startWindowLogicalHeight = window.innerHeight;
-    startWindowLogicalWidth = window.innerWidth;
   }
 
   function onSplitterDrag(e) {
-    if (!isDraggingSplitter || !isSplitterReady) return;
-    rafTargetYPos = e.screenY;
-
-    if (!isRafPending) {
-      isRafPending = true;
-      requestAnimationFrame(() => {
-        if (!isDraggingSplitter || !isSplitterReady) {
-          isRafPending = false;
-          return;
-        }
-
-        const delta = rafTargetYPos - startYPos;
-
-        let minH = 210;
-        if (appState.showNotes || appState.showArchived) minH += 6;
-        if (appState.showArchived) minH += archivedHeight || 28;
-        if (appState.showNotes) minH += appState.notesHeight;
-
-        // ✨ THE MAGIC TRICK: "팍" 튀어오르는 현상 영구 박멸!
-        // 현재 창 높이가 이미 minH보다 작다면, minH를 창 높이에 강제로 맞춥니다.
-        const safeMinH = Math.min(minH, startWindowLogicalHeight);
-        let newWinH = Math.max(safeMinH, startWindowLogicalHeight + delta);
-
-        if (splitterCurrentWindow) {
-          splitterCurrentWindow
-            .setSize(new LogicalSize(startWindowLogicalWidth, newWinH))
-            .catch(() => {});
-            
-          appState.windowHeight = newWinH;
-        }
-
-        isRafPending = false;
+    if (!splitterDrag) return;
+    splitterDrag.targetY = e.screenY;
+    if (splitterDrag.frame) return;
+    // 포인터 이동은 화면 갱신보다 자주 오므로 한 프레임에 한 번만 창 크기를 바꿉니다.
+    splitterDrag.frame = requestAnimationFrame(() => {
+      const drag = splitterDrag;
+      if (!drag) return;
+      drag.frame = 0;
+      const nextH = splitterWindowHeight({
+        startWindowH: drag.startWindowH,
+        startTodosH: drag.startTodosH,
+        todosMin: TODOS_MIN_H,
+        pointerDelta: drag.targetY - drag.startY,
+        maxWindowH: getWorkAreaHeight(),
       });
-    }
+      if (nextH === drag.lastH) return;
+      drag.lastH = nextH;
+      getCurrentWindow().setSize(new LogicalSize(drag.startWindowW, nextH)).catch(() => {});
+    });
   }
 
   function endSplitterDrag(e) {
-    isDraggingSplitter = false;
-    recentSplitterDragEnd = Date.now();
+    if (!splitterDrag) return;
+    if (splitterDrag.frame) cancelAnimationFrame(splitterDrag.frame);
+    splitterDrag = null;
+    memoLayout.endSplitterDrag();
     window.removeEventListener("pointermove", onSplitterDrag);
     window.removeEventListener("pointerup", endSplitterDrag);
     window.removeEventListener("pointercancel", endSplitterDrag);
@@ -460,29 +374,23 @@
     document.body.style.cursor = "";
 
     if (e?.currentTarget?.releasePointerCapture) {
-      try { e.currentTarget.releasePointerCapture(e.pointerId); } catch(err){}
+      try { e.currentTarget.releasePointerCapture(e.pointerId); } catch (err) {}
     }
 
-    if (splitterCurrentWindow) {
-      splitterCurrentWindow
-        .innerSize()
-        .then(async (size) => {
-          const factor = await splitterCurrentWindow.scaleFactor();
-          const logical = size.toLogical(factor);
-          appState.windowHeight = logical.height;
-          appState.windowWidth = logical.width;
-          appState.saveNow();
-        })
-        .catch(() => {
-          appState.windowHeight = window.innerHeight;
-          appState.windowWidth = window.innerWidth;
-          appState.saveNow();
-        });
-    } else {
-      appState.windowHeight = window.innerHeight;
-      appState.windowWidth = window.innerWidth;
-      appState.saveNow();
-    }
+    const win = getCurrentWindow();
+    win
+      .innerSize()
+      .then(async (size) => {
+        const logical = size.toLogical(await win.scaleFactor());
+        appState.windowHeight = logical.height;
+        appState.windowWidth = logical.width;
+        appState.saveNow();
+      })
+      .catch(() => {
+        appState.windowHeight = window.innerHeight;
+        appState.windowWidth = window.innerWidth;
+        appState.saveNow();
+      });
   }
 
   function applyCSSVars() {
@@ -570,6 +478,8 @@
     const isValidSize = (val) => isValidPos(val) && val > 0;
 
     if (currentWindow.label !== "settings") {
+      // 아래의 위치·크기 복원이 만드는 창 크기 변화는 사용자의 끌기가 아닙니다.
+      memoLayout.markProgrammatic(1500);
       // ✨ [TCREI: Persistence] 전체화면 상태 복원
       // 왜 크기/위치를 먼저 설정하는가: setFullscreen(true) 직전의 크기를 OS가 "이전 크기"로 기억합니다.
       // 이렇게 해야 앱 재시작 후 전체화면을 해제할 때 저장된 크기로 정확히 돌아갑니다.
@@ -688,13 +598,15 @@
         } catch (e) {}
       }
 
-      if (currentWindow.label === "main" || currentWindow.label.startsWith("note-")) {
-        prevScreenY = window.screenY;
-        prevInnerHeight = window.innerHeight;
-        prevInnerWidth = window.innerWidth;
-        prevPixelRatio = window.devicePixelRatio;
-
+      if (isLayoutManagedWindow()) {
         window.addEventListener("resize", handleBrowserResize);
+        // 창 이동·크기 알림으로 "아래쪽 테두리 끌기"를 판별합니다. 위치·크기 복원을 마친 뒤에 연결해야
+        // 복원 때의 크기 변화를 사용자의 끌기로 오해하지 않습니다(복원은 메모 높이를 바꾸면 안 됨).
+        // 기다리지 않습니다: 아래의 닫기 처리기 등록이 이 연결 때문에 늦어지면 안 됩니다.
+        connectMemoLayoutToWindow(memoLayout, currentWindow).then((disconnect) => {
+          if (layoutDestroyed) disconnect();
+          else disconnectMemoLayout = disconnect;
+        });
       }
 
     }
@@ -909,14 +821,10 @@
     }
 
     // 시작프로그램 등록 확인은 데이터 창만 합니다. (리마인더·우클릭 메뉴 같은 보조 창까지 매번 확인할 필요가 없습니다)
+    // 기본은 켜짐입니다. 설정 창(동작 → 컴퓨터를 켜면 자동 실행)에서 끈 경우에는 다시 등록하지 않습니다. (lib/autostart.js)
     if (isDataWindow(currentWindow.label)) {
       try {
-        const autostartEnabled = await isEnabled();
-        const explicitStartup = await invoke('thermometer_windows_start');
-        if (!autostartEnabled && explicitStartup !== false) {
-          await enable();
-          console.log("윈도우 시작프로그램에 등록되었습니다!");
-        }
+        await ensureLaunchAtStartup();
       } catch (error) {
         console.error("자동 시작 등록 실패:", error);
       }
@@ -929,27 +837,21 @@
         async (event) => {
           const s = event.payload;
 
-          if (s.targetWindow && s.targetWindow !== currentWindow.label) {
-            // 다른 창을 위한 설정 이벤트이지만,
-            // ✨ Phase 4: 매니저 창이라면 통합 리마인더 설정(알림 Off) 킬 스위치 발동
-            if (appState.isManager) {
-              const prevShowReminders = appState.showReminders;
-              appState.showReminders = s.showReminders ?? true;
-              
-              if (!appState.showReminders && prevShowReminders) {
-                 const existingWindow = await WebviewWindow.getByLabel('reminder');
-                 if (existingWindow) await existingWindow.close();
-              } else if (appState.showReminders && !prevShowReminders) {
-                 setTimeout(() => appState.checkReminders(true), 300);
-              }
-
-              // ✨ 전체 무음 모드도 전역 동기화
-              if (s.globalMuteSound !== undefined) {
-                appState.globalMuteSound = s.globalMuteSound;
-              }
-
-              appState.saveNow();
+          // 모양·글자는 요청한 창만 바꾸지만 알림·무음은 모든 데이터 창이 함께 기억합니다.
+          // 매니저만 바꾸면 다른 창이 다음에 저장하거나 권한을 이어받을 때 옛 값으로 돌아갑니다.
+          const prevShowReminders = appState.showReminders;
+          const sharedChanged = isDataWindow(currentWindow.label) && applySharedSettings(appState, s);
+          if (sharedChanged && appState.isManager && appState.showReminders !== prevShowReminders) {
+            if (appState.showReminders) {
+              setTimeout(() => appState.checkReminders(true), 300);
+            } else {
+              const existingWindow = await WebviewWindow.getByLabel('reminder');
+              if (existingWindow) await existingWindow.close();
             }
+          }
+
+          if (s.targetWindow && s.targetWindow !== currentWindow.label) {
+            if (sharedChanged) await appState.saveNow();
             return;
           }
 
@@ -962,26 +864,8 @@
           appState.showArchived = s.showArchived;
           appState.showNotes = s.showNotes;
           
-          const prevShowReminders = appState.showReminders;
-          appState.showReminders = s.showReminders ?? true;
-          
-          // ✨ Phase 4 (자신이 타겟일 때도 매니저라면 킬 스위치 처리)
-          if (appState.isManager) {
-            if (appState.showReminders && !prevShowReminders) {
-              setTimeout(() => appState.checkReminders(true), 300);
-            } else if (!appState.showReminders && prevShowReminders) {
-              const existingWindow = await WebviewWindow.getByLabel('reminder');
-              if (existingWindow) await existingWindow.close();
-            }
-          }
-
           if (s.globalFont !== undefined && s.globalFont !== appState.fontFamily) {
             appState.applyFontToAllText(s.globalFont);
-          }
-
-          // ✨ 전체 무음 모드 동기화
-          if (s.globalMuteSound !== undefined) {
-            appState.globalMuteSound = s.globalMuteSound;
           }
 
           applyCSSVars();
@@ -989,16 +873,14 @@
         },
       );
 
-      unlistenResetData = await currentWindow.listen(
-        "req-reset-data",
-        async () => {
-          await appState.resetContent();
-        },
-      );
+      // (창 하나의 내용 초기화는 상단 메뉴의 "모든 내용 초기화"가 맡습니다 — HeaderActions.svelte.
+      //  설정 창의 "데이터 초기화"는 앱 데이터 전체를 지우는 절차라 여기로 오지 않습니다 — src-tauri/src/factory_reset.rs)
 
+      // 설정 초기화: 이 창의 모양·글자·창 크기를 처음 상태로 되돌립니다. 할 일·메모는 건드리지 않습니다.
+      // 알림·무음 같은 앱 전체 값은 설정 창이 이어서 보내는 'req-apply-settings'(기본값)로 맞춥니다.
       unlistenResetConfig = await currentWindow.listen(
         "req-reset-config",
-        () => {
+        async () => {
           appState.fontFamily = "메이플스토리 L";
           appState.uiFontFamily = "메이플스토리 L";
           // 커스텀 폰트 목록은 앱 전체가 공유하는 자원이라 창 하나의 "설정 초기화"로 비우지 않습니다.
@@ -1014,13 +896,18 @@
           appState.showNotes = true;
 
           appState.todoHeight = 145;
+          appState.notesPaneHeight = DEFAULT_NOTES_H;
           appState.windowWidth = 380;
           appState.windowHeight = 500;
+          // 아래 크기 변경은 프로그램이 한 것이라 메모 높이를 바꾸지 않습니다(hold).
+          memoLayout.markProgrammatic();
           try {
             const win = getCurrentWindow();
+            // 핀 표시만 꺼지면 실제 창은 계속 위에 남으므로 Windows의 고정 상태도 함께 풉니다.
+            await win.setAlwaysOnTop(false);
             // 저장값(windowWidth/Height)이 논리 단위이므로 크기 적용도 논리 단위로 맞춥니다.
             // (물리 단위면 125%·150% 배율 화면에서 창이 작아졌습니다.)
-            win.setSize(new LogicalSize(380, 500));
+            await win.setSize(new LogicalSize(380, 500));
           } catch (e) {}
 
           appState.applyFontToAllText("메이플스토리 L");
@@ -1062,40 +949,8 @@
           } catch (e) {}
         }
         else if (action === 'symbols') window.dispatchEvent(new CustomEvent('open-symbol-popup'));
-        else if (action === 'open-settings') {
-          const existingWin = await WebviewWindow.getByLabel('settings');
-          const payload = {
-            targetLabel: currentWindow.label,
-            settings: { ...appState.takeSnapshot(), headerDesign: appState.headerDesign }
-          };
-
-          if (existingWin) {
-            try {
-              await existingWin.show();
-              await existingWin.unminimize();
-              await existingWin.setFocus();
-              setTimeout(() => emitTo('settings', 'set-settings-target', payload), 50);
-            } catch (e) {}
-          } else {
-            const unlisten = await listen('settings-ready', async () => {
-              await emitTo('settings', 'set-settings-target', payload);
-              unlisten();
-            });
-
-            new WebviewWindow('settings', {
-              url: 'index.html',
-              title: '시스템 설정',
-              width: 320,
-              height: 500,
-              resizable: false,
-              decorations: false,
-              transparent: true,
-              alwaysOnTop: true,
-              center: true,
-              visible: true
-            });
-          }
-        }
+        // 상단 메뉴의 [설정]과 같은 함수로 엽니다(창 크기·보내는 값이 한곳에서 정해지도록).
+        else if (action === 'open-settings') await handleSettings();
         else if (action === 'open-help') {
           try {
             const existingHelp = await WebviewWindow.getByLabel('help');
@@ -1158,12 +1013,14 @@
   onDestroy(() => {
     if (unlistenHeaderDesign) unlistenHeaderDesign();
     if (unlistenApplySettings) unlistenApplySettings();
-    if (unlistenResetData) unlistenResetData();
     if (unlistenResetConfig) unlistenResetConfig();
     if (unlistenClose) unlistenClose();
     if (unlistenMove) unlistenMove();
     if (unlistenFocus) unlistenFocus();
     window.removeEventListener("resize", handleBrowserResize);
+    layoutDestroyed = true;
+    disconnectMemoLayout?.();
+    memoLayout.destroy();
     document.removeEventListener("visibilitychange", handleVisibilityFlush);
     window.removeEventListener("pagehide", handleVisibilityFlush);
     if (resizeSaveTimeout) clearTimeout(resizeSaveTimeout);
@@ -1450,56 +1307,7 @@
       </div>
     {/if}
 
-    <div
-      class="flex flex-col overflow-hidden relative"
-      style="flex: 1 1 0; min-height: 0;"
-    >
-      <div
-        class="relative flex flex-col pt-1 pb-1 overflow-hidden"
-        style="min-height: 145px; flex: 1 1 0;"
-      >
-        <TodoList />
-      </div>
-
-      {#if appState.showNotes || appState.showArchived}
-        <div
-          class="h-1.5 w-full cursor-row-resize z-20 flex items-center justify-center transition-colors hover:bg-black/5"
-          style="flex: 0 0 6px;"
-          role="separator"
-          tabindex="-1"
-          onpointerdown={startSplitterDrag}
-        >
-          <div
-            class="w-[30%] h-[3px] rounded-full transition-colors"
-            style="background-color: {appState.isDarkMode
-              ? 'rgba(255,255,255,0.15)'
-              : 'rgba(0,0,0,0.10)'};"
-          ></div>
-        </div>
-      {/if}
-
-      {#if appState.showArchived}
-        <!-- 보관함은 내용이 늘어나도 창을 밀어내지 못하도록 줄어들 수 있는 박스로 만듭니다.
-             flex: 0 1 auto + min-height:0 + max-height:40% 이면 공간이 부족할 때 스스로 줄어들고,
-             내부는 ArchivedList가 스크롤로 처리합니다. -->
-        <div
-          bind:clientHeight={archivedHeight}
-          class="transition-colors duration-300 border-t flex flex-col overflow-hidden"
-          style="flex: 0 1 auto; min-height: 0; max-height: 40%; background-color: var(--global-section-bg); border-top-color: var(--global-border-color);"
-        >
-          <ArchivedList />
-        </div>
-      {/if}
-
-      {#if appState.showNotes}
-        <div
-          style="flex: 0 0 {appState.notesHeight}px; min-height: 140px; max-height: 240px; background-color: var(--global-section-bg); border-top-color: var(--global-border-color);"
-          class="relative flex flex-col transition-colors duration-300 border-t overflow-hidden"
-        >
-          <NoteEditor />
-        </div>
-      {/if}
-    </div>
+    <MemoBody layout={memoLayout} onsplitterdown={startSplitterDrag} />
 
     {#if showDeleteModal}
       <div

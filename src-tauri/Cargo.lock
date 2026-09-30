@@ -4854,7 +4854,7 @@ dependencies = [
 
 [[package]]
 name = "tidy_task"
-version = "5.6.3"
+version = "5.6.5"
 dependencies = [
  "calamine",
  "chrono",

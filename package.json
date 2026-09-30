@@ -1,7 +1,7 @@
 {
   "name": "tidy-task",
   "private": true,
-  "version": "5.6.3",
+  "version": "5.6.5",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -24,6 +24,8 @@
     "vite": "^8.0.1"
   },
   "dependencies": {
+    "@dnd-kit/abstract": "0.5.0",
+    "@dnd-kit/dom": "0.5.0",
     "@iconify/svelte": "^5.2.2",
     "@tauri-apps/api": "^2.10.1",
     "@tauri-apps/plugin-autostart": "^2.5.1",

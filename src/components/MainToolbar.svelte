@@ -1024,10 +1024,12 @@
 </div>
 
 <style>
-  .main-toolbar-row { grid-template-columns:minmax(0,1fr) clamp(60px,calc(100% - 184px),140px) minmax(0,1fr); }
+  .main-toolbar-row { grid-template-columns:auto minmax(0,1fr) auto; }
   .classic .format-tools { padding:2px 8px; gap:3px; background:transparent; }
-  .classic .format-fields > select { height:22px; }
-  .classic .format-tools :global(.header-font-size) { height:22px; }
+  .main-header.classic { --header-control-h:clamp(22px, calc(var(--ui-font-size, 10pt) * 1.4), 30px); }
+  .classic .format-fields > select { height:var(--header-control-h); }
+  .classic .format-tools :global(.header-font-size) { height:var(--header-control-h); }
+  .classic .main-toolbar-row input { font-size:min(.917em, max(11px, 4cqi)); }
 
 
   input[type=range].custom-slider { appearance:none; outline:none; }
@@ -1045,14 +1047,16 @@
   .symbol-grid { display:grid; grid-template-columns:repeat(8,minmax(0,1fr)); gap:3px; padding:8px; }
   .color-grid { display:grid; grid-template-columns:repeat(6,minmax(0,1fr)); gap:5px; }
   .color-grid > button { width:22px; height:22px; min-height:22px; }
-  .main-header { flex-shrink:0; border-bottom:1px solid var(--header-line); }
+  .main-header { --header-control-h:clamp(23px, calc(var(--ui-font-size, 10pt) * 1.4), 30px); flex-shrink:0; border-bottom:1px solid var(--header-line); container-type:inline-size; }
   .note-heading { display:flex; align-items:center; gap:8px; padding:3px 10px 3px; }
-  .note-title { flex:1; min-width:0; width:0; border:1px solid transparent; border-radius:5px; padding:3px 0; background:transparent; color:var(--header-ink); font-family:inherit; font-size:14px; font-weight:600; letter-spacing:-.2px; text-overflow:ellipsis; }
+  /* 확대는 창 폭 안에서만 허용해 한 줄짜리 도구의 글자가 옆 버튼을 밀지 않게 합니다. */
+  .note-heading :global(.tidy-header-create) { font-size:min(.917em, max(11px, 4cqi)); }
+  .note-title { flex:1; min-width:0; width:0; border:1px solid transparent; border-radius:5px; padding:3px 0; background:transparent; color:var(--header-ink); font-family:inherit; font-size:min(1.167em, max(14px, 6cqi)); font-weight:600; letter-spacing:-.2px; text-overflow:ellipsis; }
   .note-title::placeholder { color:var(--header-muted); opacity:1; font-weight:400; }
   .note-title:hover { border-bottom-color:var(--header-line); }
   .note-title:focus { background:var(--header-field); }
   .note-tools { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:5px; padding:1px 10px 5px; }
-  .note-tools :global(.tidy-header-button) { width:auto; justify-self:center; padding:3px 5px; gap:4px; font-size:11px; font-weight:500; border-radius:5px; border-color:transparent; background:transparent; }
+  .note-tools :global(.tidy-header-button) { width:auto; justify-self:center; padding:3px 5px; gap:4px; font-size:min(.917em, max(10px, 4cqi)); font-weight:500; border-radius:5px; border-color:transparent; background:transparent; }
   .note-tools :global(.tidy-header-button[aria-expanded="true"]), .note-tools :global(.tidy-header-button[aria-pressed="true"]) { background:color-mix(in srgb,var(--header-accent) 6%,transparent); border-color:transparent; }
   .note-tools :global(.tidy-header-button:hover) { background:var(--header-hover); border-color:transparent; }
   .note-tools > .tidy-header-button:first-child { justify-self:start; }
@@ -1066,14 +1070,14 @@
   /* Both groups shrink together; no wrap or clipped controls at the minimum window width. */
   .format-tools { display:flex; flex-wrap:nowrap; align-items:center; gap:clamp(2px,1vw,5px); padding:4px 10px; border-top:1px solid var(--header-line); background:color-mix(in srgb,var(--header-hover) 30%,transparent); }
   .format-fields, .format-buttons { display:flex; align-items:center; min-width:0; }
-  .format-fields { gap:3px; flex:0 1 130px; }
+  .format-fields { gap:3px; flex:0 1 max(130px, 10.833em); }
   .format-buttons { flex:0 1 149px; gap:1px; margin-left:auto; }
-  .format-buttons > button { flex:1 1 0; min-width:0; margin:0; width:0; height:25px; border-radius:6px; color:var(--header-ink); }
-  .format-fields > select { flex:1 1 64px; min-width:0; width:0; height:23px; font-size:clamp(9px,3.65vw,11px); color:var(--header-ink); background:var(--header-field); border-color:var(--header-line); border-radius:7px; }
+  .format-buttons > button { flex:1 1 0; min-width:0; margin:0; width:0; height:max(25px, var(--header-control-h)); border-radius:6px; color:var(--header-ink); }
+  .format-fields > select { flex:1 1 64px; min-width:0; width:0; height:var(--header-control-h); font-size:min(.917em, max(9px, 3.65cqi)); color:var(--header-ink); background:var(--header-field); border-color:var(--header-line); border-radius:7px; }
   .format-fields > :global(div) { flex:0 1 61px; min-width:0; }
-  .format-tools :global(input) { min-width:0; width:clamp(15px,8vw,26px); font-size:clamp(9px,3.65vw,11px); flex:1 1 auto; }
-  .format-tools :global(.header-font-size) { height:23px; padding-inline:clamp(1px,1vw,4px); gap:1px; border:1px solid var(--header-line); border-radius:7px; background:var(--header-field); color:var(--header-ink); }
-  .format-tools :global(.header-font-size > span) { font-size:clamp(7px,3vw,9px); }
+  .format-tools :global(input) { min-width:0; width:clamp(15px,8cqi,26px); font-size:min(.917em, max(9px, 3.65cqi)); flex:1 1 auto; }
+  .format-tools :global(.header-font-size) { height:var(--header-control-h); padding-inline:clamp(1px,1cqi,4px); gap:1px; border:1px solid var(--header-line); border-radius:7px; background:var(--header-field); color:var(--header-ink); }
+  .format-tools :global(.header-font-size > span) { font-size:min(.75em, max(7px, 3cqi)); }
   .format-tools :global(.header-font-size > button) { width:clamp(9px,4vw,14px); }
   .format-buttons > button :global(svg) { width:clamp(10px,4.3vw,14px); height:clamp(10px,4.3vw,14px); color:inherit; }
   .format-buttons > button > div { left:3px; right:3px; height:3px; bottom:3px; }
@@ -1088,5 +1092,10 @@
     .tool-status { display:none; }
   }
 
-  @media(max-width:229px) { .note-tools { grid-template-columns:repeat(2,minmax(0,1fr)); } }
+  @media(max-width:229px) {
+    .note-tools { gap:1px; padding-inline:6px; }
+    .note-tools :global(.tidy-header-button) { width:100%; font-size:min(.917em, 10px); padding-inline:1px; gap:2px; }
+    .note-tools :global(.tidy-header-button > svg) { width:11px; height:11px; }
+    .note-tools :global(.tidy-header-button > svg:last-child) { width:7px; height:7px; }
+  }
 </style>

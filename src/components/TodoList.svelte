@@ -1,13 +1,12 @@
 <script>
   // @ts-nocheck — 타입 주석이 아직 없는 기존 코드라 타입 검사에서 뺍니다. 고칠 때 JSDoc 타입을 붙이고 이 줄을 지워 주세요.
-  import { dndzone } from "svelte-dnd-action";
-  import { flip } from "svelte/animate";
-  import { cubicOut } from "svelte/easing";
+  import { createVerticalTodoSort } from "../lib/todos/verticalSort.js";
+  import { applyTodoOrder } from "../lib/todos/order.js";
   import { appState } from "../lib/appState.svelte.js";
   import { editable } from "../lib/editable.js";
   import { Check, Plus, Trash2, GripVertical } from "lucide-svelte";
   import clsx from "clsx";
-  import { flushSync, onMount } from "svelte";
+  import { onMount } from "svelte";
   import Icon from "@iconify/svelte";
   import { CALENDAR_BOLD_DUOTONE } from "../lib/icons.js";
   import { daysUntil } from "../lib/dateUtils.js";
@@ -60,6 +59,7 @@
   onMount(() => {
     // 처음 누를 때 창을 만드느라 늦지 않게, 한가할 때 달력 창을 미리 만들어 둡니다.
     datePicker.schedulePrewarm();
+    return () => todoSorter.destroy();
   });
 
   // ✨ [TCREI: Composition-Safe] 플레이스홀더는 CSS :empty 기반으로 처리합니다.
@@ -113,39 +113,36 @@
     return { label, color, bg, borderColor };
   }
 
-  const flipDurationMs = 300;
-  let dragDisabled = $state(true);
-
-  function dragHandle(node) {
-    function handleDown(e) {
-      flushSync(() => { dragDisabled = false; });
-    }
-    node.addEventListener('mousedown', handleDown);
-    node.addEventListener('touchstart', handleDown, { passive: true });
-    return {
-      destroy() {
-        node.removeEventListener('mousedown', handleDown);
-        node.removeEventListener('touchstart', handleDown);
-      }
-    };
-  }
+  // 이동 중 순서는 저장 상태와 분리합니다. 다른 입력의 자동 저장에도 임시 순서가 섞이지 않습니다.
+  let previewOrder = $state(null);
+  let sortDisabled = $derived(!!appState.searchQuery || appState.isUpdateFrozen);
+  let visibleTodos = $derived.by(() => {
+    if (!previewOrder) return appState.filteredTodos;
+    const byId = new Map(appState.todos.map(todo => [todo.id, todo]));
+    return previewOrder.map(id => byId.get(id)).filter(Boolean);
+  });
+  const todoSorter = createVerticalTodoSort({
+    getIds: () => appState.todos.map(todo => todo.id),
+    isDisabled: () => sortDisabled,
+    onpreview: ids => { previewOrder = ids; },
+    oncommit: (initial, next) => {
+      const reordered = applyTodoOrder(appState.todos, initial, next);
+      if (reordered) appState.reorderTodos(reordered);
+    },
+  });
+  $effect(() => todoSorter.sync());
 
   let currentFontFamily = $derived(
     appState.allFonts.find((f) => f.name === appState.fontFamily)?.family || '"Gulim", sans-serif'
   );
 
-  function handleDndConsider(e) {
-    if (appState.searchQuery) return;
-    // 드래그 도중에는 화면 순서만 바꾸고 저장하지 않습니다.
-    // 왜: 칸을 지날 때마다 저장하면 드래그 한 번에 수십 번 디스크에 쓰고,
-    //     되돌리기 기록이 중간 상태로 가득 차며, 드래그용 임시 항목까지 저장될 수 있습니다.
-    //     최종 순서는 놓는 순간(finalize)에 한 번만 저장합니다.
-    appState.todos = e.detail.items;
-  }
-  function handleDndFinalize(e) {
-    if (appState.searchQuery) return;
-    appState.reorderTodos(e.detail.items);
-    dragDisabled = true;
+  // 메모 창 세로 배치(layout/memoLayoutController.js)가 "할 일 목록이 모두 보이는 높이"를 잴 때 부릅니다.
+  // 목록이 보이는 칸(viewport)과 목록 전체(content)의 차이만큼 할 일 영역에 빈 곳/가려진 곳이 있습니다.
+  let listViewportEl = $state(null);
+  let listContentEl = $state(null);
+  export function measureLayout() {
+    if (!listViewportEl || !listContentEl) return null;
+    return { viewport: listViewportEl.clientHeight, content: listContentEl.offsetHeight };
   }
 
   function handleAddSubmit(e) {
@@ -162,21 +159,15 @@
 
 <div class="flex flex-col h-full pl-3 pr-3 pt-1">
   <div
+    bind:this={listViewportEl}
     class="flex-1 overflow-y-auto overflow-x-hidden min-h-0 border-t"
     style="border-color: {appState.isDarkMode ? 'rgba(255,255,255,0.06)' : 'rgba(120,80,20,0.1)'};"
   >
     <section
-      use:dndzone={{ 
-        items: appState.filteredTodos, 
-        flipDurationMs, 
-        dropTargetStyle: { outline: 'none' },
-        dragDisabled
-      }}
-      onconsider={handleDndConsider}
-      onfinalize={handleDndFinalize}
+      bind:this={listContentEl}
       class="todo-rows min-h-[50px]"
     >
-      {#each appState.filteredTodos as todo (todo.id)}
+      {#each visibleTodos as todo, index (todo.id)}
         {@const dlInfo = getDeadlineInfo(todo.deadline)}
 
         <!--
@@ -186,17 +177,11 @@
             높이는 즉시 반영하고 색상만 부드럽게 바꿉니다.
         -->
         <div
-          animate:flip={{ duration: flipDurationMs, easing: cubicOut }}
+          use:todoSorter.row={{ id: todo.id, index, disabled: sortDisabled }}
+          data-todo-id={todo.id}
           class="todo-row w-full min-w-full group flex items-start gap-1 px-1 transition-colors duration-200 {appState.isDarkMode ? 'hover:bg-white/5' : 'hover:bg-black/5'}"
           style="border-bottom-color: {appState.isDarkMode ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.06)'};"
         >
-          <div
-            use:dragHandle
-            class="todo-lead w-[18px] justify-center opacity-0 group-hover:opacity-40 hover:!opacity-100 transition-opacity cursor-grab active:cursor-grabbing pl-0.5 text-gray-400"
-          >
-            <GripVertical size={13} strokeWidth={2.5} />
-          </div>
-
           <div class="todo-lead gap-1.5 ml-0.5">
             {#if appState.isEditMode}
               <button
@@ -244,7 +229,7 @@
                 border-color: {dlInfo.borderColor};
                 min-width: 3.5em;
                 font-family: var(--ui-font-family);
-                font-size: 0.8em;
+                font-size: calc(var(--global-font-size, 10pt) * 0.8);
                 outline: {datePicker.openKey === todoPickerKey(todo.id) ? `2px solid ${appState.getThemeAccentColor()}` : 'none'};
                 outline-offset: 1px;
               "
@@ -276,13 +261,26 @@
             tabindex="0"
           ></div>
 
-          <button
-            onclick={() => appState.deleteTodo(todo.id)}
-            class="todo-lead opacity-0 group-hover:opacity-100 p-1 text-red-400 hover:text-red-500 hover:scale-110 active:scale-95 hover:bg-black/5 rounded transition-all"
-            title="삭제"
-          >
-            <Trash2 size={13} />
-          </button>
+          <div class="todo-actions todo-lead">
+            <button
+              type="button"
+              disabled={sortDisabled}
+              class="todo-drag-handle todo-lead justify-center text-gray-400 rounded cursor-grab active:cursor-grabbing"
+              title={sortDisabled ? '검색·업데이트 중에는 순서를 변경할 수 없습니다' : '위아래로 끌어서 순서 변경 (키보드: 스페이스 → ↑↓ → 스페이스)'}
+              aria-label="끌어서 순서 변경"
+            >
+              <GripVertical size={13} strokeWidth={2.5} />
+            </button>
+
+            <button
+              type="button"
+              onclick={() => appState.deleteTodo(todo.id)}
+              class="todo-lead p-1 text-red-400 hover:text-red-500 hover:scale-110 active:scale-95 hover:bg-black/5 rounded transition-all"
+              title="삭제"
+            >
+              <Trash2 size={13} />
+            </button>
+          </div>
         </div>
       {/each}
     </section>
@@ -301,7 +299,7 @@
           onSelect: (v) => { newTaskDeadline = v; },
           focusAfter: () => newTaskInputEl,
         }}
-        class="min-w-[28px] h-[28px] px-[0.4em] flex items-center justify-center rounded-lg border transition-all hover:scale-105 active:scale-95 relative whitespace-nowrap"
+        class="todo-date-button min-w-[28px] px-[0.4em] flex items-center justify-center rounded-lg border transition-all hover:scale-105 active:scale-95 relative whitespace-nowrap"
         style="
           background-color: {formDlInfo.bg};
           border-color: {formDlInfo.borderColor};
@@ -314,7 +312,7 @@
         aria-expanded={datePicker.openKey === NEW_TASK_PICKER_KEY}
       >
         {#if newTaskDeadline}
-          <span class="font-bold leading-none" style="font-size: 0.8em;">
+          <span class="font-bold leading-none" style="font-size: calc(var(--global-font-size, 10pt) * 0.8);">
             {formatShortDate(newTaskDeadline)}
           </span>
         {:else}
@@ -356,6 +354,8 @@
 </div>
 
 <style>
+  /* 입력줄의 달력도 글자 높이를 따라가되, 여백은 고정해 확대 때 줄만 두꺼워지지 않게 합니다. */
+  .todo-date-button { min-height: 28px; padding-block: 4px; line-height: 1.4; }
   /* ── 할 일 한 줄(행) 레이아웃 ─────────────────────────────────────
      왜 공책 밑줄을 배경 그라디언트에서 행 테두리로 바꿨는가:
        예전에는 36px 간격의 고정 그라디언트로 밑줄을 그렸습니다.
@@ -388,6 +388,51 @@
     flex-shrink: 0;
   }
 
+  /* 왼쪽 손잡이 칸을 오른쪽 버튼 묶음으로 옮깁니다. 손잡이 폭(18px)·삭제 여백은
+     그대로 두고 묶음 안 간격만 없애, 본문이 기존보다 좁아지지 않게 합니다.
+     표시할 때 폭·높이를 바꾸면 편집 중 줄바꿈이 흔들리므로 투명도만 바꿉니다. */
+  .todo-actions {
+    opacity: 0;
+    transition: opacity 150ms ease;
+  }
+
+  .todo-row:hover .todo-actions,
+  .todo-row:focus-within .todo-actions {
+    opacity: 1;
+  }
+
+  /* 잡은 행은 폭·줄바꿈을 유지하고 색과 그림자로만 구분합니다. */
+  .todo-row:global([data-dnd-dragging]) {
+    width: var(--todo-sort-width) !important;
+    min-width: var(--todo-sort-width) !important;
+    max-width: var(--todo-sort-width) !important;
+    left: var(--todo-sort-left) !important;
+    background-color: var(--global-theme-color);
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.13);
+  }
+
+  .todo-row:global([data-dnd-dragging]) .todo-actions { opacity: 1; }
+
+  .todo-drag-handle {
+    width: 18px;
+    padding: 0;
+    touch-action: none;
+    opacity: 0.55;
+    transition: opacity 150ms ease;
+  }
+
+  .todo-drag-handle:disabled { cursor: default; opacity: 0.25; }
+
+  .todo-drag-handle:hover,
+  .todo-drag-handle:focus-visible {
+    opacity: 1;
+  }
+
+  /* 마우스를 올릴 수 없는 환경에서도 이동·삭제를 찾을 수 있게 합니다. */
+  @media (hover: none) {
+    .todo-actions { opacity: 1; }
+  }
+
   .todo-text {
     line-height: 1.55;
     padding-top: var(--todo-pad-y);
@@ -410,8 +455,9 @@
     opacity: 0.4;
     pointer-events: none;
     position: absolute;
-    left: 0.625rem;
-    top: 5px;
+    left: 7px;
+    top: 50%;
+    transform: translateY(-50%);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;

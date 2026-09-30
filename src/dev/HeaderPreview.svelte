@@ -15,12 +15,34 @@
   const captureScale = params.has("capture-3x") ? 3 : 1;
   /** @type {{command: string, args?: unknown}[]} */
   const calls = [];
+  // 설정 창 미리보기(?header-preview&settings)용 흉내: 자동 실행 등록 상태와 데이터 초기화.
+  //   &autostart-off   등록이 꺼진 상태에서 시작
+  //   &autostart-fail  등록 변경이 실패하는 경우
+  //   &wipe-busy       데이터 초기화가 "종료·업데이트 중"으로 거절되는 경우 (없으면 "지우는 중" 화면에 머묾)
+  let autostartEnabled = !params.has('autostart-off');
   mockIPC((command, args) => {
     calls.push({ command, args });
     if (command.endsWith('get_all_webviews') || command.endsWith('get_all_windows')) return [];
     if (command.endsWith('is_fullscreen') || command.endsWith('is_maximized')) return false;
+    if (command === 'plugin:autostart|is_enabled') return autostartEnabled;
+    if (command === 'plugin:autostart|enable' || command === 'plugin:autostart|disable') {
+      if (params.has('autostart-fail')) throw new Error('registry');
+      autostartEnabled = command.endsWith('enable');
+      return null;
+    }
+    if (command === 'factory_reset') {
+      if (params.has('wipe-busy')) throw 'BUSY';
+      return new Promise(() => {});
+    }
     return null;
   }, { shouldMockEvents: true });
+  // 흉내 도구는 emitTo(특정 창에 보내기)를 조용히 삼킵니다. 검수에서 확인할 수 있게 호출만 기록해 둡니다.
+  const internals = /** @type {any} */ (window).__TAURI_INTERNALS__;
+  const mockedInvoke = internals.invoke;
+  internals.invoke = (/** @type {string} */ command, /** @type {unknown} */ args, /** @type {unknown} */ options) => {
+    if (command === 'plugin:event|emit_to') calls.push({ command, args });
+    return mockedInvoke(command, args, options);
+  };
   mockWindows('main');
   appState.save = async () => {};
   appState.saveNow = async () => {};
@@ -36,7 +58,13 @@
   appState.notes = '샘플 메모';
   listen('req-set-header-design', (event) => applyHeaderDesignChoice(appState, event.payload, 'main'));
   listen('req-apply-settings', (event) => { appState.showReminders = event.payload.showReminders; if (event.payload.headerDesign) appState.headerDesign = event.payload.headerDesign; });
-  Object.assign(window, { __headerQA: { appState, calls } });
+  // 설정 창이 메모 창에 보내는 요청을 기록해 검수 스크립트(scripts/qa-settings.cjs)가 확인합니다.
+  /** @type {{name: string, payload: unknown}[]} */
+  const events = [];
+  for (const name of ['req-apply-settings', 'req-reset-config', 'req-set-header-design', 'req-add-custom-font']) {
+    listen(name, (event) => { events.push({ name, payload: event.payload }); });
+  }
+  Object.assign(window, { __headerQA: { appState, calls, events } });
   let theme = $derived(getTidyTheme(appState.themeColor)?.tidy || { bg: '#fdfaf3', section: '#f4ebce' });
 </script>
 

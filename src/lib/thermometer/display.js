@@ -4,10 +4,13 @@ export function normalizeDisplay(raw) {
   const bool = (key, fallback) => typeof raw?.[key] === 'boolean' ? raw[key] : fallback;
   const g = raw?.geometry;
   return {
+    // "Tidy Task와 함께 열기" — 켜면 다음 실행 때 다시 뜨고, 위치·크기도 기억합니다(토글 하나, savedGeometry).
+    // 예전의 따로 있던 rememberPosition 값은 더 읽지 않습니다.
     autoOpen: bool('autoOpen', false),
+    // 앱 전체의 "컴퓨터를 켜면 자동 실행" 선택. 미니 온도계는 이 값을 쓰지도 보여 주지도 않고,
+    // 설정 창(src/lib/autostart.js)이 같은 구역에 적으므로 다른 값을 저장할 때 지워지지 않게 그대로 실어 나릅니다.
     windowsStart: typeof raw?.windowsStart === 'boolean' ? raw.windowsStart : null,
     alwaysOnTop: bool('alwaysOnTop', true),
-    rememberPosition: bool('rememberPosition', true),
     showToday: bool('showToday', true),
     showUpcoming: bool('showUpcoming', true),
     setKey: typeof raw?.setKey === 'string' ? raw.setKey : '',
@@ -17,7 +20,14 @@ export function normalizeDisplay(raw) {
   };
 }
 
-/** 미니 온도계 창이 실제로 보여 주는 반 — ThermometerDisplay.svelte와 같은 규칙이어야 토글 상태가 화면과 맞습니다.
+/** 미니 창을 열 때 되돌릴 위치·크기. "함께 열기"를 켠 동안에만 기억합니다 — 꺼 두면 늘 기본 자리에서 뜹니다.
+ * 왜 한 토글인가: "다시 뜨게"와 "그 자리에"는 늘 같이 쓰는 설정이라 둘로 나누면 고를 것만 늘었습니다(사용자 요청 2026-09-30).
+ * @param {ReturnType<typeof normalizeDisplay>} prefs */
+export function savedGeometry(prefs) {
+  return prefs.autoOpen ? prefs.geometry : null;
+}
+
+/** 미니 온도계 창이 실제로 보여 주는 반— ThermometerDisplay.svelte와 같은 규칙이어야 토글 상태가 화면과 맞습니다.
  * @param {ReturnType<typeof normalizeDisplay>} prefs @param {{ sets: Record<string, unknown>, lastSetKey: string }} data */
 export function displaySetKey(prefs, data) {
   return data.sets[prefs.setKey] ? prefs.setKey : data.lastSetKey;
@@ -34,12 +44,14 @@ export function isInMini(prefs, data, { open, setKey, id }) {
 /** 토글을 켤 때의 미니 설정. 미니 창이 이 반을 보여 주고 있지 않았다면(꺼져 있었거나 다른 반) 누른 온도계 하나만 띄웁니다.
  * 왜: 그때는 이 반의 다른 온도계 토글이 모두 "꺼짐"으로 보였으니, 누르지 않은 것까지 함께 뜨면 토글과 화면이 어긋납니다.
  * 다른 반의 숨김 목록은 건드리지 않습니다(미니 창 설정에서 반을 바꿔 볼 때 그대로 쓰임).
+ * 자동 열기(autoOpen)는 건드리지 않습니다 — 미니 온도계를 띄웠다고 "다음 실행 때도 열기"까지 켜지면 안 되고,
+ * 그 설정은 미니 창 설정에서 직접 누를 때만 바뀝니다(사용자 요청 2026-09-30).
  * @param {ReturnType<typeof normalizeDisplay>} d @param {{ setKey: string, id: string, ids: string[], showingThisSet: boolean }} o */
 export function showInMini(d, { setKey, id, ids, showingThisSet }) {
   const hiddenIds = showingThisSet
     ? d.hiddenIds.filter(x => x !== id)
     : [...d.hiddenIds.filter(x => !ids.includes(x)), ...ids.filter(x => x !== id)];
-  return { ...d, setKey, autoOpen: true, hiddenIds };
+  return { ...d, setKey, hiddenIds };
 }
 
 /** 토글을 끌 때의 미니 설정. 끄고 나서 이 반에 보일 온도계가 하나도 없으면 창을 닫고 다음 실행 자동 열기도 끕니다.

@@ -123,8 +123,9 @@
 @media(max-height:650px){.seat-mini-toggle{min-height:36px}.seat-rearrange-controls .seat-primary,.seat-rearrange-controls .seat-secondary{min-height:38px}}
 
 /* Keep the main action aligned with the other footer controls. */
-.seat-rearrange-primary{min-width:180px;min-height:44px!important;flex-direction:row;padding:8px 16px!important;border:1px solid var(--seat-green)!important;border-radius:9px!important;background:var(--seat-green)!important;color:#fff!important;box-shadow:none!important;font-size:16px!important;font-weight:700!important;line-height:1.25!important}
-.seat-rearrange-primary:hover:not(:disabled){transform:none!important;background:color-mix(in srgb,var(--seat-green) 85%,#183e32)!important;box-shadow:none!important}
+/* 주 버튼은 테마의 action 색을 씁니다. accent는 다크 모드에서 밝은 회색이라 흰 글자가 묻히기 때문입니다. */
+.seat-rearrange-primary{min-width:180px;min-height:44px!important;flex-direction:row;padding:8px 16px!important;border:1px solid color-mix(in srgb,var(--tk-action,#286950) 88%,#000)!important;border-radius:9px!important;background:linear-gradient(180deg,color-mix(in srgb,var(--tk-action,#286950) 90%,#fff),var(--tk-action,#286950))!important;color:var(--tk-on-action,#fff)!important;box-shadow:inset 0 1px 0 #ffffff26,0 2px 6px color-mix(in srgb,var(--tk-action,#286950) 22%,transparent)!important;font-size:16px!important;font-weight:700!important;line-height:1.25!important}
+.seat-rearrange-primary:hover:not(:disabled){transform:none!important;background:color-mix(in srgb,var(--tk-action,#286950) 86%,#000)!important;box-shadow:inset 0 1px 0 #ffffff1a,0 3px 9px color-mix(in srgb,var(--tk-action,#286950) 28%,transparent)!important}
 .seat-mini-toggle{min-height:44px}
 
 /* One compact, bounded card per saved day. */
@@ -265,8 +266,10 @@
 .seat-effect-menu button>span:nth-child(2){display:flex;flex:1;min-width:0;flex-direction:column;align-items:flex-start;gap:2px}.seat-effect-menu b{font-size:14px;line-height:1.2}.seat-effect-menu small{color:#6e796d;font-size:11px;line-height:1.35}
 .seat-effect-check{align-self:center;color:#2f7044;font-size:17px;font-weight:bold;opacity:0}.seat-effect-menu button.active .seat-effect-check{opacity:1}
 .seat-main-actions{display:flex;flex:none;align-items:center;gap:8px;margin-left:8px}
-.seating-app .seat-save-button{min-height:44px;padding:8px 16px;border:1px solid #c5a767;background:#f5e8c9;color:#76551d;font-size:15px;font-weight:700;white-space:nowrap}
-.seating-app .seat-save-button:hover:not(:disabled){border-color:#a58649;background:#ecdcaf}
+/* 저장은 주 버튼(자리 재배치)과 같은 계열의 옅은 색으로 둬 한 묶음으로 보이게 합니다. 고정 금색은 테마와 따로 놀았습니다. */
+.seating-app .seat-save-button{min-height:44px;padding:8px 16px;border:1px solid color-mix(in srgb,var(--tk-action,#286950) 30%,var(--tk-line,#bdcec3));background:var(--tk-soft,#e5f0e9);color:var(--tk-ink,#203b32);font-size:15px;font-weight:700;white-space:nowrap}
+.seating-app .seat-save-button svg{color:var(--tk-accent,#286950)}
+.seating-app .seat-save-button:hover:not(:disabled){border-color:color-mix(in srgb,var(--tk-action,#286950) 55%,var(--tk-line,#bdcec3));background:color-mix(in srgb,var(--tk-action,#286950) 12%,var(--tk-soft,#e5f0e9))}
 .seat-main-actions .seat-rearrange-primary{min-width:145px;padding:8px 13px!important}
 .seat-save-dialog{border:1px solid #c7d8c7;background:#f8fcf6;box-shadow:0 15px 65px #294d322e}
 .seat-save-dialog header{padding-bottom:14px;border-bottom:1px solid #d1dfca;color:#365e3e}

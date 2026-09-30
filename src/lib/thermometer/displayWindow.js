@@ -6,20 +6,20 @@ import { native } from '../toolkit/store.js';
 
 const LABEL = 'thermometer-display';
 
-/** 미니 온도계에 이 온도계를 띄우고 다음 앱 실행에도 다시 엽니다.
+/** 미니 온도계에 이 온도계를 띄웁니다. 다음 앱 실행 때 다시 열지는 여기서 정하지 않습니다(미니 창 설정에서 직접 켭니다).
  * @param {{ setKey: string, id: string, ids: string[], showingThisSet: boolean }} target */
 export async function openThermometerDisplay(target) {
   const client = createSection({ store: 'thermometer', section: 'display', normalize: normalizeDisplay });
   try {
     await client.load();
-    const saved = await client.mutateAndConfirm(d => showInMini(d, target), d => d.autoOpen && d.setKey === target.setKey && !d.hiddenIds.includes(target.id));
+    const saved = await client.mutateAndConfirm(d => showInMini(d, target), d => d.setKey === target.setKey && !d.hiddenIds.includes(target.id));
     if (saved !== 'saved') throw new Error('미니 온도계 설정을 저장하지 못했어요. 다시 시도해 주세요.');
     await openTool(LABEL);
   } finally { client.dispose(); }
 }
 
 /** 미니 온도계에서 이 온도계를 뺍니다. 남는 온도계가 없으면 창을 닫고 자동 열기도 끕니다.
- * @param {{ id: string, ids: string[] }} target */
+ * @param {{ id: string, ids: string[] }} target @returns {Promise<boolean>} 미니 창을 닫았는지 */
 export async function hideFromThermometerDisplay(target) {
   const client = createSection({ store: 'thermometer', section: 'display', normalize: normalizeDisplay });
   let close = false;
@@ -30,6 +30,7 @@ export async function hideFromThermometerDisplay(target) {
   } finally { client.dispose(); }
   // destroy가 아니라 close를 부릅니다 — 미니 창의 닫기 처리기가 위치·크기를 저장한 뒤 스스로 닫게 하려고.
   if (close && native) await (await WebviewWindow.getByLabel(LABEL))?.close();
+  return close;
 }
 
 /** 미니 온도계 창이 떠 있는지 지켜봅니다. 닫히면 곧바로, 새로 뜬 것은 refresh()를 부를 때 알아챕니다.

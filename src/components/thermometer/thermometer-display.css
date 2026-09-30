@@ -5,7 +5,7 @@
 .td-header > svg { color: var(--tk-muted); flex: none; }
 .td-header > strong { font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .td-header > span { font-size: 11px; color: var(--tk-muted); white-space: nowrap; }
-.td-window-actions { display: flex; gap: 2px; margin-left: auto; }
+.td-window-actions { display: flex; flex: none; gap: 2px; margin-left: auto; }
 .td-header button, .td-menu header button, .td-error button { display: grid; place-items: center; flex: none; width: 30px; height: 30px; border: 0; border-radius: 9px; background: transparent; color: var(--tk-muted); cursor: pointer; }
 .td-header button:hover { background: var(--tk-soft); }
 .td-header .td-pin.active { background: color-mix(in srgb, #2f6fd1 11%, var(--tk-panel)); color: light-dark(#2f6fd1, #9bc1ff); }
@@ -13,15 +13,17 @@
 .td-content { display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); flex: 1; min-height: 0; gap: 8px; padding: 0 10px 10px; cursor: grab; }
 .td-content[data-count='2'] { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .td-card { min-width: 0; min-height: 0; border: 0; border-radius: 14px; background: linear-gradient(160deg, color-mix(in srgb, var(--td-accent) 7%, var(--tk-panel)), color-mix(in srgb, var(--td-accent) 2%, var(--tk-panel))); container: mini-card / size; }
-.td-card-inner { height: 100%; display: flex; flex-direction: column; gap: 12px; padding: clamp(12px, 6cqw, 28px); }
+.td-card-inner { height: 100%; display: flex; flex-direction: column; gap: clamp(6px, 2cqh, 12px); padding: clamp(12px, min(6cqw, 4cqh), 28px); }
 .td-label { display: flex; gap: 7px; align-items: center; flex: none; }
-.td-label h2 { margin: 0; font-size: clamp(13px, 6cqw, 22px); line-height: 1.35; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.td-label h2 { min-width: 0; margin: 0; font-size: clamp(13px, min(6cqw, 5.5cqh), 22px); line-height: 1.35; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .td-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--td-accent); flex: none; }
-.td-hero { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex: 1; min-height: 100px; }
-.td-value-block { min-width: 0; }
-.td-reading { display: flex; align-items: baseline; gap: 2px; line-height: 1.1; white-space: nowrap; }
-.td-reading strong { font-size: clamp(18px, calc(23cqw / var(--td-number-scale)), 108px); font-weight: 800; letter-spacing: -.045em; font-variant-numeric: tabular-nums; }
-.td-reading > span { font-size: clamp(14px, 8cqw, 32px); color: var(--td-accent); }
+/* 숫자는 목표·기록을 배치하고 실제로 남은 칸을 기준으로 커집니다.
+   카드 너비만 따라 키우면 넓고 낮은 창에서 이름·조작 안내·목표 패널을 침범합니다. */
+.td-hero { --td-reading-details: 58px; display: flex; align-items: center; justify-content: space-between; gap: 8px; flex: 1; min-height: 114px; container: mini-reading / size; }
+.td-value-block { min-width: 0; flex: 1; }
+.td-reading { display: flex; align-items: baseline; gap: 2px; font-size: clamp(17px, min(calc(26cqw / var(--td-number-scale)), calc((100cqh - var(--td-reading-details)) / 1.1)), 108px); line-height: 1.1; white-space: nowrap; }
+.td-reading strong { font-size: 1em; font-weight: 800; letter-spacing: -.045em; font-variant-numeric: tabular-nums; }
+.td-reading > span { flex: none; font-size: clamp(13px, .3em, 32px); color: var(--td-accent); }
 .td-maximum { margin-top: 6px; font-size: clamp(10px, 4.5cqw, 14px); color: var(--tk-muted); }
 .td-step-note { margin-top: 16px; font-size: 10px; color: var(--tk-muted); }
 .td-instrument { display: flex; flex-direction: column; align-items: center; align-self: stretch; justify-content: center; gap: 7px; width: 44px; flex: none; cursor: default; }
@@ -40,9 +42,9 @@
 .td-goal-caption { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 3px; color: var(--td-accent); }
 .td-goal-caption small { font-size: 11px; font-weight: 700; }
 .td-goal-caption > span { font-size: 10px; }
-.td-goal > strong { display: flex; align-items: baseline; gap: 6px; min-width: 0; font-size: clamp(13px, 6cqw, 24px); line-height: 1.35; }
+.td-goal > strong { display: flex; align-items: baseline; gap: 6px; min-width: 0; font-size: clamp(13px, min(6cqw, 5cqh), 24px); line-height: 1.35; }
 .td-goal b { flex: none; color: var(--td-accent); }
-.td-goal strong > span { overflow: hidden; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow-wrap: anywhere; }
+.td-goal strong > span { min-width: 0; overflow: hidden; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow-wrap: anywhere; }
 .td-upcoming, .td-today { display: flex; align-items: baseline; gap: 6px; flex: none; min-width: 0; font-size: 11px; }
 .td-upcoming > span, .td-today > span { flex: none; color: var(--tk-muted); font-size: 10px; }
 .td-upcoming { min-height: 17px; }
@@ -58,21 +60,87 @@
 .td-empty small { display: block; margin: 8px 0; }
 .td-empty button { border: 0; border-radius: 8px; padding: 8px; margin: 3px; background: var(--tk-soft); color: var(--tk-ink); cursor: pointer; }
 .td-dismiss { position: fixed; inset: 0; z-index: 20; border: 0; background: #0002; }
-.td-menu { position: fixed; z-index: 21; width: min(320px, calc(100vw - 16px)); max-height: calc(100dvh - 16px); overflow-y: auto; padding: 8px; border: 1px solid var(--tk-line); border-radius: 14px; background: var(--tk-panel); box-shadow: 0 12px 36px #0003; color: var(--tk-ink); }
-.td-menu header { display: flex; align-items: center; padding: 2px 6px 6px; }
-.td-menu header strong { font-size: 15px; }
-.td-menu-group { display: grid; gap: 2px; padding: 8px 0; border-top: 1px solid var(--tk-line); }
-.td-menu-group > small { padding: 4px 8px; color: var(--tk-muted); font-size: 11px; }
-.td-menu-group > button, .td-open-editor { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 36px; width: 100%; padding: 8px; border: 0; border-radius: 7px; text-align: left; background: transparent; color: var(--tk-ink); font-size: 13px; }
-.td-menu button:hover, .td-menu button:focus-visible { background: var(--tk-soft); }
-.td-menu button[aria-checked='true'] > svg, .td-menu button[aria-checked='true'] > b { color: light-dark(#2f6fd1, #9bc1ff); }
-.td-menu button > b { font-size: 11px; color: var(--tk-muted); }
-.td-menu button small { display: block; margin-top: 4px; font-size: 10px; color: var(--tk-muted); }
-.td-menu label { display: flex; align-items: center; gap: 12px; padding: 6px 8px; font-size: 12px; }
-.td-menu select { flex: 1; min-width: 0; padding: 6px; background: var(--tk-bg); color: var(--tk-ink); border: 1px solid var(--tk-line); border-radius: 6px; }
-.td-menu-note { padding: 0 8px; color: var(--tk-muted); font-size: 11px; line-height: 1.6; }
+/* 설정 패널 — [보여 줄 온도계: 얼굴 딱지 + 칩] · [창: 스위치 줄] · [맨 아래 동작 버튼].
+   관리 창과 같은 말씨(점무늬 바탕, 1.5px 테두리, 아래쪽 받침 그림자, 알약 모양)로 맞춥니다.
+   색은 툴킷 테마 변수만 씁니다. light-dark()는 배포 빌드에서 값이 사라집니다(CLAUDE.md 시계 창 절). */
+.td-menu {
+  position: fixed; z-index: 21; display: grid; gap: 14px; width: min(320px, calc(100vw - 16px)); max-height: calc(100dvh - 16px); overflow-y: auto; scrollbar-width: thin; padding: 12px;
+  border: 1.5px solid color-mix(in srgb, var(--tk-accent) 22%, var(--tk-line)); border-radius: 22px; color: var(--tk-ink);
+  background: radial-gradient(color-mix(in srgb, var(--tk-line) 36%, transparent) 1.1px, transparent 1.6px) 0 0 / 16px 16px, var(--tk-panel);
+  box-shadow: 0 3px 0 color-mix(in srgb, var(--tk-accent) 16%, var(--tk-line)), 0 16px 36px #0003;
+}
+.td-menu > header { display: flex; align-items: center; gap: 8px; padding-left: 2px; }
+.td-menu > header strong { flex: 1; font-size: 15px; font-weight: 800; }
+.td-menu > header button { border-radius: 50%; background: var(--tk-panel); }
+.td-menu > header button:hover { background: var(--tk-soft); }
+.td-mascot { flex: none; }
+.td-set { display: grid; gap: 7px; }
+/* 묶음 이름은 작은 이름표 딱지로 — 점무늬 바탕 위에서도 또렷하게 읽힙니다. */
+.td-set h3 { justify-self: start; margin: 0; padding: 2px 9px; border-radius: 999px; background: color-mix(in srgb, var(--tk-accent) 12%, var(--tk-panel)); color: var(--tk-accent); font-size: 11px; font-weight: 800; line-height: 1.6; }
+.td-class { display: flex; align-items: center; gap: 10px; padding: 6px 8px 6px 12px; border-radius: 14px; background: color-mix(in srgb, var(--tk-soft) 60%, var(--tk-panel)); font-size: 12px; font-weight: 700; color: var(--tk-muted); }
+.td-class select { flex: 1; min-width: 0; height: 30px; padding: 0 8px; border: 1px solid var(--tk-line); border-radius: 10px; background: var(--tk-panel); color: var(--tk-ink); }
+/* 온도계 딱지 — 보이는 중이면 온도계 색으로 물들고 얼굴이 눈을 뜹니다. 숨기면 점선 테두리에 잠든 얼굴. */
+.td-tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 8px; }
+.td-tiles:empty { display: none; }
+.td-tile {
+  position: relative; display: flex; align-items: center; gap: 8px; min-width: 0; min-height: 62px; padding: 8px 26px 8px 10px; text-align: left; color: var(--tk-ink);
+  border: 1.5px solid color-mix(in srgb, var(--td-accent) 40%, var(--tk-line)); border-radius: 16px; background: color-mix(in srgb, var(--td-accent) 10%, var(--tk-panel));
+  box-shadow: 0 2px 0 color-mix(in srgb, var(--td-accent) 26%, var(--tk-line)); transition: background-color 160ms, border-color 160ms, box-shadow 160ms;
+}
+.td-tile:hover { background: color-mix(in srgb, var(--td-accent) 16%, var(--tk-panel)); }
+.td-tile-name { min-width: 0; overflow: hidden; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow-wrap: anywhere; font-size: 13px; font-weight: 800; line-height: 1.3; }
+.td-glyph { flex: none; transition: filter 200ms, opacity 200ms; }
+.td-tile[aria-checked='false'] { border-style: dashed; border-color: color-mix(in srgb, var(--tk-muted) 45%, transparent); background: var(--tk-panel); box-shadow: none; }
+.td-tile[aria-checked='false']:hover { background: color-mix(in srgb, var(--tk-soft) 60%, var(--tk-panel)); }
+.td-tile[aria-checked='false'] .td-tile-name { color: var(--tk-muted); font-weight: 700; }
+.td-tile[aria-checked='false'] .td-glyph { filter: grayscale(1); opacity: .5; }
+/* 체크 동그라미 — 딱지와 칩이 함께 씁니다("고르는 것"은 체크, "켜는 것"은 스위치). 꺼져도 자리는 남겨 너비가 변하지 않습니다. */
+.td-check { display: grid; place-items: center; flex: none; width: 16px; height: 16px; border: 1.5px solid color-mix(in srgb, var(--tk-muted) 55%, transparent); border-radius: 50%; color: var(--tk-panel); }
+.td-check svg { opacity: 0; }
+[aria-checked='true'] > .td-check { border-color: var(--td-accent, var(--tk-accent)); background: var(--td-accent, var(--tk-accent)); animation: td-pop 240ms cubic-bezier(.3, 1.5, .5, 1); }
+[aria-checked='true'] > .td-check svg { opacity: 1; }
+.td-tile .td-check { position: absolute; top: 7px; right: 7px; }
+@keyframes td-pop { from { transform: scale(.5); } to { transform: scale(1); } }
+.td-chips { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding-left: 4px; }
+.td-chips > span { margin-right: auto; font-size: 12px; font-weight: 700; color: var(--tk-muted); }
+.td-chip { display: inline-flex; align-items: center; gap: 5px; height: 30px; padding: 0 11px 0 7px; border: 1.5px solid var(--tk-line); border-radius: 999px; background: var(--tk-panel); color: var(--tk-muted); font-size: 12px; font-weight: 800; transition: background-color 160ms, border-color 160ms, color 160ms; }
+.td-chip:hover { border-color: color-mix(in srgb, var(--tk-accent) 45%, var(--tk-line)); color: var(--tk-ink); }
+.td-chip[aria-checked='true'] { border-color: color-mix(in srgb, var(--tk-accent) 45%, var(--tk-line)); background: color-mix(in srgb, var(--tk-accent) 12%, var(--tk-panel)); color: var(--tk-accent); }
+.td-set-empty { margin: 0; padding: 14px 12px; border: 1.5px dashed color-mix(in srgb, var(--tk-muted) 45%, transparent); border-radius: 16px; background: var(--tk-panel); text-align: center; font-size: 12px; color: var(--tk-muted); }
+/* 스위치 줄 — 줄마다 따로 떨어진 둥근 조각. 왼쪽 색 방울이 글자보다 먼저 "무슨 설정인지"를 알려 줍니다. */
+.td-row { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 46px; padding: 7px 10px 7px 8px; border: 0; border-radius: 16px; background: color-mix(in srgb, var(--tk-soft) 60%, var(--tk-panel)); color: var(--tk-ink); font-size: 13px; font-weight: 700; line-height: 1.35; text-align: left; transition: background-color 160ms; }
+.td-row:hover { background: var(--tk-soft); }
+.td-row-text { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.td-row-text small { display: block; margin-top: 1px; font-size: 11px; font-weight: 500; line-height: 1.45; color: var(--tk-muted); }
+.td-bubble { display: grid; place-items: center; flex: none; width: 30px; height: 30px; border-radius: 11px; color: var(--tk-ink); }
+.td-bubble[data-tone='gold'] { background: color-mix(in srgb, var(--tk-gold) 48%, var(--tk-panel)); }
+.td-bubble[data-tone='peach'] { background: color-mix(in srgb, var(--tk-peach) 62%, var(--tk-panel)); }
+/* 스위치 — 관리 창의 "미니 온도계" 스위치(.th-mini-track)처럼 통통 튀게 움직입니다. 손잡이는 패널 색이라 어두운 화면에서도 켜짐 바탕과 구분됩니다. */
+.td-switch { position: relative; flex: none; width: 34px; height: 20px; border-radius: 999px; background: color-mix(in srgb, var(--tk-muted) 32%, var(--tk-panel)); transition: background-color 180ms; }
+.td-switch i { position: absolute; top: 3px; left: 3px; width: 14px; height: 14px; border-radius: 50%; background: var(--tk-panel); box-shadow: 0 1px 2px rgb(0 0 0 / .28); transition: transform 200ms cubic-bezier(.3, 1.4, .5, 1); }
+[aria-checked='true'] > .td-switch { background: var(--tk-accent); }
+[aria-checked='true'] > .td-switch i { transform: translateX(14px); }
+/* 한 번 하는 동작(가운데로 · 관리 창 열기)은 설정과 섞지 않고 맨 아래 알약 버튼으로 둡니다. */
+.td-actions { display: flex; gap: 8px; }
+.td-actions button { display: inline-flex; flex: 1; align-items: center; justify-content: center; gap: 5px; min-width: 0; height: 36px; padding: 0 10px; border: 1.5px solid var(--tk-line); border-radius: 999px; background: var(--tk-panel); color: var(--tk-ink); font-size: 12.5px; font-weight: 800; white-space: nowrap; box-shadow: 0 2px 0 var(--tk-line); }
+.td-actions button:hover { background: var(--tk-soft); }
+.td-actions .td-action-main { border-color: color-mix(in srgb, var(--tk-accent) 40%, var(--tk-line)); background: color-mix(in srgb, var(--tk-accent) 12%, var(--tk-panel)); color: var(--tk-accent); box-shadow: 0 2px 0 color-mix(in srgb, var(--tk-accent) 26%, var(--tk-line)); }
+.td-actions .td-action-main:hover { background: color-mix(in srgb, var(--tk-accent) 20%, var(--tk-panel)); }
+/* 패널 너비는 min(320px, 창 너비 − 16px)입니다. 창이 그보다 좁으면 "함께 보기" 글자를 빼고 칩 둘이 한 줄을 나눠 씁니다(안 그러면 칩 하나만 아랫줄로 떨어짐). */
+@media (width < 336px) {
+  /* 딱지는 두 칸을 지키고(한 줄씩 쌓으면 패널이 길어짐) 얼굴을 이름 위로 올립니다. */
+  .td-tiles { grid-template-columns: repeat(auto-fit, minmax(100px, 1fr)); }
+  .td-tile { flex-direction: column; justify-content: center; gap: 4px; padding: 9px 8px 8px; text-align: center; }
+  .td-chips { padding-left: 0; }
+  .td-chips > span { display: none; }
+  .td-chip { flex: 1; justify-content: center; padding: 0 6px; }
+  .td-actions button { padding: 0 6px; font-size: 12px; }
+}
 .td-error { position: absolute; bottom: 14px; left: 14px; right: 14px; display: flex; align-items: center; padding: 10px; background: var(--tk-panel); border: 1px solid #c53740; border-radius: 10px; font-size: 12px; }
 .td-resize { position: absolute; z-index: 10; width: 12px; height: 12px; }
+/* 투명 여백(6px)을 포함한 실제 창 위쪽 테두리를 잡을 수 있게 뷰포트에 붙입니다.
+   모서리 손잡이는 그대로 두고 제목 줄 버튼·창 이동 영역과 겹치지 않습니다. */
+.td-resize[data-direction='North'] { position: fixed; top: 0; left: 18px; right: 18px; width: auto; height: 12px; cursor: ns-resize; }
 .td-resize[data-direction='NorthWest'] { top: 0; left: 0; cursor: nwse-resize; }
 .td-resize[data-direction='NorthEast'] { top: 0; right: 0; cursor: nesw-resize; }
 .td-resize[data-direction='SouthWest'] { bottom: 0; left: 0; cursor: nesw-resize; }
@@ -84,26 +152,37 @@
   .td-card-inner { padding: 10px; gap: 9px; }
   .td-hero { gap: 2px; }
   .td-instrument { width: 32px; }
+  .td-glass { width: 32px; }
   .td-adjust { width: 28px; height: 28px; border-radius: 8px; }
-  .td-reading strong { font-size: clamp(17px, calc(21cqw / var(--td-number-scale)), 38px); }
+  .td-hero { --td-reading-details: 21px; }
   .td-step-note { display: none; }
   .td-goal { padding: 8px; gap: 4px; }
   .td-goal-caption > span { font-size: 9px; }
   .td-goal strong { gap: 4px; font-size: 12px; }
   .td-card-foot { flex-wrap: wrap; }
 }
-@container mini-card (height < 320px) {
+@container mini-card (height < 380px) {
   .td-card-inner { gap: 8px; padding: 12px; }
   .td-step-note, .td-card-foot, .td-upcoming { display: none; }
-  .td-hero { min-height: 80px; }
-  .td-goal { padding: 8px; min-height: 64px; }
+  .td-hero { --td-reading-details: 27px; min-height: 96px; }
+  .td-instrument { gap: 4px; }
+  .td-adjust { height: 28px; }
+  .td-glass { min-height: 32px; }
+  .td-goal { padding: 8px; gap: 4px; min-height: 64px; }
+}
+@container mini-card (height < 300px) {
+  .td-today { display: none; }
+}
+/* 좁은 카드에서는 누적 변화가 여러 줄이 됩니다. 도장 줄이 카드 밖으로 밀리지 않게 여유 높이가 있을 때만 보입니다. */
+@container mini-card (width < 175px) and (height < 420px) {
+  .td-card-foot { display: none; }
 }
 @container mini-card (height < 230px) {
-  .td-card-inner { padding: 8px; gap: 5px; }
+  .td-card-inner { padding: 8px; gap: 4px; }
   .td-today, .td-maximum { display: none; }
   .td-label h2 { font-size: 12px; }
   .td-label { gap: 4px; }
-  .td-hero { min-height: 66px; }
+  .td-hero { --td-reading-details: 0px; min-height: 80px; }
   .td-instrument { gap: 2px; width: 28px; }
   .td-adjust { width: 26px; height: 24px; border-radius: 7px; }
   .td-adjust svg { width: 15px; height: 15px; }
@@ -111,7 +190,7 @@
   .td-stem { left: 8px; width: 12px; bottom: 11px; }
   .td-liquid { left: 2px; right: 2px; }
   .td-bulb { left: 3px; width: 22px; height: 22px; border-width: 4px; }
-  .td-reading strong { font-size: clamp(17px, calc(20cqw / var(--td-number-scale)), 48px); }
+  .td-reading { font-size: clamp(17px, min(calc(24cqw / var(--td-number-scale)), calc(100cqh / 1.1)), 48px); }
   .td-reading > span { font-size: 13px; }
   .td-goal { gap: 2px; padding: 5px 6px; min-height: 38px; }
   .td-goal-caption small { font-size: 10px; }
@@ -119,4 +198,4 @@
   .td-goal > strong { font-size: 12px; }
   .td-goal strong > span { -webkit-line-clamp: 1; }
 }
-@media (prefers-reduced-motion: reduce) { .td-liquid, .td-adjust { transition: none; } }
+@media (prefers-reduced-motion: reduce) { .td-liquid, .td-adjust, .td-switch, .td-switch i, .td-chip, .td-tile, .td-glyph, .td-row { transition: none; } .td-check { animation: none !important; } }

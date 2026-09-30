@@ -4,7 +4,8 @@ import { PLATFORM_TOOLS } from './registry.js';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { WebviewWindow } from '@tauri-apps/api/webviewWindow';
 import { PhysicalPosition, PhysicalSize, LogicalSize } from '@tauri-apps/api/dpi';
-import { native } from './store.js';
+import { native, readSettings } from './store.js';
+import { moreTools } from './moreTools.js';
 import { getMonitorGeometries, ensureWindowOnScreen } from '../windows/windowRegistry.js';
 import { menuPlacement } from './menuPlacement.js';
 import { fitToolbarPosition, centerToolbarPosition } from './toolbarPlacement.js';
@@ -62,10 +63,15 @@ export async function showToolkitMenu(trigger, kind, entryCount) {
     await visibleMenu.hide();
     return true;
   }
-  const logicalHeight =
+  let logicalHeight =
     kind === 'external' && typeof entryCount === 'number' && Number.isFinite(entryCount)
       ? 66 + Math.max(1, entryCount) * 48
       : definition.height;
+  if (kind === 'more') {
+    // 첫 표시부터 항목 수에 맞추고, 글꼴·줄바꿈·하위 목록의 실제 높이는 메뉴에서 다시 잽니다.
+    const count = moreTools((await readSettings()).toolkit).length;
+    logicalHeight = count ? 88 + count * 46 : 163;
+  }
   const rect = trigger.getBoundingClientRect();
   await placeMenu(definition, logicalHeight, { left: rect.left, top: rect.top, bottom: rect.bottom }, 6);
   return true;
@@ -114,6 +120,27 @@ export async function applyMenuPlacement(menu, placement) {
   for (let pass = 0; pass < 2; pass++) {
     await menu.setPosition(new PhysicalPosition(placement.x, placement.y));
     await menu.setSize(new PhysicalSize(placement.width, placement.height));
+  }
+}
+/** 더보기의 실제 내용 높이를 창에 반영합니다. 화면보다 길면 기존 배치 규칙으로 제한해 스크롤합니다.
+ * @param {number} logicalHeight */
+export async function fitMoreMenu(logicalHeight) {
+  if (!native || !Number.isFinite(logicalHeight) || logicalHeight <= 0) return;
+  const win = getCurrentWindow();
+  const [pos, size, monitors, toolbar] = await Promise.all([
+    win.outerPosition(), win.outerSize(), getMonitorGeometries(), WebviewWindow.getByLabel('toolkit'),
+  ]);
+  const point = { x: pos.x + size.width / 2, y: pos.y + size.height / 2 };
+  const placement = menuPlacement({ point, position: pos, size: { ...MENU_WINDOWS.more, height: logicalHeight }, monitors });
+  if (!placement) return;
+  // 툴바 위로 열린 메뉴는 아래 끝을 유지해야 하위 목록을 열어도 버튼에서 멀어지지 않습니다.
+  if (toolbar && pos.y + size.height <= (await toolbar.outerPosition()).y) {
+    const above = menuPlacement({ point, position: { x: pos.x, y: pos.y + size.height - placement.height },
+      size: { ...MENU_WINDOWS.more, height: logicalHeight }, monitors });
+    if (above) placement.y = above.y;
+  }
+  if (pos.x !== placement.x || pos.y !== placement.y || size.width !== placement.width || size.height !== placement.height) {
+    await applyMenuPlacement(win, placement);
   }
 }
 /** 관리 패널을 이동한 화면의 크기와 배율로 다시 맞춥니다.

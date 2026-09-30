@@ -3164,8 +3164,10 @@
 .toolkit-menu:not(.context-menu) { overflow-y:auto; }
 
 .toolkit-more .toolkit-tool-icon { color: var(--tk-muted); }
-.toolkit-preview-menu:has(.more-menu) { left:auto; right:7px; width:264px; }
-.toolkit-preview-menu .more-menu { max-height:min(474px, calc(100vh - 120px)); }
+/* 더보기는 항목 높이만큼만 채우고, 작은 창에서는 전체 목록을 스크롤해 접근합니다. */
+.toolkit-menu.more-menu { height:auto; max-height:calc(100dvh - 6px); overflow-x:hidden; }
+.toolkit-preview-menu:has(.more-menu) { left:auto; right:7px; width:min(264px, calc(100vw - 14px)); }
+.toolkit-preview-menu .more-menu { max-height:calc(100dvh - 120px); }
 .more-description, .more-empty { margin:4px 10px 12px; color:var(--tk-muted); font-size:12px; line-height:1.6; }
 .more-empty { padding:20px 0; }
 .toolkit-menu.more-menu button:nth-of-type(n) .menu-icon { background:var(--tk-bg); color:var(--tk-ink); }

@@ -45,7 +45,10 @@
 | `src/lib/windows/windowPlacement.js` | 창 위치 복원 규칙 — 저장 좌표 해석, 제목줄이 화면 안에 보이는지 판정, 화면 밖 보정 |
 | `src/lib/windows/popupPlacement.js` | **버튼 옆 팝업 창 배치 규칙** — 아래 우선 → 위 → 옆 → 겹침, 작업영역 안으로 보정, 목표 모니터 배율로 크기 환산 |
 | `src/lib/windows/windowDrag.js` | 창 머리를 잡고 끌어 옮기는 공용 액션 (몇 px 움직인 뒤 `startDragging`, 끌기 뒤 click 무시) |
+| `src/lib/layout/memoLayout.js` | **메모 창 세로 배치 규칙**(할 일·마감된 일·중요한 일 메모 높이, 테두리 판별, 창 최소 높이, 스플리터)의 단일 원천 — 순수 함수 + 불변식 테스트 |
+| `src/lib/layout/memoLayoutController.js`, `src/components/MemoBody.svelte` | 위 규칙을 DOM·Tauri 창 이벤트에 잇는 컨트롤러와, 그 짝인 몸통 마크업(할 일·스플리터·마감된 일·메모) |
 | `src/lib/datePicker/` | 마감일 달력 — 날짜 계산(`calendarModel`), 창 사이 약속·검증(`protocol`), 테마 색(`palette`), 요청 창 쪽 창구(`datePickerClient.svelte.js`) |
+| `src/lib/todos/` | 할 일 세로 재정렬 — dnd kit 좌표·충돌·애니메이션 연결(`verticalSort`), 전체 ID 순열과 변경 충돌 검증(`order`). 이동 중 순서는 컴포넌트의 임시 상태로만 관리하고 확정할 때 한 번 저장합니다 |
 | `src-tauri/src/app_update.rs` | 앱 안 자동 업데이트 — latest.json·서명 확인, 모든 창 저장 확인(응답), 업데이트 직전 사본, 설치 프로그램 실행 |
 | `scripts/release-build.mjs`, `release-verify.mjs` | `npm run release`(점검·빌드·서명 확인·올릴 파일 준비), `npm run release:verify`(게시 후 앱과 같은 순서로 확인) |
 | `src/lib/scores/` | 점수판·학급 온도계 공용 — 구역 저장(`section.js`: 바로 반영·충돌 시 다시 읽고 재적용·되돌리기), 저장소 창구(`store.js`), 효과음(`audio.js`), 스프링 움직임(`motion.js`) |
@@ -88,7 +91,7 @@
 
 ## 4. 디자인 시스템 및 UI/UX (Design & UI/UX)
 - **Themes & Fonts:** 15가지 내장 컬러 테마(`src/lib/themes.js`의 공통 레지스트리)와 라이트/다크 모드를 지원합니다. 사용자가 직접 폰트 파일(`.ttf` 등)을 드래그 앤 드롭하여 추가할 수 있는 시스템 폰트 커스터마이징을 지원합니다.
-- **Layout:** 할 일(Todos)과 노트(Notes), 보관함(Archived) 영역의 크기를 사용자가 드래그(Splitter)로 조절할 수 있습니다. 레이아웃 조절 시 화면이 튀는 현상(Jumping bug)을 방지하는 정밀한 로직이 적용되어 있습니다.
+- **Layout:** 할 일(Todos)과 노트(Notes), 보관함(Archived) 영역의 크기를 사용자가 드래그(Splitter)·창 테두리로 조절할 수 있습니다. 규칙은 아래 "메모 창 세로 배치" 절을 따릅니다.
 - **Responsiveness & Smoothness:** 창의 크기와 뷰포트 변화에 따라 즉각적으로 레이아웃이 반응하며, 유리 질감(Glassmorphism) 및 트랜지션 효과를 통해 세련된 사용자 경험을 목표로 합니다.
 
 ## 5. 작업 시 준수해야 할 엄격한 규칙 (Strict Rules & Guidelines)
@@ -101,6 +104,19 @@
 5. **IPC 성능 규칙:** ① 파일을 읽고 쓰는 Rust 명령은 `#[tauri::command(async)]`(또는 `async fn`)로 만듭니다 — 그냥 `#[tauri::command] fn`은 메인(UI) 스레드에서 돌아 쓰는 동안 모든 창이 멈춥니다. ② 파일 바이트는 `Array.from(bytes)`(JSON 숫자 배열, 약 3.6배)로 보내지 말고 `invoke(명령, uint8Array, { headers })` 원본 바이트로 보내고, Rust는 `tauri::ipc::Request`로 받습니다(예비 통로의 숫자 배열도 받기 — `classroom/import.rs`의 `body_bytes`). 돌려줄 때는 `tauri::ipc::Response::new(bytes)`. JSON 본문은 Tauri가 메인 스레드에서 해석합니다(5MB 파일 약 0.2초 멈춤, 2026-09-26 측정).
 
 
+### 메모 창 세로 배치 (할 일 · 마감된 일 · 중요한 일 메모)
+- 높이는 **`src/lib/layout/memoLayout.js` 한 곳**이 정하고, `memoLayoutController.js`가 결과를 DOM에 직접 씁니다(몸통 마크업은 `components/MemoBody.svelte`). 할 일 = 남는 높이(flex 1), 마감된 일 = 내용 높이(목록 최대 5.5줄 + 내부 스크롤), 메모 = 사용자가 고른 높이.
+- 동작 약속 (사용자 요구, 2026-09-30):
+  - **위쪽 테두리·스플리터·최대화/스냅 = hold**: 할 일만 바뀝니다. 할 일이 최소(145px)에 닿은 뒤에만 마감된 일 목록 → 메모 순으로 양보하고, 창을 다시 키우면 정확히 되돌아옵니다(사용자가 고른 메모 높이는 바꾸지 않음). 스플리터는 할 일 최소에서 멈춥니다.
+  - **아래쪽 테두리**: 끌기 시작 때의 배치를 기준으로 계산(끌던 중 되돌리면 원래대로). 줄일 때 메모 빈 곳(글 양 고려) → 할 일 빈 곳 → 메모(최소 = 머리글 + 두 줄) → 할 일(최소) → 마감된 일 목록(머리글은 끝까지 남음). 늘릴 때 가려진 목록·할 일·메모 글을 먼저 보이고 남는 높이는 메모. 끝나면 그 메모 높이를 `notesPaneHeight`로 저장.
+- 지켜야 할 것:
+  - 위/아래 테두리 판별은 **Tauri `onMoved`/`onResized`(물리 좌표)** 로만 합니다(`classifyResize`). `window.screenY`는 WebView2가 늦게 갱신해 위쪽 끌기를 아래쪽으로 오판했습니다(5.6.3의 "요동" 원인).
+  - 프로그램이 창 크기를 바꾸면(setSize·setMinSize·복원·세로 스냅) `memoLayout.markProgrammatic()` 또는 `appState.isProgrammaticResize`로 알려 hold로 처리되게 합니다. 안 그러면 사용자의 아래쪽 끌기로 보고 메모 높이를 바꿉니다.
+  - 영역에 **CSS `min-height`·`max-height`·%·vh로 높이를 다시 정하지 않습니다.** 5.6.3까지 메모 `max-height:240px`(저장값이 넘치면 안 보이는 유령 높이), 보관함 `flex-shrink`·40%·28vh(창 높이에 따라 출렁이고 통째로 사라짐)가 규칙과 싸웠습니다. 메모·마감된 일 칸의 `style`은 고정 문자열로 둡니다(Svelte가 style을 다시 쓰면 컨트롤러가 넣은 높이가 지워짐).
+  - 예전 `notesHeight`는 읽기만 합니다(`notesPaneHeight`가 없을 때 140~240으로 옮겨 씀). `isNotesLocked`·`todoHeight`도 옛 파일 호환용일 뿐 배치에 쓰지 않습니다.
+  - 규칙을 바꾸면 `memoLayout.test.js`의 무작위 불변식 테스트("끌기가 끝나 hold로 돌아가도 배치가 한 픽셀도 바뀌지 않는다")가 통과해야 합니다.
+- 개발 시 `?memo-layout-preview`로 실제 몸통을 창 흉내 상자에 넣고 위·아래 테두리·스플리터 끌기를 확인합니다. 콘솔 `__memoPreview.scenario('bottom-shrink' | 'bottom-roundtrip' | 'top' | 'splitter')`, `.setEventFirst(true)`(창 알림이 화면보다 먼저 오는 순서).
+
 ### 마감일 달력 (날짜 선택 창, `date-picker`)
 - 할 일 뱃지와 새 할 일 입력줄의 달력은 **메모 창 안이 아니라 별도 창**으로 뜹니다. 왜: 메모 창 최소 높이는 210px인데 달력은 약 240~270px이라, 창 안에서는 어디에 놓아도 잘렸습니다.
 - `main.js`가 `date-picker` 라벨을 **가장 먼저** `DatePickerWindow`로 분기합니다. 이 경로에서 App·appState를 실행하지 않습니다(이 라벨로 저장소 키가 생기면 안 됨).
@@ -111,6 +127,20 @@
   - **"초점 잃음" 신호를 그대로 믿고 닫지 않습니다.** Windows가 창을 OS 이동 모드로 넘기면 최상위 창과 웹뷰 자식 창 사이로 초점이 오가며 가짜 신호가 옵니다(그대로 닫으면 달력을 잡는 순간 꺼집니다). 이동 중에는 무시하고, 아니면 70ms·420ms 두 번 `isFocused()`로 되물은 뒤에만 닫습니다.
   - 이동이 끝나면(이동 알림이 0.5초간 없으면) 초점과 키보드 커서를 되살리고, 화면 밖으로 나갔으면 `ensureWindowOnScreen`으로 되돌립니다.
 - 개발 시 `?date-picker-preview`로 카드 모양·키보드·빠른 선택을 브라우저에서 확인합니다(테마·글꼴·크기·값을 바꿔 볼 수 있음).
+
+### 설정 창 (`settings`) · 초기화 · 자동 실행
+- `components/SettingsModal.svelte`는 탭 넷입니다: **모양**(테마+다크 모드 · 상단 디자인 · 보이는 영역) / **글자**(메모 글자 · 화면 글자 · 글꼴 추가) / **동작**(컴퓨터를 켜면 자동 실행 · 알림과 소리 · Tidy 툴킷) / **관리**(새로운 소식 · 앱 업데이트 · 초기화). 묶음 카드는 `components/settings/SettingsPanel.svelte`, 스위치 줄은 `SwitchRow.svelte`. 색은 고른 테마의 강조색(`--st-accent`)을 따르고 글자는 모두 em이라 "UI 글자 크기"에 맞춰 함께 커집니다.
+- 값의 기본값·바뀜 판정·보내는 모양·창 크기는 `src/lib/settings/settingsForm.js` 한 곳입니다. 항목을 추가하면 `SETTINGS_DEFAULTS`·`APPLY_FIELDS`·`FIELD_TABS`·`toApplyPayload`를 함께 고칩니다. 메모 창이 설정 창을 열 때 보내는 값은 `settingsSnapshotFor()`(되돌리기 스냅샷 + 상단 디자인 + 전체 무음)이고, 여는 코드는 `headerWindows.js`의 `handleSettings()` 하나입니다(상단 메뉴·우클릭 메뉴 공용).
+- 적용 시점: "바로 적용" 꼬리표(상단 디자인 · Tidy 툴킷)만 즉시, 나머지는 [반영]. 설정 창은 메모 저장소에 직접 쓰지 않고 `req-apply-settings`·`req-reset-config`로 메모 창에 보냅니다.
+  - 알림·무음은 모든 데이터 창이 `applySharedSettings()`로 함께 받습니다. 매니저만 받으면 다른 창의 다음 저장·매니저 승계 때 옛 값이 돌아옵니다. 창별 모양·글자는 요청한 창만 바꿉니다.
+- **컴퓨터를 켜면 자동 실행**(`src/lib/autostart.js`): 기본 켜짐(사용자 결정 2026-09-30). 실제 등록은 Windows 시작 프로그램, "사용자가 껐다"는 선택은 온도계 저장 파일의 `display.windowsStart`(5.6.x부터 쓰던 자리 — 옮기면 이미 끈 사용자의 선택을 잃습니다). 앱은 시작할 때 `ensureLaunchAtStartup()`으로 "끄지 않았는데 등록이 없으면" 등록합니다. 바꾸는 곳은 설정 창뿐입니다.
+- **설정 초기화**: 설정을 연 메모 창의 모양·글자·창 크기(`req-reset-config`) + 알림·무음(기본값을 `req-apply-settings`로 방송) + 자동 실행(켜짐). 할 일·메모는 건드리지 않습니다.
+- **데이터 초기화**(`src-tauri/src/factory_reset.rs`): 앱 데이터 폴더를 통째로 비우고 다시 시작합니다(메모·백업·툴킷 자료·급식·글꼴·통계 설치 ID 전부). 경고 창 두 번, 두 번째 [모두 지우기]는 3초 뒤에 눌립니다.
+  - 떠 있는 채로 지우지 않습니다. 저장 플러그인이 종료할 때 메모리 내용을 다시 쓰고 SQLite·캐시가 파일을 쥐고 있어 지운 파일이 되살아납니다. `factory_reset` 명령은 표식 파일(`factory-reset.pending`)만 남기고 `request_restart()`하며, 다음 시작의 `setup` **맨 앞**(`run_pending` — 백업 복구 `protect_store_file`보다 먼저)에서 비웁니다.
+  - `defer_startup_windows()`로 기본 창 생성을 미룹니다. Tauri는 원래 사용자 `setup`보다 먼저 창을 만들므로, 미루지 않으면 초기화·백업 복구 전에 JS가 저장소를 읽거나 웹뷰가 캐시를 잠급니다. 초기화·백업 점검·통계 준비 뒤 원래 창 옵션으로 만듭니다.
+  - 표식을 먼저 지우고(못 지우면 아무것도 지우지 않음), 폴더 이름이 앱 식별자이고 링크가 아닐 때만 비웁니다. Windows의 별도 앱 로컬 데이터 폴더(웹뷰 캐시·localStorage)도 함께 비웁니다. 새 저장 파일을 이 두 앱 폴더 밖에 만들면 초기화에서 빠지니 이 절차에 넣으세요.
+  - 창 하나의 내용만 비우는 것은 상단 메뉴의 "모든 내용 초기화"(`HeaderActions.svelte` → `appState.resetContent()`)입니다.
+- 개발 시 `?header-preview&settings`(`&theme=mauve`, `&dark`, `&autostart-off`, `&autostart-fail`, `&wipe-busy`). 검수 스크립트 `scripts/qa-settings.cjs`(Playwright, 캡처는 `output/qa/settings/`), 기록은 `docs/QA-settings.md`.
 
 ### 급식 창
 - `main.js`가 `meal`, `meal-search`, `meal-settings`를 별도 `MealApp`으로 분기합니다. 이 경로에서 메모의 App/appState 효과를 실행하지 않습니다.
@@ -142,6 +172,11 @@
 - 온도계는 처음 1개, 설정 → 기본에서 2개까지. 창 최소 크기는 1개 380×520, 2개 760×520이며 Rust `work_window_size("thermometer")`·`thermometer_pair_size()`와 JS `setToolMinSize`(ThermometerApp) 값이 같아야 합니다.
 - 날짜 규칙: 자동 식힘은 **켠 날부터** 셉니다 — 설정을 바꿀 때 `applySettings(t, patch, today)`가 `lastCooledOn`을 적습니다. `catchUp`(자동 식힘·기한 판정)은 창 열기·초점·10분마다 부르며 여러 번 불러도 결과가 같아야 합니다.
 - 숫자 굴림(`components/scores/RollingNumber.svelte`)은 WAAPI로 직접 움직이고 끝·취소·시간 초과 때 옛 숫자를 반드시 지웁니다. Svelte `{#key}` in/out 전환은 연타·가려진 창에서 잔상이 남았습니다.
+- **미니 온도계**(`thermometer-display`, `ThermometerDisplay.svelte`, 설정은 `display` 구역 · 사용자 요청 2026-09-30):
+  - 관리 창의 "미니 온도계" 스위치는 **창만 띄웁니다**. 다음 실행 때 다시 열기(`autoOpen`)는 미니 창 설정의 "Tidy Task와 함께 열기"를 사용자가 직접 켤 때만 켜집니다(기본 꺼짐, `showInMini`는 `autoOpen`을 건드리지 않음). 새 경로를 만들 때도 저절로 켜지게 하지 마세요.
+  - 같은 토글이 위치·크기 기억까지 맡습니다(`display.js`의 `savedGeometry` — 켠 동안에만 저장·복원). 따로 있던 `rememberPosition`은 없앴습니다.
+  - Windows 시작 프로그램 등록은 미니 온도계가 다루지 않습니다(설정 창 · `src/lib/autostart.js`). 다만 그 선택값이 같은 구역의 `windowsStart`에 있으므로 `normalizeDisplay`에서 이 필드를 빼면 안 됩니다(미니 설정을 저장할 때 지워져 꺼 둔 자동 실행이 다시 켜짐).
+  - 설정 패널은 "고르는 것 = 체크(온도계 딱지 · 칩), 켜는 것 = 스위치, 한 번 하는 동작 = 맨 아래 버튼"으로 나눕니다. 패널 CSS에 `light-dark()`를 쓰지 않습니다(시계 창 절 참고).
 - 개발 시 `?toolkit-preview=scoreboard-personal|scoreboard-group|scoreboard-custom|thermometer|toolkit-scoreboard-menu`, 날짜 흉내 `&thermo-today=2026-09-28`(개발 전용). 미리보기 저장은 localStorage `tidy-scores-preview-v1:<저장소>`입니다. 검수 기록은 `docs/QA-scoreboard.md`.
 
 ### 학급 투표 (툴킷 `vote`, `vote-teacher`)

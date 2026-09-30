@@ -51,7 +51,7 @@ const MAIN = { label: 'main', globalMuteSound: true };
 
 test('필드 표는 5.0.0 저장 키 순서와 개수를 그대로 유지한다', () => {
   // 5.0.5에서 추가된 필드는 항상 "끝에만" 붙입니다 (기존 키 순서 보존).
-  assert.deepEqual(WINDOW_FIELDS.map((f) => f.name), [...Object.keys(FULL_V500), 'windowPhysX', 'windowPhysY', 'headerDesign']);
+  assert.deepEqual(WINDOW_FIELDS.map((f) => f.name), [...Object.keys(FULL_V500), 'windowPhysX', 'windowPhysY', 'headerDesign', 'notesPaneHeight']);
   assert.deepEqual(
     SNAPSHOT_FIELDS,
     ['todos', 'archivedTodos', 'notes', 'themeColor', 'opacity', 'fontFamily', 'uiFontFamily',
@@ -222,4 +222,21 @@ test('상단 디자인은 클래식 기본값이며 새 디자인 선택만 저�
   assert.equal(encoded.headerDesign, 'modern');
   assert.deepEqual(encoded.todos, FULL_V500.todos);
   assert.equal(Object.hasOwn(pickSnapshot(name => restored[name]), 'headerDesign'), false);
+});
+
+test('notesPaneHeight(5.6.4)는 없으면 undefined로 두어 옛 파일 내용이 바뀌지 않고, 값은 그대로 왕복한다', () => {
+  // 옛 데이터: 키가 없으므로 저장해도 JSON에 나타나지 않습니다(위 왕복 테스트와 같은 원리).
+  const legacy = decodeWindowData({ notesHeight: 500 }, MAIN);
+  assert.equal(legacy.notesPaneHeight, undefined);
+  assert.equal(legacy.notesHeight, 500); // 예전 값은 손대지 않습니다(옮기는 규칙은 memoLayout.resolveNotesPreference)
+  assert.equal('notesPaneHeight' in JSON.parse(JSON.stringify(encodeWindowData((name) => legacy[name]))), false);
+
+  // 새 값·경계값은 그대로 왕복합니다. (값 검사는 배치 규칙이 쓸 때 합니다)
+  for (const value of [320, 0, 88.5]) {
+    const d = decodeWindowData({ notesPaneHeight: value }, MAIN);
+    assert.equal(d.notesPaneHeight, value);
+    assert.equal(JSON.parse(JSON.stringify(encodeWindowData((name) => d[name]))).notesPaneHeight, value);
+  }
+  // 되돌리기 대상이 아닙니다(창 배치는 Ctrl+Z로 되돌리지 않음).
+  assert.equal(SNAPSHOT_FIELDS.includes('notesPaneHeight'), false);
 });

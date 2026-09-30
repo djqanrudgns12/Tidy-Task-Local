@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { normalizeDisplay, goalCards, goalPanel, displaySetKey, isInMini, showInMini, hideInMini } from './display.js';
+import { normalizeDisplay, goalCards, goalPanel, displaySetKey, isInMini, showInMini, hideInMini, savedGeometry } from './display.js';
 import { makeThermometer } from './model.js';
 
 test('열람판은 기존 자료에 자동 생성되지 않고 잘못된 위치를 복원하지 않는다', () => {
@@ -67,10 +67,32 @@ test('토글을 켜면 새로 띄울 때는 누른 온도계만, 이미 보이�
   const d = normalizeDisplay({ setKey: 'a', hiddenIds: ['x1', 't1'] });
   const fresh = showInMini(d, { setKey: 'b', id: 't1', ids: ['t1', 't2'], showingThisSet: false });
   assert.equal(fresh.setKey, 'b');
-  assert.equal(fresh.autoOpen, true);
   assert.deepEqual(fresh.hiddenIds, ['x1', 't2'], '다른 반 숨김(x1)은 유지, 누르지 않은 t2는 숨김');
   const more = showInMini({ ...fresh, hiddenIds: ['x1', 't2'] }, { setKey: 'b', id: 't2', ids: ['t1', 't2'], showingThisSet: true });
   assert.deepEqual(more.hiddenIds, ['x1']);
+});
+
+test('미니 온도계를 띄워도 자동 열기는 저절로 켜지지 않고, 직접 켠 값은 그대로 둔다', () => {
+  const target = { setKey: 'a', id: 't1', ids: ['t1', 't2'], showingThisSet: false };
+  assert.equal(showInMini(normalizeDisplay(undefined), target).autoOpen, false, '처음 띄울 때');
+  assert.equal(showInMini(normalizeDisplay({ autoOpen: false }), { ...target, showingThisSet: true }).autoOpen, false, '하나 더 띄울 때');
+  assert.equal(showInMini(normalizeDisplay({ autoOpen: true }), target).autoOpen, true, '설정에서 직접 켠 값은 유지');
+});
+
+test('위치·크기는 "함께 열기"를 켠 동안에만 되돌린다(토글 하나)', () => {
+  const geometry = { x: 40, y: 60, width: 400, height: 560 };
+  assert.deepEqual(savedGeometry(normalizeDisplay({ autoOpen: true, geometry })), geometry);
+  assert.equal(savedGeometry(normalizeDisplay({ autoOpen: false, geometry })), null, '꺼 두면 기본 자리');
+  assert.equal(savedGeometry(normalizeDisplay({ autoOpen: true })), null, '아직 기억한 자리가 없음');
+  assert.deepEqual(savedGeometry(normalizeDisplay({ autoOpen: true, rememberPosition: false, geometry })), geometry, '예전의 따로 있던 "위치 기억" 값은 보지 않는다');
+  assert.equal('rememberPosition' in normalizeDisplay({ rememberPosition: true }), false);
+});
+
+test('앱 전체의 자동 실행 선택(windowsStart)은 미니 온도계 설정을 바꿔도 지워지지 않는다', () => {
+  const target = { setKey: 'a', id: 't1', ids: ['t1'], showingThisSet: false };
+  assert.equal(showInMini(normalizeDisplay({ windowsStart: false }), target).windowsStart, false);
+  assert.equal(hideInMini(normalizeDisplay({ windowsStart: true }), { id: 't1', ids: ['t1'] }).next.windowsStart, true);
+  assert.equal(normalizeDisplay({}).windowsStart, null, '고른 적 없음');
 });
 
 test('토글을 끄다 마지막 하나까지 끄면 창을 닫고 자동 열기도 끈다', () => {

@@ -136,21 +136,21 @@
 <style>
   .classic-create { display:flex; align-items:center; gap:1px; }
   .brand-group { display:flex; align-items:center; gap:4px; flex-shrink:0; }
-  .classic .window-button { width:18px; min-height:22px; border-radius:4px; }
+  .classic .window-button { width:clamp(10px, 5.8cqi, 18px); min-height:22px; border-radius:4px; }
+  .classic :global(.header-reset-shortcut) { width:clamp(10px, 5.8cqi, 18px); }
   .classic .window-actions { gap:1px; }
   .classic .history-actions { border:0; margin:0; padding:0; }
   .classic .brand { font-size:12px; }
   .classic .brand-group { gap:2px; }
   .create-icon { color:var(--header-accent); }
-  @media(max-width:249px) { .titlebar.classic { flex-wrap:wrap; } .classic .brand-group { order:-1; width:100%; } .classic .window-actions { margin-left:auto; } }
 
-  .titlebar { display:flex; align-items:center; justify-content:space-between; gap:6px; min-height:29px; padding:2px 8px 2px 10px; user-select:none; cursor:move; background:transparent; flex-shrink:0; }
+  .titlebar { display:flex; align-items:center; justify-content:space-between; gap:6px; min-height:29px; padding:2px 8px 2px 10px; user-select:none; cursor:move; background:transparent; flex-shrink:0; container-type:inline-size; }
   .brand { font-size:13px; font-weight:600; letter-spacing:-.35px; white-space:nowrap; }
   .window-actions,.history-actions { display:flex; align-items:center; }
   .history-actions { margin-right:4px; padding-right:4px; border-right:1px solid var(--header-line); }
-  .window-button { width:25px; min-height:25px; padding:0; border-radius:7px; color:var(--header-muted); }
+  .window-button { width:clamp(18px, 8cqi, 25px); min-height:25px; padding:0; border-radius:7px; color:var(--header-muted); }
   .pin-button[aria-pressed="true"] { color:var(--header-accent); }
   .close-button:hover { color:#fff; background:#b43e3e !important; }
-  @media(max-width:279px) { .titlebar { padding-inline:8px; gap:2px; } .window-button { width:26px; } .history-actions { padding-right:3px; margin-right:3px; } .brand { font-size:13px; } }
-  @media(max-width:259px) { .titlebar { flex-wrap:wrap; } .brand { flex:1; } .window-actions { margin-left:auto; } }
+  /* 폭이 좁으면 장식 간격과 아이콘 칸만 줄여 제목줄을 한 줄로 유지합니다. */
+  @media(max-width:279px) { .titlebar { padding-inline:6px; gap:2px; } .history-actions { padding-right:3px; margin-right:3px; } .brand { font-size:13px; } }
 </style>

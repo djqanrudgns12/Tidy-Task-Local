@@ -2,7 +2,7 @@
 <html lang="ko"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="color-scheme" content="light"><title>Tidy Task 사용 가이드</title><link rel="preload" href="fonts/MaplestoryL.woff2" as="font" type="font/woff2" crossorigin><link rel="stylesheet" href="help.css"><script src="help.js" defer></script></head>
 <body><a class="skip" href="#main">본문으로 건너뛰기</a><header class="masthead"><a class="brand" href="#start" aria-label="Tidy Task 사용 가이드 처음으로"><span class="brand-mark" aria-hidden="true">✓</span><div><small>Tidy Task</small><h1>사용 가이드</h1>
 </div>
-</a><span class="version">v5.6.3</span></header>
+</a><span class="version">v5.6.5</span></header>
 
 <div class="reading-tools js-only"><div class="search-field"><label for="guide-search">궁금한 기능 찾기</label><div class="search-box"><input id="guide-search" type="search" placeholder="예: 뽑기, 글꼴, 백업" autocomplete="off" aria-controls="search-results"><button id="clear-search" type="button" hidden>지우기</button></div>
 </div>
@@ -75,6 +75,7 @@
 </li>
 <li><h3>고치거나 완료하세요</h3>
 <p>내용을 고치려면 할 일의 글자를 누르세요. 끝낸 일은 왼쪽 완료 버튼을 누르면 <b>마감된 일</b>로 이동합니다.</p>
+<p>순서를 바꾸려면 일정에 마우스를 올리고 오른쪽 손잡이를 위아래로 끌어 주세요. 이동을 취소하려면 <kbd>Esc</kbd>를 누르세요. 손잡이에 초점을 두고 <kbd>Space</kbd> → <kbd>↑</kbd>·<kbd>↓</kbd> → <kbd>Space</kbd>로도 옮길 수 있습니다.</p>
 </li>
 <li><h3>긴 내용은 아래에 적으세요</h3>
 <p>창 아래의 메모 공간에 회의 내용이나 자주 보는 안내를 적으세요. 목록과 메모 사이의 경계선을 끌면 공간을 넓히거나 줄일 수 있습니다.</p>
@@ -537,17 +538,21 @@
 <p>메모 창의 글꼴과 디자인을 바꾸고, 필요한 자료를 파일로 남깁니다.</p>
 </header>
 <p class="route"><strong>여는 곳</strong>메모 창 상단을 우클릭 → 설정 · 모던 디자인은 메뉴 → 설정</p>
-<dl class="facts"><div><dt>글꼴과 글자 크기</dt>
-<dd>설정에서 본문과 화면 도구에 쓰는 글꼴·크기를 조절하세요. 메모의 기본 글꼴은 메이플스토리체입니다. PC의 글꼴 파일을 등록해 사용할 수도 있습니다.</dd>
+<p>설정은 <b>모양 · 글자 · 동작 · 관리</b> 네 묶음으로 나뉩니다. <b>바로 적용</b>이라고 적힌 항목은 고르는 즉시 바뀌고, 나머지는 아래의 <b>반영</b>을 눌러야 바뀝니다.</p>
+<dl class="facts"><div><dt>모양</dt>
+<dd>메모의 15가지 색상 테마와 다크 모드, 마감된 일·중요한 일 메모 표시를 고릅니다. <b>상단 디자인</b>의 <b>모던</b>은 서식·알림·급식처럼 이름이 보이는 버튼을 사용합니다. 아이콘이 익숙하지 않다면 모던을 선택해 보세요. <b>클래식</b>은 아이콘 중심의 배치입니다.</dd>
 </div>
-<div><dt>상단 디자인</dt>
-<dd><b>모던</b>은 서식·알림·급식처럼 이름이 보이는 버튼을 사용합니다. 아이콘이 익숙하지 않다면 모던을 선택해 보세요. <b>클래식</b>은 아이콘 중심의 배치입니다.</dd>
+<div><dt>글자</dt>
+<dd><b>메모 글자</b>는 할 일과 메모에, <b>화면 글자</b>는 버튼과 메뉴에 쓰는 글꼴·크기입니다. 메모의 기본 글꼴은 메이플스토리체입니다. <b>글꼴 추가</b>로 PC의 글꼴 파일을 등록해 사용할 수도 있습니다.</dd>
 </div>
-<div><dt>테마 · 알림 · 소리</dt>
-<dd>메모의 15가지 색상 테마와 다크 모드, 마감된 일·중요한 메모 표시, 통합 리마인더와 전체 무음 모드를 설정할 수 있습니다.</dd>
+<div><dt>동작</dt>
+<dd><b>컴퓨터를 켜면 자동 실행</b>을 켜 두면 Windows와 함께 Tidy Task가 시작되고 창이 마지막 위치와 크기 그대로 열립니다. 원하지 않으면 끄세요. 통합 리마인더와 전체 무음 모드, Tidy 툴킷 사용 여부도 여기에서 정합니다.</dd>
 </div>
-<div><dt>업데이트</dt>
-<dd>설정에서 현재 버전과 새 버전을 확인하세요. 업데이트 안내에서는 내려받기, 내일 다시 알림, 이 버전 건너뛰기를 선택할 수 있습니다.</dd>
+<div><dt>관리 · 업데이트</dt>
+<dd>현재 버전과 새 버전을 확인하세요. 업데이트 안내에서는 내려받기, 내일 다시 알림, 이 버전 건너뛰기를 선택할 수 있습니다.</dd>
+</div>
+<div><dt>관리 · 초기화</dt>
+<dd><b>설정 초기화</b>는 모양·글자·동작 설정만 처음 상태로 되돌리며 할 일과 메모는 그대로 둡니다. <b>데이터 초기화</b>는 모든 메모와 툴킷 자료, 설정을 지우고 처음 설치한 상태로 다시 시작합니다. 되돌릴 수 없으므로 두 번 확인한 뒤에 진행합니다.</dd>
 </div>
 </dl>
 <details class="more"><summary>메모를 TXT 파일로 내보내고 가져오기</summary><div><ol class="steps"><li><h3>내보낼 메모 창을 여세요</h3>
@@ -672,7 +677,7 @@
 </section>
 
 <nav class="page-turn js-only" aria-label="가이드 앞뒤로 읽기"><a id="previous" href="#start"><small>이전 설명</small><span></span></a><a id="next" href="#notes"><small>다음 설명</small><span></span></a></nav>
-<footer class="footer"><a href="#start">가이드 처음으로</a><p>Tidy Task v5.6.3 · 찰떡쌤</p>
+<footer class="footer"><a href="#start">가이드 처음으로</a><p>Tidy Task v5.6.5 · 찰떡쌤</p>
 </footer>
 </main>
 </div>

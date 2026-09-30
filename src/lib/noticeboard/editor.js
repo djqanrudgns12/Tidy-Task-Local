@@ -14,7 +14,14 @@ import {
   redoDepth,
   closeHistory,
 } from "prosemirror-history";
-import { baseKeymap, toggleMark } from "prosemirror-commands";
+import {
+  baseKeymap,
+  toggleMark,
+  chainCommands,
+  createParagraphNear,
+  liftEmptyBlock,
+  splitBlockKeepMarks,
+} from "prosemirror-commands";
 import { keymap } from "prosemirror-keymap";
 import { DEFAULT_FONT, COLORS, validateDocument } from "./document.js";
 /** @param {string} tag @param {string} [style] @returns {import("prosemirror-model").MarkSpec} */
@@ -65,6 +72,12 @@ export const schema = new Schema({
     },
   },
 });
+/** 줄을 바꿔도 쓰던 서식(글자 크기·색·굵기 등)을 새 문단으로 이어 주는 Enter. */
+export const enterKeepingMarks = chainCommands(
+  createParagraphNear,
+  liftEmptyBlock,
+  splitBlockKeepMarks,
+);
 /** 서식 도구로 붙잡아 둔 본문 범위. @typedef {{from:number,to:number}|null} HeldRange */
 /** @type {PluginKey<HeldRange>} */
 const heldSelection = new PluginKey("heldSelection");
@@ -116,6 +129,9 @@ export function createEditor(host, session, { changed, error }) {
       "Mod-b": toggleMark(schema.marks.bold),
       "Mod-i": toggleMark(schema.marks.italic),
       "Mod-u": toggleMark(schema.marks.underline),
+      // 기본 Enter(splitBlock)는 새 문단에 서식을 넘기지 않아, 44로 쓰다 줄을 바꾸면
+      // 기본 크기(22)로 돌아갔습니다. 쓰던 크기·색·굵기를 다음 문단에서도 이어 갑니다.
+      Enter: enterKeepingMarks,
       "Shift-Enter": (s, d) => {
         d?.(
           s.tr

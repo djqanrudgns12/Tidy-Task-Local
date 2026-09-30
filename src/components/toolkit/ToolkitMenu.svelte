@@ -9,7 +9,7 @@
   import { contextPanel } from '../../lib/toolkit/contextPanel.js';
   import ToolkitQuickTools from './ToolkitQuickTools.svelte';
   import { native, readSettings, subscribeSettings, patchSettings, setEnabled } from '../../lib/toolkit/store.js';
-  import { openTool, openPlatform, dismissMenu, centerToolbar } from '../../lib/toolkit/windows.js';
+  import { openTool, openPlatform, dismissMenu, centerToolbar, fitMoreMenu } from '../../lib/toolkit/windows.js';
   import TimerIcon from './TimerIcon.svelte';
   import { ArrowUpRight, Minimize2, Maximize2, LocateFixed, Settings, Power, GripHorizontal } from 'lucide-svelte';
   // ondone: 브라우저 미리보기에서는 메뉴가 툴바 안에 그려지므로, 동작 뒤 닫기를 툴바에 맡깁니다.
@@ -44,6 +44,7 @@
   let collapsed = $state(false);
   let suppressInitialFocusRing = $state(true);
   let focusDismissTimer: ReturnType<typeof setTimeout>;
+  let fitMore = () => {};
   const visiblePlatforms = $derived(
     PLATFORM_TOOLS.filter((tool) => externalToolsEnabled && !hiddenPlatformIds.includes(tool.id)),
   );
@@ -110,6 +111,38 @@
     let offFocus = () => {};
     let offSettings = () => {};
     let disposed = false;
+    let stopSizing = () => {};
+    if (native && kind === 'more') {
+      let frame = 0;
+      let fitQueue = Promise.resolve();
+      let revision = 0;
+      fitMore = () => {
+        cancelAnimationFrame(frame);
+        frame = requestAnimationFrame(() => {
+          if (disposed) return;
+          const style = getComputedStyle(list);
+          // scrollHeight는 화면이 짧아 스크롤 중이어도 전체 내용 높이를 줍니다. 테두리·바깥 여백은 따로 더합니다.
+          const height = Math.ceil(list.scrollHeight + parseFloat(style.borderTopWidth) + parseFloat(style.borderBottomWidth)
+            + parseFloat(style.marginTop) + parseFloat(style.marginBottom));
+          const current = ++revision;
+          fitQueue = fitQueue.catch(() => {}).then(async () => {
+            if (!disposed && current === revision) await fitMoreMenu(height);
+          }).catch(() => {});
+        });
+      };
+      const sizes = new ResizeObserver(fitMore);
+      const observeContent = () => {
+        sizes.disconnect();
+        sizes.observe(list);
+        for (const child of list.children) sizes.observe(child);
+        fitMore();
+      };
+      // 설정 변경·하위 목록·오류 메시지와 늦게 불러온 글꼴 모두 내용 크기로만 창을 맞춥니다.
+      const content = new MutationObserver(observeContent);
+      content.observe(list, { childList: true, subtree: true, characterData: true });
+      observeContent();
+      stopSizing = () => { cancelAnimationFrame(frame); sizes.disconnect(); content.disconnect(); };
+    }
     if (kind !== 'timer' && kind !== 'scoreboard') {
       const apply = (settings: Awaited<ReturnType<typeof readSettings>>) => {
         if (disposed) return;
@@ -136,6 +169,7 @@
             focusDismissTimer = setTimeout(() => { if (!panelDragging) void dismissMenu(kind); }, 120);
           } else {
             suppressInitialFocusRing = true;
+            fitMore();
             focusFirst();
             void refreshOpen();
           }
@@ -146,6 +180,7 @@
         });
     return () => {
       disposed = true;
+      stopSizing();
       clearTimeout(focusDismissTimer);
       offFocus();
       offSettings();

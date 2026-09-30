@@ -319,9 +319,17 @@ export class AppState {
   // ✨ 전체화면 상태 보존: 앱 재시작 시 전체화면이 풀리지 않도록
   // 왜 takeSnapshot에 넣지 않는가: 전체화면은 Undo/Redo 대상이 아닌 "창 상태"이기 때문
   isFullscreen = $state(false);
+  // todoHeight·notesHeight·isNotesLocked는 5.6.3까지의 배치 값입니다. 옛 버전과 파일을 주고받을 수 있게
+  // 읽고 쓰기만 하고, 화면 배치에는 쓰지 않습니다. (notesHeight는 notesPaneHeight가 없을 때 옮겨 오는 데만 씀)
   todoHeight = $state(145);
   notesHeight = $state(140);
   isNotesLocked = $state(false);
+  // 5.6.4: 사용자가 고른 "중요한 일 메모" 높이. 없으면 undefined(→ notesHeight를 옮겨 씀).
+  // 왜 새 키인가: notesHeight에는 CSS 최대 240px에 가려 화면에 보이지 않던 값(예: 500)이 섞여 있습니다.
+  //   같은 키를 고쳐 쓰면 "예전에 가려졌던 값"과 "새로 고른 큰 값"을 구분할 수 없습니다.
+  //   배치 규칙: src/lib/layout/memoLayout.js
+  /** @type {number | undefined} */
+  notesPaneHeight = $state(undefined);
   sortOrder = $state('asc');
 
   isRolledUp = $state(false);

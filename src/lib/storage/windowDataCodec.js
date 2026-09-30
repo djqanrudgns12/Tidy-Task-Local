@@ -87,6 +87,10 @@ export const WINDOW_FIELDS = Object.freeze(/** @type {FieldSpec[]} */ ([
   { name: 'windowPhysX', restore: (v) => v, snapshot: false },
   { name: 'windowPhysY', restore: (v) => v, snapshot: false },
   { name: 'headerDesign', restore: (v) => v === 'modern' ? 'modern' : 'classic', snapshot: false },
+  // 5.6.4 추가: 사용자가 고른 메모 높이. 예전 데이터에는 없으므로(undefined) 파일이 한 글자도 바뀌지 않고,
+  // 그때는 layout/memoLayout.js의 resolveNotesPreference가 notesHeight를 "실제로 보이던 높이"로 옮겨 씁니다.
+  // 값 검사도 그 함수가 합니다(여기서 고치면 옛 버전과 주고받을 때 값이 조용히 바뀝니다).
+  { name: 'notesPaneHeight', restore: (v) => v, snapshot: false },
 ]));
 
 // 되돌리기 스냅샷의 필드 순서 (5.0.0 takeSnapshot과 동일)

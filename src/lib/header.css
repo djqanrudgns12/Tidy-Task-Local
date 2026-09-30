@@ -1,5 +1,7 @@
 /* Scoped shared vocabulary for the main note header; Tiny Note is unaffected. */
 .tidy-header-surface {
+  /* 화면 글자를 키워도 rem 기반 여백이 도구 영역을 과하게 넓히지 않게 합니다. */
+  --spacing: 3.333333px;
   --header-ink: #374151;
   --header-muted: #606976;
   --header-line: #27344920;
@@ -9,7 +11,7 @@
   --header-tint: color-mix(in srgb, var(--header-accent) 9%, transparent);
   color: var(--header-ink);
   font-family: var(--ui-font-family, '엘리스 디지털배움'), 'Malgun Gothic', sans-serif;
-  font-size: 12px;
+  font-size: max(9px, calc(var(--ui-font-size, 10pt) * .9));
   line-height: 1.4;
 }
 .tidy-header-surface.header-dark {

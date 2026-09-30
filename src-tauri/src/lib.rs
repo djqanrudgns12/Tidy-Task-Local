@@ -15,6 +15,7 @@ mod classroom;
 mod app_update;
 mod clock_time;
 mod scores;
+mod factory_reset;
 
 // 모든 창이 함께 쓰는 저장 파일과 그 백업 파일 이름
 const STORE_FILE: &str = "tidy-task-config.json";
@@ -313,6 +314,10 @@ pub(crate) fn show_or_create_main(app: &tauri::AppHandle) {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    let mut context = tauri::generate_context!();
+    // Tauri는 기본적으로 사용자 setup보다 먼저 설정 파일의 창을 만듭니다.
+    // 초기화·백업 복구 중 JS가 옛 자료를 읽거나 웹뷰가 캐시를 잠그지 않게, 창 생성만 뒤로 미룹니다.
+    let startup_windows = defer_startup_windows(context.config_mut());
     tauri::Builder::default()
         // ✨ 1. notification 플러그인 초기화 줄 삭제됨
         .on_window_event(|window, event| {
@@ -372,11 +377,18 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         // 앱 안 자동 업데이트 (진행 순서는 app_update.rs가 쥡니다)
         .plugin(tauri_plugin_updater::Builder::new().build())
-        .invoke_handler(tauri::generate_handler![app_update::update_install, app_update::update_cancel, app_update::update_prepare_ack, tournament::tournament_read, tournament::tournament_write, picker::picker_read, picker::picker_write, noticeboard::noticeboard_execute, noticeboard_quit::noticeboard_quit_reply, noticeboard_quit::noticeboard_cancel_quit, save_custom_font, store_health, neis::neis_search_schools, neis::neis_meals, neis::neis_schedule, neis::meal_take_launch_token, analytics::analytics_track, classroom::classroom_quit_reply, classroom::seating::seating_context, classroom::seating::seating_public, classroom::classroom_read, classroom::classroom_execute, classroom::classroom_clear_history, classroom::import::classroom_take_drop, classroom::import::classroom_parse, classroom::import::classroom_cancel_parse, classroom::import::classroom_project, toolkit::toolkit_read, toolkit::toolkit_patch, toolkit::toolkit_open, toolkit::toolkit_set_enabled, toolkit::toolkit_center_if_requested, clock_time::clock_time_offset, clock_time::clock_wall_skew, tray::tray_request_done, tray::tray_take_pending_request, scores::scores_read, scores::scores_write, scores::thermometer_windows_start, classroom::intent::classroom_set_intent, classroom::intent::classroom_take_intent])
-        .setup(|app| {
+        .invoke_handler(tauri::generate_handler![app_update::update_install, app_update::update_cancel, app_update::update_prepare_ack, tournament::tournament_read, tournament::tournament_write, picker::picker_read, picker::picker_write, noticeboard::noticeboard_execute, noticeboard_quit::noticeboard_quit_reply, noticeboard_quit::noticeboard_cancel_quit, save_custom_font, store_health, neis::neis_search_schools, neis::neis_meals, neis::neis_schedule, neis::meal_take_launch_token, analytics::analytics_track, classroom::classroom_quit_reply, classroom::seating::seating_context, classroom::seating::seating_public, classroom::classroom_read, classroom::classroom_execute, classroom::classroom_clear_history, classroom::import::classroom_take_drop, classroom::import::classroom_parse, classroom::import::classroom_cancel_parse, classroom::import::classroom_project, toolkit::toolkit_read, toolkit::toolkit_patch, toolkit::toolkit_open, toolkit::toolkit_set_enabled, toolkit::toolkit_center_if_requested, clock_time::clock_time_offset, clock_time::clock_wall_skew, tray::tray_request_done, tray::tray_take_pending_request, scores::scores_read, scores::scores_write, scores::thermometer_windows_start, classroom::intent::classroom_set_intent, classroom::intent::classroom_take_intent, factory_reset::factory_reset])
+        .setup(move |app| {
+            // 설정의 "데이터 초기화"를 누르고 다시 시작한 경우: 다른 무엇보다 먼저 앱 데이터 폴더를 비웁니다.
+            // (아래의 백업 복구가 지운 메모를 되살리지 않도록 반드시 그보다 앞에 둡니다)
+            factory_reset::run_pending(app.handle());
             // 어떤 창보다 먼저 저장 파일을 점검·백업합니다.
             protect_store_file(app.handle());
             analytics::setup(app.handle());
+            // 원래 설정(숨김·투명도·최소 크기 포함)을 그대로 사용하되 저장소 준비가 끝난 뒤 만듭니다.
+            for window_config in &startup_windows {
+                tauri::WebviewWindowBuilder::from_config(app.handle(), window_config)?.build()?;
+            }
             // 학급 온도계 열람판은 툴킷을 꺼 두어도 앱 시작 시 복원합니다.
             let thermometer_handle = app.handle().clone();
             std::thread::spawn(move || scores::restore_thermometer_display(&thermometer_handle));
@@ -419,13 +431,42 @@ pub fn run() {
 
             Ok(())
         })
-        .run(tauri::generate_context!())
+        .run(context)
         .expect("error while running tauri application");
+}
+
+fn defer_startup_windows(config: &mut tauri::utils::config::Config) -> Vec<tauri::utils::config::WindowConfig> {
+    let windows = config.app.windows.iter().filter(|window| window.create).cloned().collect();
+    for window in &mut config.app.windows {
+        window.create = false;
+    }
+    windows
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn startup_windows_keep_their_options_but_wait_until_data_is_ready() {
+        let mut config = tauri::utils::config::Config::default();
+        let mut main = tauri::utils::config::WindowConfig::default();
+        main.label = "main".into();
+        main.visible = false;
+        main.transparent = true;
+        main.width = 350.0;
+        let mut optional = main.clone();
+        optional.label = "optional".into();
+        optional.create = false;
+        config.app.windows = vec![main.clone(), optional];
+        let deferred = defer_startup_windows(&mut config);
+        assert!(config.app.windows.iter().all(|window| !window.create));
+        assert_eq!(deferred.len(), 1);
+        assert_eq!(deferred[0].label, main.label);
+        assert_eq!(deferred[0].visible, main.visible);
+        assert_eq!(deferred[0].transparent, main.transparent);
+        assert_eq!(deferred[0].width, main.width);
+    }
 
     #[test]
     fn font_name_header_round_trips_korean_and_strips_paths() {

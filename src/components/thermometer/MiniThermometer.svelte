@@ -1,7 +1,12 @@
+<script module lang="ts">
+  import { moodOf } from '../../lib/thermometer/moods.js';
+  /** 미니 온도계 카드의 강조색(밝은 화면, 어두운 화면). 설정 패널의 온도계 점도 같은 색을 써서 카드와 짝을 알아보게 합니다. */
+  export const miniAccent = (mood: string) => `light-dark(${moodOf(mood).accent}, ${mood === 'positive' ? '#9bc1ff' : '#ff9b9f'})`;
+</script>
 <script lang="ts">
   import { Plus, Minus, Check } from 'lucide-svelte';
   import { goalCards } from '../../lib/thermometer/display.js';
-  import { moodOf, unitMark } from '../../lib/thermometer/moods.js';
+  import { unitMark } from '../../lib/thermometer/moods.js';
   import { todaySummary } from '../../lib/thermometer/history.js';
   import ThermoTitle from './ThermoTitle.svelte';
   let { t, today, showToday, showUpcoming, onchange, onrename }: {
@@ -16,7 +21,7 @@
   const fill = $derived(Math.max(0, Math.min(100, t.value / t.max * 100)));
 </script>
 
-<article class="td-card" style:--td-accent={`light-dark(${moodOf(t.mood).accent}, ${t.mood === 'positive' ? '#9bc1ff' : '#ff9b9f'})`} style:--td-number-scale={Math.max(1, String(t.value).length / 2)} aria-label={t.title}>
+<article class="td-card" style:--td-accent={miniAccent(t.mood)} style:--td-number-scale={Math.max(1, String(t.value).length / 2)} aria-label={t.title}>
   <div class="td-card-inner">
     <!-- 이름을 누르면 여기서 바로 고칩니다. 관리 창과 같은 저장 구역이라 치는 대로 관리 창에도 비칩니다. -->
     <div class="td-label"><span class="td-dot"></span><h2><ThermoTitle class="td-title" value={t.title} label="온도계 이름" onrename={(title) => onrename(t.id, title)} /></h2></div>

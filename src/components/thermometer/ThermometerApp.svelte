@@ -323,10 +323,10 @@
   // 설정은 미니 창과 같은 display 구역을 읽고, 창이 떠 있는지는 따로 지켜봅니다(판정 규칙: display.js isInMini).
   let displayPrefs = $state.raw(normalizeDisplay(undefined));
   const displayClient = createSection({ store: 'thermometer', section: 'display', normalize: normalizeDisplay, onChange: (d) => (displayPrefs = d) });
-  let miniWindowOpen = $state(false);
-  const miniWatch = watchThermometerDisplay((open) => (miniWindowOpen = open));
-  // 개발 미리보기에서는 다른 탭의 창을 알 수 없어 "자동 열기"를 떠 있는 것으로 봅니다.
-  const miniOpen = $derived(native ? miniWindowOpen : displayPrefs.autoOpen);
+  // 개발 미리보기에서는 다른 탭의 창을 알 수 없어, 이 토글로 띄우고 닫은 것만 기억합니다(toggleMini).
+  // 왜 "자동 열기" 설정으로 어림하지 않는가: 그 설정은 이제 창을 띄운다고 켜지지 않아 떠 있는지와 상관이 없습니다.
+  let miniOpen = $state(false);
+  const miniWatch = watchThermometerDisplay((open) => (miniOpen = open));
   // 누르는 즉시 스위치가 넘어가도록 저장이 끝날 때까지 바라는 값을 따로 들고 있습니다.
   let miniPending = $state<Record<string, boolean>>({});
   const inMini = (id: string) => miniPending[id] ?? isInMini(displayPrefs, data, { open: miniOpen, setKey, id });
@@ -336,12 +336,14 @@
     miniPending = { ...miniPending, [id]: on };
     try {
       const ids = thermos.map((x) => x.id);
+      let closed = false;
       if (on) {
         await client.settle();
         await openThermometerDisplay({ setKey, id, ids, showingThisSet: miniOpen && displaySetKey(displayPrefs, data) === setKey });
-      } else await hideFromThermometerDisplay({ id, ids });
+      } else closed = await hideFromThermometerDisplay({ id, ids });
       await displayClient.load().catch(() => {});
-      await miniWatch.refresh();
+      if (native) await miniWatch.refresh();
+      else miniOpen = on || !closed;
     } catch {
       error = on ? '미니 온도계를 띄우지 못했어요. 다시 시도해 주세요.' : '미니 온도계를 끄지 못했어요. 다시 시도해 주세요.';
     } finally {

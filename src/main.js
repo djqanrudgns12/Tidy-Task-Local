@@ -13,6 +13,11 @@ const label = isTauri()
 async function start() {
   const target = document.getElementById("app");
   if (!target) throw new Error("Application root is missing");
+  // 메모 창 세로 배치 확인 화면(개발 전용): 실제 몸통(MemoBody)과 배치 컨트롤러로 테두리·스플리터 끌기를 흉내 냅니다.
+  if (!isTauri() && import.meta.env.DEV && new URLSearchParams(location.search).has('memo-layout-preview')) {
+    const { default: MemoLayoutPreview } = await import('./dev/MemoLayoutPreview.svelte');
+    return mount(MemoLayoutPreview, { target });
+  }
   if (!isTauri() && import.meta.env.DEV && new URLSearchParams(location.search).has('note-context-preview')) {
     const { default: NoteContextPreview } = await import('./dev/NoteContextPreview.svelte');
     return mount(NoteContextPreview, { target });

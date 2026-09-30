@@ -91,33 +91,26 @@
 {/if}
 
 <style>
+  /* panel: 설정 창의 묶음 카드 안에 들어가는 한 줄입니다.
+     카드(테두리·배경)는 설정 창이 그리므로 여기서는 내용만 그리고,
+     글자는 em이라 설정 창의 "UI 글자 크기"를 따라 함께 커지고 작아집니다. */
   .toolkit-toggle-panel {
-    --toolkit-ink: #4b5563;
-    --toolkit-muted: #64748b;
-    --toolkit-surface: rgba(255, 255, 255, 0.6);
-    --toolkit-border: rgba(0, 0, 0, 0.04);
-    --toolkit-icon-surface: rgba(0, 0, 0, 0.045);
-    padding: 14px;
-    border: 1px solid var(--toolkit-border);
-    border-radius: 12px;
+    --toolkit-ink: #1f2937;
+    --toolkit-muted: #6b7280;
+    --toolkit-icon-surface: rgba(15, 23, 42, 0.05);
     color: var(--toolkit-ink);
-    background: var(--toolkit-surface);
-    box-shadow: 0 1px 3px rgba(15, 23, 42, 0.12);
-    transition: background 0.3s, border-color 0.3s, color 0.3s;
+    transition: color 0.25s;
   }
   .toolkit-toggle-panel.panel-dark {
-    --toolkit-ink: #cbd5e1;
-    --toolkit-muted: #94a3b8;
-    --toolkit-surface: rgba(0, 0, 0, 0.2);
-    --toolkit-border: rgba(255, 255, 255, 0.05);
+    --toolkit-ink: #e5e7eb;
+    --toolkit-muted: #9aa5b8;
     --toolkit-icon-surface: rgba(255, 255, 255, 0.08);
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
   }
   .toolkit-toggle-panel-row {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 14px;
+    gap: 12px;
   }
   .toolkit-toggle-identity {
     display: flex;
@@ -145,18 +138,17 @@
   }
   .toolkit-toggle-copy h2 {
     margin: 0;
-    font-size: 12px;
+    font-size: 0.86em;
     line-height: 1.4;
     font-weight: 700;
   }
   .toolkit-toggle-copy p {
-    margin: 4px 0 0;
+    margin: 2px 0 0;
     color: var(--toolkit-muted);
-    font-size: 10px;
-    line-height: 1.5;
+    font-size: 0.72em;
+    line-height: 1.45;
     font-weight: 500;
-    letter-spacing: -0.015em;
-    text-wrap: balance;
+    text-wrap: pretty;
   }
   .toolkit-toggle-row {
     display: flex;
@@ -184,9 +176,29 @@
     padding: 4px 9px;
   }
   .toolkit-toggle-panel .toolkit-toggle-error {
-    margin: 9px 0 0 44px;
+    margin: 8px 0 0 44px;
     padding: 0;
-    font-size: 9px;
+    font-size: 0.72em;
+    font-weight: 700;
+  }
+  /* 설정 창의 다른 스위치(SwitchRow)와 같은 크기·꺼짐 색으로 맞춥니다. */
+  .toolkit-toggle-panel :global(.tk-switch) {
+    width: 34px;
+    height: 20px;
+  }
+  .toolkit-toggle-panel :global(.tk-switch:not([data-state='checked'])) {
+    background: rgba(15, 23, 42, 0.2);
+  }
+  .toolkit-toggle-panel.panel-dark :global(.tk-switch:not([data-state='checked'])) {
+    background: rgba(255, 255, 255, 0.22);
+  }
+  .toolkit-toggle-panel :global(.tk-switch-thumb) {
+    width: 14px;
+    height: 14px;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.28);
+  }
+  .toolkit-toggle-panel :global(.tk-switch[data-state='checked'] .tk-switch-thumb) {
+    transform: translateX(14px);
   }
   :global(.tk-switch) {
     width: 34px;

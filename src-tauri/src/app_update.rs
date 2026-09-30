@@ -86,6 +86,10 @@ impl Failure {
 
 // 설치가 진행 중인지 (두 창에서 동시에 눌러도 한 번만 진행합니다)
 static RUNNING: AtomicBool = AtomicBool::new(false);
+// 데이터 초기화가 설치 도중에 앱을 다시 시작하지 않도록 물어보는 창구입니다(factory_reset.rs).
+pub(crate) fn is_running() -> bool {
+    RUNNING.load(Ordering::SeqCst)
+}
 // 확인·내려받기 단계에서만 채워지는 취소 신호. 저장 확인이 시작되면 비웁니다(그 뒤로는 되돌리지 않습니다).
 static CANCEL: Mutex<Option<Arc<tokio::sync::Notify>>> = Mutex::new(None);
 // 취소 버튼이 눌렸는지. 신호가 내려받기 완료와 엇갈려도 설치로 넘어가지 않게 한 번 더 확인합니다.
