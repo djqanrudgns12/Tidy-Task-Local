@@ -14,18 +14,19 @@ pub(crate) static STORE_LOCK: Mutex<()> = Mutex::new(());
 static WINDOW_LOCK: Mutex<()> = Mutex::new(());
 static NEXT_WINDOW: AtomicU64 = AtomicU64::new(1);
 pub static QUITTING: AtomicBool = AtomicBool::new(false);
-const KINDS: [&str; 4] = ["digital", "analog", "hourglass", "stopwatch"];
+pub(crate) const KINDS: [&str; 4] = ["digital", "analog", "hourglass", "stopwatch"];
 // 시계 제목 최대 글자 수. JS src/lib/clock/clockPreferences.js의 CLOCK_TITLE_MAX와 같아야 합니다(코드포인트로 셈).
 const CLOCK_TITLE_MAX: usize = 30;
 // 툴킷 UI 글꼴 이름 최대 글자 수. JS src/lib/toolkit/preferences.js의 UI_FONT_NAME_MAX와 같아야 합니다(코드포인트로 셈).
 const UI_FONT_NAME_MAX: usize = 60;
 // 툴바에 보일 수 있는 도구 id. JS src/lib/toolkit/preferences.js의 허용 목록과 같아야 합니다.
-const TOOL_IDS: [&str; 12] = ["timer", "clock", "picker", "noticeboard", "tournament", "focus-bell", "dice", "scoreboard", "thermometer", "vote", "seating", "roster"];
+pub(crate) const TOOL_IDS: [&str; 12] = ["timer", "clock", "picker", "noticeboard", "tournament", "focus-bell", "dice", "scoreboard", "thermometer", "vote", "seating", "roster"];
 const DEFAULT_VISIBLE_TOOL_IDS: [&str; 6] = ["timer", "picker", "noticeboard", "vote", "seating", "roster"];
 const TOOL_ORDER_IDS: [&str; 13] = ["timer", "picker", "noticeboard", "vote", "seating", "roster", "external", "focus-bell", "clock", "scoreboard", "dice", "thermometer", "tournament"];
 const LEGACY_TOOL_ORDER_IDS: [&str; 13] = ["timer", "clock", "picker", "noticeboard", "tournament", "focus-bell", "dice", "scoreboard", "thermometer", "vote", "seating", "external", "roster"];
 // 점수판 3종의 창 이름(드롭다운 항목). JS registry.js의 SCOREBOARD_TOOLS와 같습니다.
-const SCOREBOARD_ROLES: [&str; 3] = ["scoreboard-personal", "scoreboard-group", "scoreboard-custom"];
+pub(crate) const SCOREBOARD_ROLES: [&str; 3] = ["scoreboard-personal", "scoreboard-group", "scoreboard-custom"];
+pub(crate) const TOOL_ROLES: [&str; 15] = ["roster", "noticeboard", "picker", "tournament", "focus-bell", "dice", "clock", "thermometer", "thermometer-display", "vote", "vote-teacher", "seating", "seating-teacher", "seating-display", "toolkit"];
 // 타이머 소리 id(시계음·종료 경고음·종료음). JS src/lib/timers/soundLibrary.js의 SOUND_LIBRARY와 같아야 합니다
 // (soundLibrary.test.js가 이 세 목록을 읽어 대조). 목록에 없는 값은 저장을 거부하고, 읽을 때는 기본 소리로 둡니다.
 const TICK_SOUNDS: [&str; 14] = ["clock-closeup", "small-tick", "wall-clock", "grandfather-clock", "alarm-clock", "stopwatch", "kitchen-timer", "metronome", "woodblock", "water-drop", "button-click", "soft-tap", "digital-tick", "glass-tink"];
@@ -374,7 +375,7 @@ pub fn is_work_window(label: &str) -> bool {
 /// 툴바에서 여는 "작업 창"(타이머 제외). 크기 조절·작업표시줄 표시·항상 위 기본 꺼짐을 함께 따릅니다.
 /// 왜 한 곳에 모으는가: 예전에는 창 만들기의 세 설정이 목록을 따로 들고 있어, 새 도구를 한 곳만 빠뜨리는 실수가 쉬웠습니다.
 fn is_tool_role(role: &str) -> bool {
-    matches!(role, "roster" | "noticeboard" | "picker" | "tournament" | "focus-bell" | "dice" | "clock" | "thermometer" | "thermometer-display" | "vote" | "vote-teacher" | "seating" | "seating-teacher" | "seating-display")
+    TOOL_ROLES.contains(&role) && role != "toolkit"
         || SCOREBOARD_ROLES.contains(&role)
 }
 

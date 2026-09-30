@@ -1,5 +1,7 @@
 <script lang="ts">
   import { onMount, tick } from 'svelte';
+  import { track } from '../../lib/analytics.js';
+  import { newId } from '../../lib/ids.js';
   import { Dices, Volume2, VolumeX, Maximize2, Minimize2, Pin, X } from 'lucide-svelte';
   import { getCurrentWindow } from '@tauri-apps/api/window';
   import { native } from '../../lib/toolkit/store.js';
@@ -168,6 +170,7 @@
     rollSize = size;
     phase = 'rolling';
     values = next;
+    track('dice_rolled', { count: next.length, operation: newId() });
     filled = next.map(() => false);
     showTotal = false;
     badge = null;

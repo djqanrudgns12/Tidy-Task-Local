@@ -17,11 +17,12 @@
 //   (바꾸려면 환경변수나 src-tauri/.env에 TAURI_SIGNING_PRIVATE_KEY_PATH, 암호가 있으면 TAURI_SIGNING_PRIVATE_KEY_PASSWORD)
 // ═══════════════════════════════════════════════════════════════════════
 import { spawnSync } from 'node:child_process';
-import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { homedir, tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { verifySignature } from './lib/minisign.mjs';
+import { releaseAnalyticsSettings, verifyAnalyticsBinary, verifyAnalyticsFrontend, analyticsBuildReceipt, verifyAnalyticsBuildReceipt } from './lib/analyticsBuild.mjs';
 import {
   PLATFORM_KEYS,
   assetDownloadUrl,
@@ -108,9 +109,31 @@ if (config.bundle?.createUpdaterArtifacts !== true) {
 }
 console.log(`   버전 ${version} · 태그 ${tag}`);
 
+// 통계 설정이 빠진 설치 파일은 정상 실행되어도 아무 이벤트도 보내지 않습니다.
+// 서명·프런트 빌드보다 먼저 검사하고, Rust 직접 빌드도 build.rs에서 검사합니다.
+const dotEnv = readDotEnv(path.join(TAURI_DIR, '.env'));
+let analyticsSettings;
+try {
+  analyticsSettings = releaseAnalyticsSettings(process.env, dotEnv);
+} catch (error) {
+  fail(/** @type {Error} */ (error).message);
+}
+console.log(`   PostHog 운영 수집 설정 확인 (${analyticsSettings.host})`);
+
+// 새 도구를 추가하면서 통계 분류를 빠뜨린 변경도 배포 단계에서 잡습니다.
+step('통계 회귀 검사를 실행합니다');
+/** @type {[string, string[], string][]} */
+const analyticsChecks = [
+  [process.execPath, ['--test', 'scripts/lib/analyticsBuild.test.mjs', 'scripts/lib/releaseVersion.test.mjs', 'src/lib/analyticsActivity.test.js', 'src/lib/timers/analytics.test.js'], ROOT],
+  ['cargo', ['test', '--lib', 'analytics::tests'], TAURI_DIR],
+];
+for (const [command, args, cwd] of analyticsChecks) {
+  const result = spawnSync(command, args, { cwd, stdio: 'inherit' });
+  if (result.status !== 0) fail('통계 회귀 검사 실패: 새 창 분류·중복 제거·배포 설정·버전 표기를 확인하세요.');
+}
+
 // ── 서명 키 점검 ──────────────────────────────────────────────────────
 step('업데이트 서명 키를 확인합니다');
-const dotEnv = readDotEnv(path.join(TAURI_DIR, '.env'));
 const keyPath = process.env.TAURI_SIGNING_PRIVATE_KEY_PATH || dotEnv.TAURI_SIGNING_PRIVATE_KEY_PATH || DEFAULT_KEY_PATH;
 let privateKey = process.env.TAURI_SIGNING_PRIVATE_KEY || dotEnv.TAURI_SIGNING_PRIVATE_KEY || '';
 if (!privateKey) {
@@ -175,6 +198,16 @@ if (skipBuild) {
 
 // ── 3) 결과 확인 ──────────────────────────────────────────────────────
 step('설치 파일과 서명을 확인합니다');
+const analyticsBinaryPath = path.join(TAURI_DIR, 'target', 'release', 'deps', 'tidy_task.exe');
+if (!existsSync(analyticsBinaryPath)) fail('통계 설정을 검사할 배포 실행 파일이 없습니다. --skip-build 없이 다시 빌드하세요.');
+try {
+  verifyAnalyticsBinary(readFileSync(analyticsBinaryPath), analyticsSettings);
+  const assetsDir = path.join(ROOT, 'dist', 'assets');
+  const assets = readdirSync(assetsDir).filter(name => name.endsWith('.js')).map(name => readFileSync(path.join(assetsDir, name)));
+  verifyAnalyticsFrontend(Buffer.concat(assets));
+} catch (error) {
+  fail(/** @type {Error} */ (error).message);
+}
 if (!existsSync(installerPath)) fail(`설치 파일이 없습니다: ${installerPath}`);
 if (!existsSync(signaturePath)) fail(`서명 파일이 없습니다: ${signaturePath}`);
 const installerTime = statSync(installerPath).mtimeMs;
@@ -186,6 +219,15 @@ if (statSync(signaturePath).mtimeMs + 1000 < installerTime) {
 }
 
 const installer = readFileSync(installerPath);
+const analyticsReceiptPath = `${installerPath}.analytics.json`;
+if (skipBuild) {
+  try {
+    const receipt = existsSync(analyticsReceiptPath) ? readJson(analyticsReceiptPath) : null;
+    verifyAnalyticsBuildReceipt(installer, analyticsSettings, receipt);
+  } catch (error) {
+    fail(/** @type {Error} */ (error).message);
+  }
+}
 const signature = readFileSync(signaturePath, 'utf8').trim();
 try {
   const checked = verifySignature(installer, signature, pubkey);
@@ -196,11 +238,14 @@ try {
   fail(`설치 파일의 서명을 확인하지 못했습니다.\n   ${/** @type {Error} */ (error).message}`);
 }
 console.log(`   ${installerName} (${megabytes(installer.length)}) 서명 확인`);
+if (!skipBuild) {
+  writeFileSync(analyticsReceiptPath, `${JSON.stringify(analyticsBuildReceipt(installer, analyticsSettings), null, 2)}\n`);
+}
 
 // ── 4) 올릴 파일 준비 ─────────────────────────────────────────────────
 step('GitHub 릴리스에 올릴 파일을 준비합니다');
 const outDir = path.join(ROOT, 'output', 'release', releaseTag(version));
-rmSync(outDir, { recursive: true, force: true });
+// 기존 릴리스·검수 자료를 지우지 않습니다. 이번 버전의 두 파일만 아래에서 기록합니다.
 mkdirSync(outDir, { recursive: true });
 
 const assetName = releaseAssetName(installerName);

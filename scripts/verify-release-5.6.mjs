@@ -11,7 +11,7 @@ const browser=await chromium.launch({headless:true,channel:'msedge'});
 const context=await browser.newContext({deviceScaleFactor:2,locale:'ko-KR',timezoneId:'Asia/Seoul'});
 const page=await context.newPage();page.setDefaultTimeout(15000);
 const errors=[];page.on('pageerror',e=>errors.push(e.message));
-const tabs=['5.6.2 새 소식','툴킷 전체','지난 업데이트','롤링 썬더'];
+const tabs=['5.6.3 새 소식','툴킷 전체','지난 업데이트','롤링 썬더'];
 const results=[];
 try {
   for(const [width,height] of [[600,1040],[600,768],[683,420],[390,720],[360,420]]) {
@@ -47,7 +47,7 @@ try {
     await page.goto(`${base}/?release-news-preview`);await page.evaluate(()=>localStorage.clear());
     await page.locator('.rn-footer').getByRole('button',{name:action,exact:true}).click();
     await page.getByText('공지를 닫았습니다.',{exact:true}).waitFor();
-    const hidden=await page.evaluate(()=>localStorage.getItem('update-notice:v5.6.2:hidden-until'));
+    const hidden=await page.evaluate(()=>localStorage.getItem('update-notice:v5.6.3:hidden-until'));
     if(action==='닫기')assert.equal(hidden,null);
     else if(action==='이 공지 그만보기')assert.equal(Number(hidden),Number.MAX_SAFE_INTEGER);
     else assert.equal(Number(hidden),await page.evaluate(()=>{const d=new Date();d.setDate(d.getDate()+1);d.setHours(0,0,0,0);return d.getTime();}));
@@ -71,7 +71,7 @@ try {
     await page.getByRole('button',{name:'사용하지 않기',exact:false}).click();
     await page.waitForFunction(()=>document.body.dataset.setupComplete==='true');
     const value=await page.evaluate(()=>JSON.parse(localStorage.getItem('initial-setup')));
-    assert.equal(value.completed,true);assert.equal(value.completionCount,1);assert.equal(value.appVersion,'5.6.2');assert.equal(value.choices.toolkitEnabled,false);
+    assert.equal(value.completed,true);assert.equal(value.completionCount,1);assert.equal(value.appVersion,'5.6.3');assert.equal(value.choices.toolkitEnabled,false);
   }
   await page.setViewportSize({width:600,height:780});await page.goto(`${base}/?initial-setup-preview`);await page.evaluate(()=>localStorage.clear());await page.reload();
   await page.getByRole('textbox',{name:'학교 이름',exact:true}).waitFor();await page.screenshot({path:`${out}/setup-first.png`});

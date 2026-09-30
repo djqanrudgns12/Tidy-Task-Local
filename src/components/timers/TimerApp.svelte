@@ -1,5 +1,8 @@
 <script lang="ts">
   import { onMount, untrack } from 'svelte';
+  import { track } from '../../lib/analytics.js';
+  import { newId } from '../../lib/ids.js';
+  import { timerAnalyticsEvents } from '../../lib/timers/analytics.js';
   import { AlertDialog } from 'bits-ui';
   import {
     Play,
@@ -86,6 +89,14 @@
     { direction: 'SouthEast', className: 'south-east' },
   ];
   const tracker = createAlarmTracker();
+  const analyticsWindowId = newId();
+  function reportTransition(before: typeof model) {
+    for (const event of timerAnalyticsEvents(before, model)) {
+      const operation = event === 'timer_completed' || event === 'timer_started'
+        ? `${analyticsWindowId}-${model.runId}` : newId();
+      track(event, { operation });
+    }
+  }
   const audio = createTimerAudio((message) => {
     if (!disposed) error = message;
   }, timerKind);
@@ -106,8 +117,11 @@
     if (disposed) return;
     const now = performance.now();
     view = sampleTimer(model, now);
-    if (model.phase === 'running' && view.phase === 'completed')
+    if (model.phase === 'running' && view.phase === 'completed') {
+      const before = model;
       model = transitionTimer(model, { type: 'sample' }, now);
+      reportTransition(before);
+    }
     if (timerKind === 'analog' && view.remainingMs > 1800000) dialRange = 60;
   }
   function schedule() {
@@ -122,7 +136,9 @@
       if (type === 'start' || type === 'restart') await audio.ready();
       if (disposed) return;
       const before = sampleTimer(model, performance.now());
+      const beforeTransition = model;
       model = transitionTimer(model, { type, ms }, performance.now());
+      reportTransition(beforeTransition);
       update();
       if (type === 'record') return;
       if (type === 'adjust' && before.phase === 'running' && model.phase === 'completed')

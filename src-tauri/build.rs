@@ -7,6 +7,22 @@ fn main() {
                 .find(|(key, _)| key == name).map(|(_, value)| value)
         }).unwrap_or_else(|| if name == "POSTHOG_HOST" { "https://us.i.posthog.com".into() } else { String::new() });
         assert!(!value.contains(['\r', '\n']), "Invalid analytics build setting");
+        if std::env::var("PROFILE").as_deref() == Ok("release") {
+            let value = value.trim();
+            match name {
+                "POSTHOG_PROJECT_TOKEN" => assert!(
+                    (value.starts_with("phc_") || value.starts_with("ph_project_"))
+                        && value.len() > 16
+                        && value.bytes().all(|b| b.is_ascii_alphanumeric() || matches!(b, b'_' | b'-')),
+                    "POSTHOG_PROJECT_TOKEN must be a public project token for release builds; configure src-tauri/.env and rebuild"
+                ),
+                "POSTHOG_HOST" => assert!(
+                    ["https://us.i.posthog.com", "https://eu.i.posthog.com"].contains(&value),
+                    "POSTHOG_HOST must be a supported PostHog ingestion host for release builds"
+                ),
+                _ => {}
+            }
+        }
         println!("cargo:rustc-env={name}={}", value.trim());
     }
     println!("cargo:rerun-if-changed=.env");

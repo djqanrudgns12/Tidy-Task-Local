@@ -34,6 +34,10 @@ npm.cmd run tauri build
 
 토큰이 비어 있거나 지역 주소가 허용된 주소가 아니면 수집을 시작하지 않습니다. 개발 빌드는 기본적으로 꺼져 있습니다. 개발 검증은 별도 테스트 프로젝트와 `POSTHOG_DEV_ENABLED=1`을 사용하세요. 개발 빌드 이벤트에는 `environment=test`가 붙습니다.
 
+배포 빌드에서는 이 설정 누락을 허용하지 않습니다. `npm run release`는 서명과 빌드 전에 공개 Project token과 수집 주소를 확인하며, `cargo` 또는 `tauri`로 직접 release 빌드를 해도 `build.rs`가 잘못된 설정을 거부합니다. `.env`를 고친 뒤에도 이미 만든 설치 파일은 바뀌지 않으므로 반드시 Rust 실행 파일과 설치 파일을 새로 빌드해야 합니다.
+
+릴리스 스크립트는 실행 파일에 실제 설정이 포함되었는지 확인하고, 서명된 설치 파일의 해시와 설정의 해시를 `설치파일.exe.analytics.json`에 기록합니다. `--skip-build`는 이 확인 기록과 일치하는 설치 파일만 다시 준비할 수 있습니다. 확인 기록에는 토큰 원문이 없으며 GitHub에 올릴 파일에도 포함하지 않습니다. 확인 기록이 없는 예전 설치 파일은 새로 빌드하세요.
+
 처음 확인할 때는 테스트 프로젝트의 토큰과 `POSTHOG_DEV_ENABLED=1`을 저장한 다음 프로젝트 폴더에서 `npm.cmd run tauri dev`를 실행합니다. `npm.cmd run dev`만 실행한 웹 브라우저 미리보기에서는 통계를 보내지 않습니다. 토큰을 바꿨다면 실행 중인 개발 앱을 완전히 종료하고 다시 실행하세요.
 
 배포할 때는 운영 프로젝트 토큰과 `POSTHOG_DEV_ENABLED=0`으로 바꾸고 위의 `tauri build`를 실행합니다. 만들어진 설치 파일은 `src-tauri/target/release/bundle/nsis` 또는 `msi` 폴더에서 확인합니다. 기존 설치 파일에는 설정 변경이 반영되지 않습니다. NEIS 키가 없는 배포 빌드는 별도 빌드 규칙에 따라 실패하므로 기존 급식 API 설정을 지우지 마세요.
@@ -72,7 +76,9 @@ npm.cmd run tauri build
 | 일·주·월 활성 설치 수 | `active_minute` / Unique users / 일·주·월 | 실제 입력이 관측된 설치본 수 |
 | 처음 관측된 설치 수 | `installation_first_seen` / Unique users | 설치일이 아닌 첫 통계 관측 시점 |
 | 7일·30일 재방문 | 시작 `installation_first_seen`, 재방문 `active_minute` / Retention | 관측된 설치본의 재사용 |
-| 기능별 이용 비율 | `window_used` / Unique users / `window_kind`로 분류 | Tidy Task, Tiny Note, 급식, 설정, 아카이브 등 |
+| 도구·기능별 활성 설치 수 (5.6.3+) | `tool_active_minute` / Unique users / `window_kind` | 같은 분에 여러 도구를 써도 각 도구에 반영. 선생님·표시 창은 본 도구로 통합 |
+| 도구별 활동이 관측된 분 (5.6.3+) | `tool_active_minute` / Total count / `window_kind` | 조작이 발생한 분의 수. 연속 체류 시간이나 타이머 실행 시간 아님 |
+| 이전 방식의 창 이용 | `window_used` / Unique users / `window_kind` | 세션별 첫 사용만 기록. 자정을 넘는 긴 세션의 일별 도구 집계에는 부적합 |
 | 세션 수 | `session_started` / Total count | 프로세스 시작 후 첫 사용 또는 30분 비활동 후 사용 |
 | 활동이 관측된 분 | `active_minute` / Total count | 조작이 발생한 분의 근사치. 연속 체류 시간 아님 |
 | 버전 사용 분포 | `active_minute` / Unique users / `app_version`로 분류 | 기간 중 여러 버전을 쓴 설치본은 각 버전에 포함 |
@@ -95,6 +101,14 @@ npm.cmd run tauri build
 | `app_active` | UTC 날짜별 실제 사용 1회 |
 | `active_minute` | 앱 전체에서 UTC 분별 실제 사용 1회. 재시작해도 같은 분은 중복 생성하지 않음 |
 | `window_used` | 세션별 창 종류를 처음 사용 |
+| `tool_active_minute` | 5.6.3부터 설치·도구·UTC 분마다 실제 입력 1회. 재시작·동일 도구 다중 창 중복 제거. 한국 자정 전후에도 각 날짜 관측 가능 |
+| `dice_rolled` | 새 굴리기를 받아 무작위 값을 만든 시점 / `count` = 주사위 수(1~3). 눈·합계·결과는 미수집 |
+| `timer_started` | 새 실행 또는 다시 시작. 일시정지 후 재개는 제외 |
+| `timer_resumed`, `timer_paused` | 실제 재개·일시정지 상태 전이. 중복 클릭 제외 |
+| `timer_completed` | 실행 중 → 완료 전이. 자동 완료 자체는 활동 집계 안 함. 스톱워치는 완료 없음 |
+| `vote_created` | 새 투표 저장 확인 이후. 결선도 새 투표로 집계 |
+| `vote_counting_started` | 개표 상태 저장 확인 이후 |
+| `vote_completed` | 완료된 투표의 기록함 저장 확인 이후. 복구 저장에도 작업 ID로 중복 제거. 단순 결과 재열기 제외 |
 | `todo_created` | 단일·여러 할 일 추가 / `count` |
 | `todo_completed` | 단일 할 일 완료 / `count` |
 | `todo_restored` | 단일 완료 항목 복원 / `count` |
@@ -116,7 +130,59 @@ npm.cmd run tauri build
 
 오류 코드: `frontend_error`, `unhandled_rejection`, `storage_write`, `meal_load`, `meal_copy`, `archive_write`. 네이티브 프로세스 충돌 보고 시스템은 아닙니다.
 
+### 5.6.3 도구 분류와 중복 방지
+
+`schema_version=2`부터 아래 고정 분류를 보냅니다. 사용자 제목·창 일련번호는 보내지 않습니다.
+
+| `window_kind` | 도구 |
+|---|---|
+| `timer_digital`, `timer_analog`, `timer_hourglass`, `timer_stopwatch` | 디지털·아날로그·모래시계·스톱워치 |
+| `vote` | 투표판 + 선생님 창 |
+| `dice`, `clock`, `focus_bell` | 주사위·시계·집중벨 |
+| `picker`, `tournament` | 뽑기·토너먼트 |
+| `noticeboard`, `roster` | 알림장·학급 명단 |
+| `scoreboard` | 개인·모둠·커스텀 점수판 |
+| `thermometer` | 온도계 + 표시 창 |
+| `seating` | 자리 배치 + 선생님·표시 창 |
+| `toolkit` | 도구 모음 자체 |
+
+기존 메모·급식·설정 등의 분류도 유지합니다. 알 수 없는 보조 창은 `other`이며 창 이름 원문은 수집하지 않습니다.
+행동 이벤트의 `operation`은 무작위 작업 ID이며 Rust에서 형식·창 종류를 검증한 뒤 **로컬 중복 방지에만** 씁니다.
+최근 최대 1,000개 작업 키(7일)를 보관합니다. 이 범위를 벗어난 재시도까지 영구적인 정확히 한 번 전송을 보증하지는 않습니다.
+실제 전송 재시도는 기존 UUID를 유지합니다. 도구별 분 중복 제거 값도 디스크에 저장합니다.
+
+`active_minute`의 `window_kind`만 분류해 도구 사용량을 만들지 마세요. 앱 전체 분 중복 제거 때문에 두 번째로 사용한 도구가 빠집니다.
+전체 설치 수와 도구별 설치 수는 다릅니다. 한 PC에서 여러 도구를 쓰므로 도구별 설치 수의 합은 전체 설치 수보다 클 수 있습니다.
+통계가 없던 기간 및 이미 `other`로 합쳐진 과거 기록은 세부 도구로 복원할 수 없습니다.
+
+운영 대시보드의 도구별 차트를 새 방식으로 바꾸었고, [기능 사용 현황](https://us.posthog.com/project/615314/dashboard/2109077)에
+활동 분·주사위·타이머·투표 동작 차트를 추가했습니다. 이전 `window_used` 차트도 이곳에 남겨 비교할 수 있습니다.
+
 ## 전송과 데이터 범위
+
+### 개발·배포 회귀 검사
+
+`npm run release`는 다음 검사를 자동 실행하며 실패하면 설치 파일 준비를 중단합니다.
+
+1. 환경변수와 `.env`의 공개 토큰·수집 주소 검사. Rust `build.rs`에서도 release 설정을 별도로 검사합니다.
+2. 현재 버전 일치, 활동 경계, 타이머 상태 전이, 네이티브 도구 목록 전체 분류, 중복·콘텐츠 제한 테스트.
+3. 빌드된 네이티브 파일의 토큰·수집 주소·`tool_active_minute`, 프런트 JS 번들의 주사위·타이머·투표 호출 확인.
+4. 원래 업데이터 공개 키로 서명 검증, 서명된 설치 파일 해시와 설정 해시를 묶은 확인 기록 검증.
+
+Rust 최적화는 `match`의 이벤트 문자열을 여러 정수 비교로 바꿀 수 있습니다. 이 때문에 네이티브 파일에
+모든 이벤트 이름이 문자열로 들어 있어야 한다고 검사하면 정상 빌드도 거부합니다. 고정 생성 이벤트와 프런트 호출 번들을 나누어 검사합니다.
+
+실제 전송 검수는 프로젝트 폴더에서 다음 명령으로 실행할 수 있습니다. **운영 활성 설치 수에 넣지 않는 `environment=test` 이벤트**를 보냅니다.
+자동 테스트에는 포함되지 않으며, 원래 앱의 저장 파일을 읽거나 수정하지 않습니다.
+
+```powershell
+cargo test --manifest-path src-tauri/Cargo.toml --lib analytics::tests::live_posthog_delivery_smoke -- --ignored --nocapture
+```
+
+표시되는 임의 설치 ID로 PostHog 원본 이벤트를 확인해야 검수가 끝납니다. HTTP 응답 성공만으로 실제 수신을 단정하지 않습니다.
+새 버전을 게시한 후에는 실제 5.6.3 설치본의 `environment=production` 수신을 따로 확인합니다.
+
+### 대기열과 수집 범위
 
 - 모든 창이 Rust의 단일 설치 ID·세션·대기열을 공유합니다. 자동 실행만으로 활성 이용자/세션을 만들지 않습니다.
 - 이벤트와 원래 시각·UUID를 디스크에 보관하고 15초 간격으로 최대 50건씩 HTTPS로 보냅니다. 실패하면 최대 15분까지 지수 백오프하며 동일 UUID로 재전송합니다. 앱 종료를 막지 않고 다음 실행 때 이어 보냅니다.

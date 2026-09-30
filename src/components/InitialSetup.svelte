@@ -202,7 +202,7 @@
     try {
       await setEnabled(value);
       toolkitEnabled = value;
-      await completeInitialSetup({ mealStartup, toolkitEnabled: value, appVersion: '5.6.2' });
+      await completeInitialSetup({ mealStartup, toolkitEnabled: value, appVersion: '5.6.3' });
       await finish();
     } catch {
       error = '설정을 끝내지 못했어요. 저장 공간을 확인한 뒤 다시 눌러 주세요.';
@@ -221,7 +221,7 @@
         mealStartup: meal.school ? meal.behavior.startup : false,
         toolkitEnabled: toolkit.toolkit.enabled,
         skipped: true,
-        appVersion: '5.6.2',
+        appVersion: '5.6.3',
       });
       await finish();
     } catch {
@@ -261,7 +261,7 @@
 <svelte:window onkeydown={keydown} />
 <div class="setup" role="dialog" aria-labelledby="setup-title" tabindex="-1" bind:this={dialog}>
   <header class="window-bar" use:draggable>
-    <span><GripHorizontal size={15} /> Tidy Task <b>5.6.2</b></span>
+    <span><GripHorizontal size={15} /> Tidy Task <b>5.6.3</b></span>
     <button aria-label="처음 설정 건너뛰기" title="건너뛰기 · 다시 표시되지 않음" disabled={busy} onclick={skipForever}><X size={18} /></button>
   </header>
 

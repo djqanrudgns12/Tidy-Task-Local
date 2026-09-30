@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { track } from '../../lib/analytics.js';
   // 학급 투표판 창(vote). 화면은 저장된 투표 단계(phase)를 따라 바뀝니다(PRD 3절):
   //   진행 중 투표 없음 → 홈 · 만들기 · 기록함 · 결과
   //   ready → 준비 · tutorial → 안내 · voting/paused → 투표 부스 · closed → 개표 대기 · counting → 개표 · done → 기록함에 옮기는 중
@@ -306,6 +307,7 @@
       return false;
     }
     store.draft.mutate(() => ({ config: null, step: 0, seed: '', templateId: '' }));
+    track('vote_created', { operation: id });
     setPrefs({ lastVoters: s.rules.voters });
     return true;
   }
@@ -421,9 +423,12 @@
     });
   }
   const setVoters = (n: number) => store.session.mutate(B.setVoters(n));
-  function startCounting() {
+  async function startCounting() {
     void audio.unlock();
-    store.session.mutate(B.startCounting);
+    const id = session.id;
+    if (!id || session.phase !== 'closed') return;
+    const result = await store.session.mutateAndConfirm(B.startCounting, (d: any) => d.id === id && d.phase === 'counting');
+    if (result === 'saved') track('vote_counting_started', { operation: id });
   }
   async function finishArchive(s: any, celebrateNow: boolean) {
     const r = await store.archive.mutateAndConfirm(archiveSession(s, todayString()), (a: any) => alreadyArchived(s, a));
@@ -434,6 +439,7 @@
     // 결과 화면을 투표를 비우기 "전에" 정해 둡니다. 비우는 순간(저장 확인 전) 옛 화면 값(첫 화면)이 잠깐 보였다가 결과로 바뀌어,
     // 화면이 한 번 깜빡이고 배경 음악도 결과 연출(축하 소리 뒤에 메인 음악)과 어긋났습니다. 투표가 남아 있는 동안에는 screen 값이 화면에 쓰이지 않습니다.
     focusEntryId = s.runoffOf ?? s.id;
+    if (s.phase === 'done' && s.id) track('vote_completed', { operation: s.id });
     celebrate = celebrateNow;
     screen = 'result';
     await clearSession();

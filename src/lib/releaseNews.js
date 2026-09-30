@@ -3,7 +3,7 @@ import { fitNoticeSize } from './toolkitRelease.js';
 // 공지 ID는 앱의 패치 버전과 독립적입니다. 패치마다 저절로 바뀌지 않고, 새로 알릴 것이 있을 때만 손으로 올립니다.
 // ID를 바꾸면 숨김 키도 바뀌어, 이전 공지를 "그만보기"한 사용자에게도 한 번 더 뜹니다.
 // 5.6.2(2026-09-27): 사용자 요청으로 공지를 5.6.2로 올리고 첫 탭에 5.6.2의 달라진 점을 더했습니다.
-export const RELEASE_NEWS_ID = 'v5.6.2';
+export const RELEASE_NEWS_ID = 'v5.6.3';
 export const RELEASE_NEWS_LABEL = 'release-news';
 export const RELEASE_NEWS_KEY = `update-notice:${RELEASE_NEWS_ID}:hidden-until`;
 export const DISMISSED_FOREVER = Number.MAX_SAFE_INTEGER;

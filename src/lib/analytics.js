@@ -3,11 +3,11 @@ import { shouldReportActivity } from './analyticsActivity.js';
 
 /** No text/DOM/error objects accepted. Native code independently validates all properties.
  * @param {string} event
- * @param {{count?:number, choice?:string}} [properties]
+ * @param {{count?:number, choice?:string, operation?:string}} [properties]
  */
-export function track(event, { count, choice } = {}) {
+export function track(event, { count, choice, operation } = {}) {
   if (!isTauri()) return;
-  void invoke('analytics_track', { event, count, choice }).catch(() => {});
+  void invoke('analytics_track', { event, count, choice, operation }).catch(() => {});
 }
 
 const lastEvents = new Map();
