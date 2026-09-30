@@ -1,5 +1,5 @@
 import { numbers } from './geometry.js';
-import { ruleSatisfied } from './solver.js';
+import { ruleSatisfied, individualDomains, seatConflicts, formationSeats } from './constraints.js';
 
 /**
  * 자리 재배치 전에 "먼저 앉힐 자리(사전 지정·자리 유지)"와 선생님이 추가한 조건이 서로 맞는지 미리 따져 봅니다.
@@ -39,14 +39,16 @@ export function seatLabeler(layout) {
 }
 
 /**
- * 학생별로 먼저 앉을 자리를 모읍니다. 재배치 엔진처럼 자리 유지(fixed)가 사전 지정(zone)보다 앞섭니다.
+ * 학생별로 자리 유지(fixed)와 사전 지정(zone)을 모두 지킬 수 있는 자리의 교집합을 모읍니다.
  * @param {import('./types').Draft} draft
  */
 function pinsOf(draft) {
   /** @type {Map<string,{seatIds:string[],source:'fixed'|'preset'}>} */
   const pins = new Map();
-  for (const r of draft.rules) if (r.kind === 'fixed' && r.seatId && !pins.has(r.students[0])) pins.set(r.students[0], { seatIds: [r.seatId], source: 'fixed' });
-  for (const r of draft.rules) if (r.kind === 'zone' && r.seatIds?.length && !pins.has(r.students[0])) pins.set(r.students[0], { seatIds: [...r.seatIds], source: 'preset' });
+  for (const r of draft.rules) if (r.kind === 'fixed' || r.kind === 'zone') {
+    const id=r.students[0],seatIds=r.kind==='fixed'?[r.seatId||'']:[...(r.seatIds||[])],previous=pins.get(id);
+    pins.set(id,{seatIds:previous?previous.seatIds.filter(seat=>seatIds.includes(seat)):seatIds,source:r.kind==='fixed'||previous?.source==='fixed'?'fixed':'preset'});
+  }
   return pins;
 }
 
@@ -55,12 +57,13 @@ const sameStudents = (a, b) => a.students.length === b.students.length && a.stud
 
 /**
  * 두 학생 조건끼리 동시에 지킬 수 없는 짝을 찾습니다.
- * 짝으로 함께 앉으면 가까이 앉게 되므로 어떤 "떨어져 앉기"와도 함께 지킬 수 없고, 같은 모둠끼리도 마찬가지입니다.
- * @param {import('./types').Rule} together @param {import('./types').Rule} apart
+ * 실제 교실의 짝·모둠 관계와 거리를 기준으로 두 조건을 함께 지킬 수 있는 자리가 있는지 확인합니다.
+ * @param {import('./types').Rule} together @param {import('./types').Rule} apart @param {import('./types').Layout} layout
  */
-function contradicts(together, apart) {
-  if (together.distance === 'group') return apart.distance === 'group';
-  return true;
+function contradicts(together, apart, layout) {
+  const seats=layout.seats.filter(s=>s.active!==false),[first,second]=together.students;
+  // 짝과 모둠은 다른 관계입니다. 실제 책상 관계와 거리를 함께 보아 가능한 조합을 모순으로 표시하지 않습니다.
+  return !seats.some(a=>seats.some(b=>a.id!==b.id&&ruleSatisfied(together,{[a.id]:first,[b.id]:second},layout)&&ruleSatisfied(apart,{[a.id]:first,[b.id]:second},layout)));
 }
 
 /**
@@ -72,6 +75,7 @@ export function checkRules(draft, students) {
   const name = (/** @type {string} */ id) => people.get(id)?.name || '삭제된 학생';
   const label = seatLabeler(draft.layout);
   const seats = draft.layout.seats.filter(s => s.active !== false);
+  const formation=formationSeats(draft,students.filter(p=>!draft.excluded.includes(p.id)).map(p=>p.id));
   const pins = pinsOf(draft);
   const pinnedBy = new Map();
   for (const [studentId, pin] of pins) if (pin.seatIds.length === 1) pinnedBy.set(pin.seatIds[0], studentId);
@@ -87,7 +91,7 @@ export function checkRules(draft, students) {
   /** 한 학생이 앉을 수 있는 자리: 지정이 있으면 그 자리들, 없으면 다른 학생이 맡지 않은 빈자리. @param {string} studentId */
   const domain = studentId => {
     const pin = pins.get(studentId);
-    if (pin) return seats.filter(s => pin.seatIds.includes(s.id));
+    if (pin) return seats.filter(s => pin.seatIds.includes(s.id)&&(!pinnedBy.has(s.id)||pinnedBy.get(s.id)===studentId));
     return seats.filter(s => !pinnedBy.has(s.id) || pinnedBy.get(s.id) === studentId);
   };
 
@@ -111,7 +115,7 @@ export function checkRules(draft, students) {
       const front = pair.find(r => r.kind === 'front'), back = pair.find(r => r.kind === 'back');
       const together = pair.find(r => r.kind === 'together'), apart = pair.find(r => r.kind === 'apart');
       if (front && back) for (const r of pair) put(r, 'conflict', '앞쪽·뒤쪽 조건이 함께 걸려 있어요. 하나만 남겨 주세요.');
-      if (together && apart && contradicts(together, apart)) for (const r of pair) put(r, 'conflict', '함께 앉기와 떨어져 앉기가 서로 부딪혀요. 하나만 남겨 주세요.');
+      if (together && apart && contradicts(together, apart,draft.layout)) for (const r of pair) put(r, 'conflict', '현재 교실에서 함께 앉기와 떨어져 앉기를 동시에 지킬 수 없어요. 조건이나 교실 모양을 확인해 주세요.');
     }
   });
 
@@ -154,9 +158,13 @@ export function checkRules(draft, students) {
   const fixedPeople = new Set(fixedSeats.values());
   const pinList = [...pins].map(([studentId, pin]) => {
     let issue = '';
+    if(!people.has(studentId)||draft.excluded.includes(studentId))issue='이번 배치에 참여하지 않는 학생이에요.';
+    else if(!pin.seatIds.length)issue='한 학생의 지정 조건이 서로 다른 자리를 요구해요.';
+    else if(!seats.some(s=>pin.seatIds.includes(s.id)))issue='지정한 자리가 없거나 비워 둔 자리예요.';
+    else if(!formation.some(s=>pin.seatIds.includes(s.id)))issue='현재 대형에서 책상이 없는 칸이에요. 메인 화면에서 대형을 먼저 조정해 주세요.';
     if (pin.source === 'preset') {
       const taken = pin.seatIds.map(id => fixedSeats.get(id)).find(id => id && id !== studentId);
-      if (taken) issue = `${who(taken, '이', '가')} 자리 유지로 앉아 있는 자리예요.`;
+      if (taken&&pin.seatIds.every(id=>fixedSeats.has(id)&&fixedSeats.get(id)!==studentId)) issue = `${who(taken, '이', '가')} 자리 유지로 앉아 있는 자리예요.`;
     }
     return { studentId, number: people.get(studentId)?.number ?? 0, name: name(studentId), seatId: pin.seatIds[0], label: pin.seatIds.length === 1 ? label(pin.seatIds[0]) : `${pin.seatIds.length}곳 중`, source: pin.source, issue };
   });
@@ -167,6 +175,13 @@ export function checkRules(draft, students) {
       if (entry) entry.issue = '자리 유지 중이라 사전 지정 자리와 달라요.';
     }
   }
+  // 두 학생의 동일 지정과 여러 구역이 겹쳐 생기는 자리 부족을 같은 매칭 규칙으로 점검합니다.
+  const pinDomains=new Map([...pins].map(([student,pin])=>[student,seats.filter(s=>pin.seatIds.includes(s.id))]));
+  const pinConflicts=seatConflicts(pinDomains);
+  for(const entry of pinList)if(pinConflicts.has(entry.studentId)&&!entry.issue&&(entry.source==='preset'||!pinList.some(p=>p.source==='preset'&&p.issue&&pinConflicts.has(p.studentId))))entry.issue='다른 학생의 지정과 겹쳐 모두 앉을 자리가 부족해요.';
+  const domains=individualDomains(draft,students.filter(p=>!draft.excluded.includes(p.id)).map(p=>p.id),formation);
+  const domainConflicts=seatConflicts(domains);
+  for(const rule of custom)if(rule.students.length===1&&domainConflicts.has(rule.students[0])&&results.get(rule.id)?.status!=='conflict')put(rule,'conflict','지정 구역과 앞뒤 조건을 함께 적용하면 앉을 자리가 부족해요.',pins.has(rule.students[0])?rule.students[0]:'');
   pinList.sort((x, y) => (x.source === y.source ? 0 : x.source === 'preset' ? -1 : 1) || x.number - y.number || x.name.localeCompare(y.name, 'ko'));
 
   const conflictCount = [...results.values()].filter(r => r.status === 'conflict').length + pinList.filter(p => p.issue).length;

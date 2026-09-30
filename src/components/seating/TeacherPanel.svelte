@@ -5,6 +5,7 @@
   import { dailyArchives, importSeatLayout } from '../../lib/seating/model.js';
   import { RULE_NAMES, violations } from '../../lib/seating/solver.js';
   import { checkRules } from '../../lib/seating/ruleCheck.js';
+  import { setPreset, loadPresets } from '../../lib/seating/presets.js';
   import { Check, ClipboardList, History, ListChecks, LockKeyhole, MapPin, Maximize2, Pencil, Plus, RotateCcw, Trash2, TriangleAlert, X } from 'lucide-svelte';
   import ClassroomScene from './ClassroomScene.svelte';
   let { draft, classroom, document, onchange, onaction, busy=false }: {draft:Draft,classroom:Classroom,document:SeatingDocument,onchange:(d:Draft)=>void,onaction:(a:any)=>void,busy?:boolean} = $props();
@@ -51,7 +52,7 @@
   const unassignedCount=$derived(sortedStudents.filter(p=>!presetByStudent.has(p.id)&&!fixedStudents.has(p.id)).length);
   const presetBoard=$derived.by(()=>{
     const base=publicBoard(draft,classroom.students,classroom.name);
-    const bySeat=new Map([...fixedRules.map(r=>[r.seatId,r.students[0]] as const),...presetRules.flatMap(r=>(r.seatIds||[]).map(id=>[id,r.students[0]] as const))]);
+    const bySeat=new Map([...presetRules.flatMap(r=>(r.seatIds||[]).map(id=>[id,r.students[0]] as const)),...fixedRules.map(r=>[r.seatId,r.students[0]] as const)]);
     return {...base,seats:draft.layout.seats.map(s=>{
       const p=classroom.students.find(p=>p.id===bySeat.get(s.id));
       return {...s,name:p?.name||'',number:p?.number||'',appearance:'',gender:p?.gender||'unspecified'};
@@ -69,7 +70,9 @@
     notice=info?.status==='conflict'?`규칙을 추가했지만 확인이 필요해요. ${info.message}`:info?.status==='covered'?`규칙을 추가했어요. ${info.message}`:'규칙을 추가했어요. 자리 재배치 때 꼭 지켜요.';}
   // 사전 지정을 바꾼 결과 새로 부딪히는 배치 조건이 생기면, 배치 조건 탭으로 가지 않아도 바로 알 수 있게 알려 줍니다.
   function warnNewConflicts(next:Draft){
-    const before=check.rules,after=checkRules(next,classroom.students).rules;
+    const before=check.rules,nextCheck=checkRules(next,classroom.students),after=nextCheck.rules;
+    const pinIssue=nextCheck.pins.find(p=>p.issue&&!check.pins.some(old=>old.studentId===p.studentId&&old.issue===p.issue));
+    if(pinIssue){showPresetToast(`${pinIssue.name}: ${pinIssue.issue}`);return;}
     const fresh=[...after].filter(([id,v])=>v.status==='conflict'&&before.get(id)?.status!=='conflict').map(([id])=>next.rules.find(r=>r.id===id)).filter(r=>!!r);
     if(!fresh.length)return;
     const rule=fresh[0];
@@ -82,11 +85,8 @@
     if(fixed&&fixed.seatId!==id){showPresetToast('고정된 학생이나 자리예요. 메인 화면에서 자물쇠를 해제해 주세요.');return;}
     if(fixed&&fixed.students[0]!==studentId){showPresetToast('다른 학생이 고정된 자리예요.');return;}
     if(fixed&&fixed.students[0]===studentId){showPresetToast('이미 자리가 고정된 학생이에요.');return;}
-    const d=clone(draft),existing=d.rules.find(r=>r.kind==='zone'&&r.students[0]===studentId),wasSame=existing?.seatIds?.length===1&&existing.seatIds[0]===id;
-    if(wasSame&&!toggle)return;
-    d.rules=d.rules.filter(r=>r.kind!=='zone'||r.students[0]===studentId||!r.seatIds?.includes(id));
-    if(existing){if(wasSame)d.rules=d.rules.filter(r=>r.id!==existing.id);else existing.seatIds=[id];}
-    else d.rules.push({id:uid(),kind:'zone',students:[studentId],seatIds:[id]});
+    const d=setPreset(draft,studentId,id,toggle);
+    if(!d){showPresetToast('비워 둔 자리에는 지정할 수 없어요. 사용할 자리를 골라 주세요.');return;}
     onchange(d);warnNewConflicts(d);
   }
   // 배치도의 × 버튼: 그 자리에 걸린 사전 지정만 지웁니다. 메인 화면의 자리 유지(fixed)는 자물쇠로만 풀 수 있게 x를 달지 않습니다.
@@ -109,29 +109,22 @@
   }
   // 초기화 뒤 새로 지정한 학생·자리가 있으면 그쪽을 우선하고, 겹치지 않는 옛 지정만 되살립니다.
   function restorePresets(cleared:typeof presetRules){
-    const d=clone(draft),valid=new Set(classroom.students.map(p=>p.id)),seats=new Set(d.layout.seats.map(s=>s.id));
+    const d=clone(draft),valid=new Set(classroom.students.map(p=>p.id)),seats=new Set(d.layout.seats.filter(s=>s.active!==false).map(s=>s.id));
     const takenPeople=new Set(d.rules.filter(r=>r.kind==='zone'||r.kind==='fixed').map(r=>r.students[0]));
     const takenSeats=new Set(d.rules.flatMap(r=>r.kind==='fixed'?[r.seatId]:r.kind==='zone'?(r.seatIds||[]):[]));
     let restored=0;
     for(const r of cleared){
-      const seatId=r.seatIds?.[0],studentId=r.students[0];
-      if(!seatId||!valid.has(studentId)||!seats.has(seatId)||takenPeople.has(studentId)||takenSeats.has(seatId))continue;
-      d.rules.push(clone(r));takenPeople.add(studentId);takenSeats.add(seatId);restored++;
+      const studentId=r.students[0],seatIds=(r.seatIds||[]).filter(id=>seats.has(id)&&!takenSeats.has(id));
+      if(!seatIds.length||!valid.has(studentId)||takenPeople.has(studentId))continue;
+      d.rules.push({...clone(r),seatIds});takenPeople.add(studentId);seatIds.forEach(id=>takenSeats.add(id));restored++;
     }
     if(!restored){showPresetToast('되살릴 수 있는 지정이 없어요.');return;}
     onchange(d);showPresetToast(`사전 지정 ${restored}명을 되살렸어요.`);
   }
   function resizePreset(axis:'columns'|'rows',delta:number){const d=resizeLayout(draft,axis,delta);if(!d){showPresetToast('학생이 앉아 있거나 지정된 자리까지는 줄일 수 없어요.');return;}onchange(d);}
   function loadPresetFrom(source:Draft){
-    const d=clone(draft),valid=new Set(classroom.students.map(p=>p.id)),fixedPeople=new Set(fixedRules.map(r=>r.students[0])),fixedSeats=new Set(fixedRules.map(r=>r.seatId));
-    d.rules=d.rules.filter(r=>r.kind!=='zone');
-    const seen=new Set<string>();
-    source.layout.seats.forEach((seat,i)=>{
-      const studentId=source.assignments[seat.id],target=d.layout.seats[i];
-      if(!target||!studentId||!valid.has(studentId)||fixedPeople.has(studentId)||fixedSeats.has(target.id)||seen.has(studentId))return;
-      d.rules.push({id:uid(),kind:'zone',students:[studentId],seatIds:[target.id]});seen.add(studentId);
-    });
-    if(!seen.size){showPresetToast('불러올 학생 자리가 없어요.');return;}
+    const {draft:d,count}=loadPresets(draft,source,classroom.students.map(p=>p.id));
+    if(!count){showPresetToast('불러올 학생 자리가 없어요.');return;}
     archivePicker=false;presetStudent='';onchange(d);warnNewConflicts(d);
   }
   function openArchivePicker(){if(!previousArchives.length){showPresetToast('이전 자리가 없어요.');return;}archivePicker=!archivePicker;}
@@ -142,9 +135,10 @@
   function change(key:string,value:any){const d=clone(draft);Object.assign(d,{[key]:value});onchange(d);}
   function restore(a:Archive,layoutOnly=false){
     const d=importSeatLayout(draft,a.draft,classroom.students.length);
+    if(!d){notice='현재 학생과 지정 조건을 모두 유지할 자리가 부족해 가져오지 않았어요.';return;}
     if(!layoutOnly){
       const valid=new Set(classroom.students.map(p=>p.id));
-      const archived=Object.fromEntries(Object.entries(a.draft.assignments).filter(([seat,p])=>valid.has(p)&&d.layout.seats.some(s=>s.id===seat)));
+      const archived=Object.fromEntries(Object.entries(a.draft.assignments).filter(([seat,p])=>valid.has(p)&&!d.excluded.includes(p)&&d.layout.seats.some(s=>s.id===seat&&s.active!==false)));
       const placed=new Set(Object.values(archived));
       for(const [seat,p] of Object.entries(d.assignments))if(!placed.has(p)){
         const destination=!archived[seat]?seat:d.layout.seats.find(s=>s.active!==false&&!archived[s.id])?.id;

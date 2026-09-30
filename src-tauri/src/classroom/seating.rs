@@ -23,12 +23,17 @@ fn rule_ok(r: &Value, draft: &Value) -> bool {
     let found: Vec<_> = student_ids.iter().filter_map(|id| seats.iter().find(|s| draft["assignments"][text(s,"id")].as_str() == Some(*id))).collect();
     if found.len() != student_ids.len() { return true; }
     let Some(a) = found.first() else { return false; };
-    let height = seats.iter().map(|s| num(s,"y")+1.8).fold(5.0_f64, f64::max);
+    // 바닥 여백 대신 실제 줄로 판정해 JS 조건 평가와 저장 시 검증을 일치시킵니다.
+    let mut coordinates:Vec<f64>=seats.iter().filter(|s|s["active"]!=false).map(|s|num(s,"y")).collect();
+    coordinates.sort_by(f64::total_cmp);
+    let mut rows:Vec<f64>=Vec::new();
+    for y in coordinates {if !rows.iter().any(|anchor|(anchor-y).abs()<=0.12){rows.push(y);}}
+    let row=rows.iter().position(|y|(y-num(a,"y")).abs()<=0.12).unwrap_or(rows.len());
     match text(r,"kind") {
         "fixed" => text(a,"id") == text(r,"seatId"),
         "zone" => ids(&r["seatIds"]).contains(&text(a,"id")),
-        "front" => num(a,"y") <= height*0.46,
-        "back" => num(a,"y") >= height*0.46,
+        "front" => row < rows.len().div_ceil(2),
+        "back" => row >= rows.len().div_ceil(2),
         "apart" | "together" => {
             let Some(b) = found.get(1) else { return false; };
             let pair = !text(a,"pair").is_empty() && text(a,"pair") == text(b,"pair");
@@ -195,6 +200,44 @@ fn project(d:&Value,students:&Value,class_name:&str,date:&str)->Value{
 mod tests {
     use super::*;
     use crate::classroom::model::Student;
+
+    #[test]
+    fn front_and_back_use_actual_active_rows_even_with_large_gaps() {
+        let mut draft=json!({"layout":{"seats":[
+            {"id":"s1","x":1,"y":10,"angle":0,"active":true},
+            {"id":"s2","x":1,"y":11,"angle":0,"active":true},
+            {"id":"s3","x":1,"y":80,"angle":0,"active":true},
+            {"id":"s4","x":1,"y":100,"angle":0,"active":true},
+            {"id":"unused","x":1,"y":120,"angle":0,"active":false}
+        ]},"assignments":{"s2":"a","s3":"b"}});
+        assert!(rule_ok(&json!({"kind":"front","students":["a"]}),&draft));
+        assert!(!rule_ok(&json!({"kind":"back","students":["a"]}),&draft));
+        assert!(rule_ok(&json!({"kind":"back","students":["b"]}),&draft));
+        draft["assignments"]=json!({"s1":"a","s2":"b"});
+        draft["layout"]["seats"].as_array_mut().unwrap().truncate(2);
+        assert!(rule_ok(&json!({"kind":"back","students":["b"]}),&draft));
+        draft["layout"]["seats"].as_array_mut().unwrap().truncate(1);
+        assert!(!rule_ok(&json!({"kind":"back","students":["a"]}),&draft));
+    }
+
+    #[test]
+    fn saving_current_preserves_sparse_geometry_and_preset_rules() {
+        let class=Class{id:"c".into(),name:"학급".into(),revision:0,groups:vec![],students:["a","b"].into_iter().enumerate().map(|(i,id)|Student{id:id.into(),number:i as u32+1,name:id.into(),gender:"unspecified".into(),group_id:None}).collect()};
+        let layout=json!({"shape":"single","columns":3,"rows":2,"front":"top","props":[],"seats":[
+            {"id":"s1","x":1,"y":1,"angle":0,"active":true},
+            {"id":"s2","x":2.38,"y":1,"angle":0,"active":true},
+            {"id":"s3","x":3.76,"y":2.65,"angle":0,"active":true}
+        ]});
+        let rules=json!([{"id":"pin","kind":"zone","students":["a"],"seatIds":["s3"]}]);
+        let draft=json!({"title":"자리","layout":layout,"assignments":{"s1":"b","s3":"a"},"rules":rules,"excluded":[],"appearances":{}});
+        let mut snapshot=Snapshot::default();snapshot.classes.push(class);
+        snapshot.seating.insert("c".into(),json!({"version":1,"revision":0,"draft":draft,"archives":[],"currentId":null}));
+        apply(&mut snapshot,"c",0,0,json!({"type":"saveCurrent","date":"2026-09-30","sessionId":"session"})).unwrap();
+        assert_eq!(snapshot.seating["c"]["draft"]["layout"],layout);
+        assert_eq!(snapshot.seating["c"]["archives"][0]["draft"]["layout"],layout);
+        assert_eq!(snapshot.seating["c"]["archives"][0]["draft"]["rules"],rules);
+        assert!(snapshot.seating["c"]["archives"][0]["draft"]["assignments"].get("s2").is_none());
+    }
 
     #[test]
     fn previously_optional_rule_prevents_confirming_a_violating_arrangement() {

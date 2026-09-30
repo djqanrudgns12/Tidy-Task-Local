@@ -11,6 +11,8 @@
   const size=$derived({width:Math.max(3,...compact.map(s=>s.x+1.55)),height:Math.max(2,...compact.map(s=>s.y+1.55))});
   const ux=$derived(Math.max(fit&&viewport<650?66:12,Math.min(128,(viewport-40)/size.width))*zoom);
   const uy=$derived(Math.max(fit&&viewportHeight<270?31:10,Math.min(105,(viewportHeight-76)/size.height))*zoom);
+  // 작은 교실에서도 자물쇠가 자리 중앙을 덮어 학생 선택 클릭을 가로채지 않도록 크기를 줄입니다.
+  const lockSize=$derived(Math.min(28,ux*.32,uy*.5));
   const viewed=$derived(compact.map((s:PublicSeat)=>({...s,...viewPoint(s,size,teacher)})));
   const grid=$derived(numbers(viewed));
   const guides=$derived({xs:guideEdges(grid.xs,1),ys:guideEdges(grid.ys,1.25)});
@@ -40,7 +42,7 @@
       {@const isDragging=drag?.id===s.id&&drag.moved}
       <button class="seat-place" class:chosen={selected.includes(s.id)} class:locked={locked.includes(s.id)} class:drop-target={target===s.id||dropHighlight===s.id} class:found={highlighted===s.id} class:unavailable={!s.active} class:empty={!s.name&&!concealed.includes(s.id)} class:mystery={concealed.includes(s.id)} class:simple class:dragging={isDragging}
         style:left={`${16+s.x*ux}px`} style:top={`${38+s.y*uy}px`} style:width={`${ux}px`} style:height={`${uy*1.25}px`}
-        data-seat-id={s.id} aria-label={concealed.includes(s.id)?`숨겨진 학생 자리, 위쪽 ${num.x}, 왼쪽 ${num.y}. 클릭해서 공개`:`${s.number?`${s.number}번 `:''}${s.name||'빈자리'}, 위쪽 ${num.x}, 왼쪽 ${num.y}`} aria-pressed={concealed.includes(s.id)?undefined:selected.includes(s.id)} disabled={disabled&&!concealed.includes(s.id)}
+        data-seat-id={s.id} aria-label={concealed.includes(s.id)?`숨겨진 학생 자리, 위쪽 ${num.x}, 왼쪽 ${num.y}. 클릭해서 공개`:`${s.number?`${s.number}번 `:''}${s.name||'빈자리'}, 위쪽 ${num.x}, 왼쪽 ${num.y}`} aria-pressed={concealed.includes(s.id)?undefined:selected.includes(s.id)} disabled={s.active===false||disabled&&!concealed.includes(s.id)}
         onpointerdown={e=>down(e,s)} onpointermove={move} onpointerup={up} onpointercancel={()=>drag=null} onclick={e=>click(e,s)}>
         {#if concealed.includes(s.id)}<span class="seat-mystery" aria-hidden="true"><span class="seat-mystery-figure"></span><span class="seat-mystery-plate">?</span></span>{/if}
         {#if s.name}{#key `${s.number}|${s.name}`}
@@ -51,7 +53,7 @@
         {/key}{/if}
         {#if target===s.id}<span class="seat-drop-label">{s.name?'서로 바꾸기':'여기로 옮기기'}</span>{/if}
       </button>
-      {#if lockable&&(s.name||locked.includes(s.id))}<button class="seat-lock" class:active={locked.includes(s.id)} style:left={`${16+s.x*ux+ux-31}px`} style:top={`${38+s.y*uy+uy*1.25-32}px`} aria-label={`${s.name||'지정된'} 자리 ${locked.includes(s.id)?'고정 해제':'고정'}`} aria-pressed={locked.includes(s.id)} title={locked.includes(s.id)?`${s.name||'지정된'} 자리 고정 해제`:`${s.name} 자리 고정`} disabled={disabled} onclick={()=>onlock(s.id)}>{#if locked.includes(s.id)}<LockKeyhole size={15}/>{:else}<LockKeyholeOpen size={15}/>{/if}</button>{/if}
+      {#if lockable&&(s.name||locked.includes(s.id))}<button class="seat-lock" class:active={locked.includes(s.id)} style:left={`${16+s.x*ux+ux-lockSize-3}px`} style:top={`${38+s.y*uy+uy*1.25-lockSize-3}px`} style:--seat-lock-size={`${lockSize}px`} aria-label={`${s.name||'지정된'} 자리 ${locked.includes(s.id)?'고정 해제':'고정'}`} aria-pressed={locked.includes(s.id)} title={locked.includes(s.id)?`${s.name||'지정된'} 자리 고정 해제`:`${s.name} 자리 고정`} disabled={disabled} onclick={()=>onlock(s.id)}>{#if locked.includes(s.id)}<LockKeyhole size={Math.min(15,lockSize*.65)}/>{:else}<LockKeyholeOpen size={Math.min(15,lockSize*.65)}/>{/if}</button>{/if}
       <!-- 자리 버튼 안에 넣으면 누를 때 자리 선택(click)까지 같이 일어나므로 형제 버튼으로 카드 오른쪽 위 모서리에 겹쳐 둡니다. -->
       {#if s.name&&clearable.includes(s.id)}<button class="seat-clear" style:left={`${16+s.x*ux+ux*.97-15}px`} style:top={`${38+s.y*uy+uy*.125-9}px`} aria-label={`${s.number?`${s.number}번 `:''}${s.name} 자리 비우기`} title={`${s.name} 자리 비우기`} disabled={disabled} onclick={()=>onclear(s.id)}>×</button>{/if}
     {/each}

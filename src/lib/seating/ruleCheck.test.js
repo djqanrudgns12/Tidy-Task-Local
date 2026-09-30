@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { newDraft } from './model.js';
+import { newDraft, makeLayout } from './model.js';
 import { checkRules, josa, seatLabeler } from './ruleCheck.js';
 
 const students = Array.from({ length: 20 }, (_, i) => ({ id: `p${i}`, number: i + 1, name: ['김하늘', '이서아', '박도윤', '최지우'][i % 4] + i, gender: 'unspecified', groupId: null }));
@@ -83,10 +83,30 @@ test('같은 조건을 두 번 넣으면 뒤의 것을 중복으로, 앞·뒤쪽
 
 test('모둠 기준 함께 앉기와 짝 기준 떨어져 앉기는 함께 지킬 수 있습니다', () => {
   const { draft } = setup();
+  draft.layout=makeLayout(20,'groups');
   draft.rules.push({ id: 't', kind: 'together', students: ['p0', 'p1'], distance: 'group' }, { id: 'a', kind: 'apart', students: ['p0', 'p1'], distance: 'pair' });
   const { rules } = checkRules(draft, students);
   assert.equal(rules.get('t')?.status, 'free');
   assert.equal(rules.get('a')?.status, 'free');
+});
+
+test('짝 함께 앉기와 모둠 기준 떨어져 앉기는 모둠이 없는 대형에서 모순이 아닙니다',()=>{
+  const {draft}=setup();draft.rules=[{id:'t',kind:'together',students:['p0','p1'],distance:'pair'},{id:'a',kind:'apart',students:['p0','p1'],distance:'group'}];
+  assert.equal(checkRules(draft,students).conflictCount,0);
+});
+
+test('여러 학생이 중첩 지정 구역의 수용 인원을 넘으면 지정마다 문제를 표시합니다',()=>{
+  const {draft}=setup(),zone=draft.layout.seats.slice(0,2).map(s=>s.id);
+  draft.rules=students.slice(0,3).map(p=>({id:`z-${p.id}`,kind:'zone',students:[p.id],seatIds:zone}));
+  assert.equal(checkRules(draft,students).pins.filter(p=>p.issue).length,3);
+});
+
+test('동일 학생의 두 지정은 교집합으로 검사하고 완성 대형 밖의 지정은 즉시 알립니다',()=>{
+  const {draft,seat}=setup();
+  draft.rules=[preset('p0',seat(0,0)),{id:'z-other',kind:'zone',students:['p0'],seatIds:[seat(0,1)]}];
+  assert.match(checkRules(draft,students).pins[0].issue,/서로 다른/);
+  draft.rules=[preset('p0',seat(3,5))];draft.assignments=Object.fromEntries(draft.layout.seats.slice(0,20).map((s,i)=>[s.id,students[i].id]));
+  assert.match(checkRules(draft,students).pins[0].issue,/대형/);
 });
 
 test('사전 지정 자리를 다른 학생이 자리 유지로 차지하면 그 지정에 문제를 표시합니다', () => {

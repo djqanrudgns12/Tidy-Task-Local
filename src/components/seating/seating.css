@@ -159,7 +159,7 @@
 .seat-teacher-panel ~ .archive-lightbox .seat-scene-viewport,.archive-lightbox .seat-scene-viewport{flex:1;min-height:0;height:auto;padding:0;background:#fdfbf6}
 @media(max-width:540px){.archive-action-grid{grid-template-columns:1fr}.archive-preview{height:220px}}
 
-.seating-app button.seat-lock{position:absolute;z-index:5;width:28px;height:28px;min-width:28px;min-height:28px;padding:0;border:1px solid #c7c5b8;border-radius:8px;background:#fffdf8d9;color:#64746c;opacity:.58;box-shadow:0 1px 3px #253c3016}
+.seating-app button.seat-lock{position:absolute;z-index:5;width:var(--seat-lock-size,28px);height:var(--seat-lock-size,28px);min-width:var(--seat-lock-size,28px);min-height:var(--seat-lock-size,28px);padding:0;border:1px solid #c7c5b8;border-radius:6px;background:#fffdf8d9;color:#64746c;opacity:.58;box-shadow:0 1px 3px #253c3016}
 .seating-app button.seat-lock:hover,.seating-app button.seat-lock:focus-visible{opacity:1;border-color:var(--seat-green);background:#e9f0e8}
 .seating-app button.seat-lock.active{opacity:1;border-color:var(--seat-green);background:var(--seat-green);color:white}
 .seating-app button.seat-place.locked:not(.chosen):not(.drop-target){background:#e0e5e1c9;box-shadow:inset 0 0 0 1px #aab6ad,0 3px 9px #44524818}
@@ -265,6 +265,15 @@
 .seat-effect-menu button>span:nth-child(2){display:flex;flex:1;min-width:0;flex-direction:column;align-items:flex-start;gap:2px}.seat-effect-menu b{font-size:14px;line-height:1.2}.seat-effect-menu small{color:#6e796d;font-size:11px;line-height:1.35}
 .seat-effect-check{align-self:center;color:#2f7044;font-size:17px;font-weight:bold;opacity:0}.seat-effect-menu button.active .seat-effect-check{opacity:1}
 .seat-main-actions{display:flex;flex:none;align-items:center;gap:8px;margin-left:8px}
+.seating-app .seat-save-button{min-height:44px;padding:8px 16px;border:1px solid #c5a767;background:#f5e8c9;color:#76551d;font-size:15px;font-weight:700;white-space:nowrap}
+.seating-app .seat-save-button:hover:not(:disabled){border-color:#a58649;background:#ecdcaf}
+.seat-main-actions .seat-rearrange-primary{min-width:145px;padding:8px 13px!important}
+.seat-save-dialog{border:1px solid #c7d8c7;background:#f8fcf6;box-shadow:0 15px 65px #294d322e}
+.seat-save-dialog header{padding-bottom:14px;border-bottom:1px solid #d1dfca;color:#365e3e}
+.seat-save-summary{display:flex;align-items:center;gap:14px;margin:20px 0;padding:16px;border:1px solid #cdddbe;border-radius:12px;background:#eaf3df;color:#385b37}
+.seat-save-summary p{margin:4px 0 0;font-size:14px}
+.seat-save-warning{padding:12px;border-radius:9px;background:#fff1d6;color:#795522!important}
+.seat-save-dialog .seat-save-confirm{border-color:#65864e;background:#65864e}
 .seating-app .seat-export-button{min-height:44px;padding:8px 15px;border:1px solid #b9cdb9;border-radius:9px;background:#fff;color:#385e43;font-size:15px;font-weight:700;white-space:nowrap}
 .seating-app .seat-export-button:hover{border-color:#6c9973;background:#eef5ec}
 .seat-reveal-progress{position:absolute;z-index:45;left:50%;bottom:14px;display:flex;align-items:center;gap:15px;max-width:calc(100% - 24px);padding:7px 8px 7px 13px;border:1px solid #c9d7c3;border-radius:11px;background:#fffef9f2;box-shadow:0 8px 25px #263a2b30;transform:translateX(-50%);white-space:nowrap}

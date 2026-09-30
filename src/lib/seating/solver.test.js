@@ -1,9 +1,57 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {newDraft,relations} from './model.js';
-import {solve,score,violations,validAssignments} from './solver.js';
+import {newDraft,relations,resizeLayout,clone} from './model.js';
+import {solve,score,violations,validAssignments,allowsAssignmentChange} from './solver.js';
 
 const students=Array.from({length:20},(_,i)=>({id:`p${i}`,number:i+1,name:`학생${i+1}`,gender:i%2?'female':'male',groupId:null}));
+
+test('manual repairs can resolve new presets one at a time while keeping every already satisfied rule',()=>{
+  const before=newDraft(20);before.assignments=Object.fromEntries(before.layout.seats.slice(0,20).map((s,i)=>[s.id,students[i].id]));
+  const seats=before.layout.seats;
+  before.rules=[{id:'z0',kind:'zone',students:['p0'],seatIds:[seats[22].id]},{id:'z1',kind:'zone',students:['p1'],seatIds:[seats[23].id]},{id:'fixed',kind:'fixed',students:['p2'],seatId:seats[2].id}];
+  const first=clone(before);first.assignments[seats[22].id]='p0';delete first.assignments[seats[0].id];
+  assert.ok(allowsAssignmentChange(before,first));assert.equal(validAssignments(first,students,true),false);
+  const second=clone(first);second.assignments[seats[23].id]='p1';delete second.assignments[seats[1].id];
+  assert.ok(allowsAssignmentChange(first,second));assert.ok(validAssignments(second,students,true));
+  const broken=clone(first);broken.assignments[seats[20].id]='p2';delete broken.assignments[seats[2].id];
+  assert.equal(allowsAssignmentChange(first,broken),false);
+});
+
+test('rearrangement preserves a customized footprint and vacancies across repeated solves and grid expansions',()=>{
+  let draft=newDraft(20);
+  draft.assignments=Object.fromEntries(draft.layout.seats.slice(0,20).map((s,i)=>[s.id,students[i].id]));
+  draft.assignments[draft.layout.seats[22].id]=draft.assignments[draft.layout.seats[17].id];delete draft.assignments[draft.layout.seats[17].id];
+  const footprint=Object.keys(draft.assignments).sort(),before=clone(draft.layout);
+  for(const seed of [2,5,9,17]){
+    const result=solve({draft,students,seed,budget:260});assert.ok(result.candidates.length);
+    for(const candidate of result.candidates){assert.deepEqual(Object.keys(candidate.assignments).sort(),footprint);assert.ok(validAssignments({...draft,assignments:candidate.assignments},students,true));}
+    assert.deepEqual(draft.layout,before);draft.assignments=result.candidates[0].assignments;
+  }
+  for(const axis of /** @type {const} */(['columns','rows'])){
+    const grown=resizeLayout(draft,axis,1);assert.ok(grown);const result=solve({draft:grown,students,seed:7,budget:260});assert.ok(result.candidates.length);
+    for(const candidate of result.candidates)assert.deepEqual(Object.keys(candidate.assignments).sort(),footprint);
+  }
+});
+
+test('overlapping preset domains report impossible quickly without exponential reservation',()=>{
+  const draft=newDraft(20),zone=draft.layout.seats.slice(0,8).map(s=>s.id);
+  draft.rules=students.slice(0,9).map(p=>({id:`zone-${p.id}`,kind:'zone',students:[p.id],seatIds:zone}));
+  const start=performance.now(),result=solve({draft,students,budget:260});
+  assert.equal(result.status,'impossible');assert.ok(performance.now()-start<150);
+});
+
+test('partial rearrangement preserves every unselected student even at the back of the grid',()=>{
+  const draft=newDraft(20);draft.assignments=Object.fromEntries(draft.layout.seats.slice(4).map((s,i)=>[s.id,students[i].id]));
+  const result=solve({draft,students,only:['p0','p1','p2'],seed:3,budget:260});assert.ok(result.candidates.length);
+  for(const candidate of result.candidates)for(const [seat,p] of Object.entries(draft.assignments))if(!['p0','p1','p2'].includes(p))assert.equal(candidate.assignments[seat],p);
+});
+
+test('a complete formation is kept when a new preset cannot fit it; failure never moves desks',()=>{
+  const draft=newDraft(20);draft.assignments=Object.fromEntries(draft.layout.seats.slice(0,20).map((s,i)=>[s.id,students[i].id]));
+  draft.rules=[{id:'z',kind:'zone',students:['p0'],seatIds:[draft.layout.seats[23].id]}];
+  const before=clone(draft),result=solve({draft,students,budget:260});
+  assert.equal(result.status,'impossible');assert.deepEqual(draft,before);assert.match(result.message,/대형/);
+});
 
 test('all proposed arrangements fill from the front and finish quickly',()=>{
   const draft=newDraft(students.length),started=performance.now();

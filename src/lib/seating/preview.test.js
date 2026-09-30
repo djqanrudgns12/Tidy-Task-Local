@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {newDocument, makeLayout, importSeatLayout} from './model.js';
+import {newDocument, makeLayout, importSeatLayout, clone} from './model.js';
 import {previewAction,reconcilePreview} from './preview.js';
 
 test('automatic current record keeps one latest result per day across sessions',()=>{
@@ -34,12 +34,23 @@ test('automatic current record keeps one latest result per day across sessions',
   assert.equal(doc.archives.length,1);
 });
 
+test('importing sparse historical desks extends by coordinates without overlap or lost students',()=>{
+  const current=newDocument(6).draft,saved=newDocument(6).draft;
+  current.assignments=Object.fromEntries(current.layout.seats.map((seat,i)=>[seat.id,`p${i}`]));
+  saved.layout=makeLayout(6,'single',3);saved.layout.seats=saved.layout.seats.filter((_,i)=>[0,1,5].includes(i));
+  const before=clone(saved.layout),next=importSeatLayout(current,saved,6);assert.ok(next);
+  assert.equal(new Set(next.layout.seats.map(s=>`${s.x}:${s.y}`)).size,next.layout.seats.length);
+  for(const seat of before.seats)assert.deepEqual(next.layout.seats.find(s=>s.id===seat.id),seat);
+  assert.equal(Object.keys(next.assignments).length,6);assert.deepEqual(saved.layout,before);
+});
+
 test('importing desks keeps current students near their previous positions',()=>{
   const current=newDocument(6).draft,saved=newDocument(6).draft;
   const people=['a','b','c','d','e','f'];
   current.assignments=Object.fromEntries(current.layout.seats.map((seat,i)=>[seat.id,people[i]]));
   saved.layout=makeLayout(6,'pairs',3);
   const imported=importSeatLayout(current,saved,6);
+  assert.ok(imported);
   assert.equal(imported.layout.columns,3);
   assert.equal(imported.layout.seats.length,6);
   assert.deepEqual(new Set(Object.values(imported.assignments)),new Set(people));

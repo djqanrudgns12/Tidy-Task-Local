@@ -44,7 +44,7 @@ export function reconcilePreview(snapshot) {
   for(const [id,doc] of Object.entries(snapshot.seating||{})){
     const c=snapshot.classes.find(c=>c.id===id);if(!c){delete snapshot.seating?.[id];continue;}
     const ids=new Set(c.students.map(p=>p.id));doc.draft=reconcile(doc.draft,c);
-    for(const a of doc.archives){a.draft=reconcile(a.draft,c);a.students=a.students.filter(p=>ids.has(p.id));a.relations=relations(a.draft);}
+    for(const a of doc.archives){a.draft=reconcile(a.draft,c,false);a.students=a.students.filter(p=>ids.has(p.id));a.relations=relations(a.draft);}
     compactDocument(doc);
   }
 }
