@@ -1,8 +1,18 @@
 <script lang="ts">
-  import { AlarmClock, BellRing, Check, Clock3, Eye, Volume2 } from 'lucide-svelte';
+  import { AlarmClock, BellRing, Check, Clock3, Eye, Minus, Plus, RotateCcw, Type, Volume2 } from 'lucide-svelte';
   import ToolkitSwitch from '../toolkit/ToolkitSwitch.svelte';
   import ToolkitSelect from '../toolkit/ToolkitSelect.svelte';
   import { PRESETS, WARNING_LEADS, WARNING_DURATIONS } from '../../lib/toolkit/preferences.js';
+  import {
+    TITLE_SCALE_MAX,
+    TITLE_SCALE_MIN,
+    TITLE_SCALE_PRESETS,
+    NOTE_SCALE_MAX,
+    NOTE_SCALE_MIN,
+    NOTE_SCALE_PRESETS,
+    defaultTimerDisplayPreferences,
+    type TimerDisplayPreferences,
+  } from '../../lib/timers/timerDisplayPreferences.js';
   import {
     DEFAULT_SOUNDS,
     SOUND_GROUPS,
@@ -10,14 +20,29 @@
     selectedSounds,
     type SoundRole,
   } from '../../lib/timers/soundLibrary.js';
-  let { id, kind, prefs, phase, remaining, dialRange, onchange, onset, onpreview, onsound } = $props<{
+  let {
+    id,
+    kind,
+    prefs,
+    displayPrefs = defaultTimerDisplayPreferences(),
+    phase,
+    remaining,
+    dialRange,
+    onchange,
+    ondisplaychange,
+    onset,
+    onpreview,
+    onsound,
+  } = $props<{
     id?: string;
     kind: string;
     prefs: Record<string, any>;
+    displayPrefs?: TimerDisplayPreferences;
     phase: string;
     remaining: number;
     dialRange: number;
     onchange: (patch: Record<string, unknown>) => void;
+    ondisplaychange?: (patch: Partial<TimerDisplayPreferences>) => void;
     onset: (ms: number) => void;
     onpreview: (name: string) => void;
     onsound: (role: SoundRole, id: string) => void;
@@ -71,6 +96,28 @@
     onset((m * 60 + s) * 1000);
   }
   type SoundRow = { key: string; name: string; description: string; sound: SoundRole };
+  const isCustomDisplay = $derived(
+    displayPrefs.titleScale !== 100 ||
+      displayPrefs.noteScale !== 100 ||
+      displayPrefs.noteAlign !== 'auto' ||
+      displayPrefs.layoutFocus !== 'balanced',
+  );
+  function stepScale(key: 'titleScale' | 'noteScale', delta: number) {
+    const min = key === 'titleScale' ? TITLE_SCALE_MIN : NOTE_SCALE_MIN;
+    const max = key === 'titleScale' ? TITLE_SCALE_MAX : NOTE_SCALE_MAX;
+    const next = Math.max(min, Math.min(max, Math.round((displayPrefs[key] + delta) / 5) * 5));
+    if (next !== displayPrefs[key]) ondisplaychange?.({ [key]: next });
+  }
+  function resetDisplayPrefs() {
+    ondisplaychange?.({
+      titleScale: 100,
+      noteScale: 100,
+      noteAlign: 'auto',
+      layoutFocus: 'balanced',
+    });
+  }
+  const presetLabel = (val: number) =>
+    val === 100 ? '자동' : val < 100 ? '작게' : val <= 125 ? '크게' : '더 크게';
   const soundRows = $derived<SoundRow[]>(
     kind === 'stopwatch'
       ? [
@@ -191,6 +238,120 @@
         </div>
       </div>
     </section>{/if}
+  <section class="settings-section display-settings-section">
+    <header class="settings-section-heading">
+      <span class="settings-section-icon" aria-hidden="true"><Type size={18} /></span>
+      <div class="display-heading-copy">
+        <div class="display-heading-title">
+          <h2>글자와 화면</h2>
+          <span class="display-shared-badge">공통</span>
+        </div>
+        <p>창 크기에 맞춘 자동 크기에서 내 취향대로 조절해요.</p>
+      </div>
+      {#if isCustomDisplay}
+        <button
+          type="button"
+          class="display-reset-btn"
+          title="글자와 화면 비율을 기본값(자동)으로 되돌리기"
+          onclick={resetDisplayPrefs}><RotateCcw size={13} /><span>기본값</span></button
+        >
+      {/if}
+    </header>
+    <div class="display-control-stack">
+      <div class="display-scale-card">
+        <div class="display-scale-head">
+          <strong>제목 크기</strong>
+          <div class="display-stepper">
+            <button
+              type="button"
+              aria-label="제목 크기 줄이기"
+              disabled={displayPrefs.titleScale <= TITLE_SCALE_MIN}
+              onclick={() => stepScale('titleScale', -5)}><Minus size={13} /></button
+            >
+            <span class:custom={displayPrefs.titleScale !== 100}>{displayPrefs.titleScale}%</span>
+            <button
+              type="button"
+              aria-label="제목 크기 키우기"
+              disabled={displayPrefs.titleScale >= TITLE_SCALE_MAX}
+              onclick={() => stepScale('titleScale', 5)}><Plus size={13} /></button
+            >
+          </div>
+        </div>
+        <div class="display-chip-row" role="group" aria-label="제목 크기 빠른 선택">
+          {#each TITLE_SCALE_PRESETS as preset}
+            <button
+              type="button"
+              class:selected={displayPrefs.titleScale === preset}
+              aria-pressed={displayPrefs.titleScale === preset}
+              onclick={() => ondisplaychange?.({ titleScale: preset })}>{presetLabel(preset)}</button
+            >
+          {/each}
+        </div>
+      </div>
+      <div class="display-scale-card">
+        <div class="display-scale-head">
+          <strong>설명 크기</strong>
+          <div class="display-stepper">
+            <button
+              type="button"
+              aria-label="설명 크기 줄이기"
+              disabled={displayPrefs.noteScale <= NOTE_SCALE_MIN}
+              onclick={() => stepScale('noteScale', -5)}><Minus size={13} /></button
+            >
+            <span class:custom={displayPrefs.noteScale !== 100}>{displayPrefs.noteScale}%</span>
+            <button
+              type="button"
+              aria-label="설명 크기 키우기"
+              disabled={displayPrefs.noteScale >= NOTE_SCALE_MAX}
+              onclick={() => stepScale('noteScale', 5)}><Plus size={13} /></button
+            >
+          </div>
+        </div>
+        <div class="display-chip-row" role="group" aria-label="설명 크기 빠른 선택">
+          {#each NOTE_SCALE_PRESETS as preset}
+            <button
+              type="button"
+              class:selected={displayPrefs.noteScale === preset}
+              aria-pressed={displayPrefs.noteScale === preset}
+              onclick={() => ondisplaychange?.({ noteScale: preset })}>{presetLabel(preset)}</button
+            >
+          {/each}
+        </div>
+      </div>
+      <div class="display-option-row">
+        <span>설명 정렬</span>
+        <div class="display-segmented" role="radiogroup" aria-label="설명 정렬">
+          {#each [['auto', '자동'], ['center', '가운데'], ['left', '왼쪽']] as [val, label]}
+            <button
+              type="button"
+              role="radio"
+              aria-checked={displayPrefs.noteAlign === val}
+              class:selected={displayPrefs.noteAlign === val}
+              onclick={() =>
+                ondisplaychange?.({ noteAlign: val as TimerDisplayPreferences['noteAlign'] })}
+              >{label}</button
+            >
+          {/each}
+        </div>
+      </div>
+      <div class="display-option-row">
+        <span>화면 비중</span>
+        <div class="display-segmented" role="radiogroup" aria-label="화면 비중">
+          {#each [['balanced', '균형'], ['note', '설명 강조'], ['timer', '시계 강조']] as [val, label]}
+            <button
+              type="button"
+              role="radio"
+              aria-checked={displayPrefs.layoutFocus === val}
+              class:selected={displayPrefs.layoutFocus === val}
+              onclick={() =>
+                ondisplaychange?.({ layoutFocus: val as TimerDisplayPreferences['layoutFocus'] })}
+              >{label}</button
+            >
+          {/each}
+        </div>
+      </div>
+    </div>
+  </section>
   <section class="settings-section sound-settings">
     <header class="settings-section-heading">
       <span class="settings-section-icon" aria-hidden="true"><Volume2 size={18} /></span>

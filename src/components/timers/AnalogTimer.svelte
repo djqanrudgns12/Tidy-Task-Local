@@ -1,10 +1,11 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { pointAt, sectorPath, pointerAngle, advanceAngle } from '../../lib/timers/geometry.js';
-  let { remaining, range, editable, onset } = $props<{
+  let { remaining, range, editable, density = 'full', onset } = $props<{
     remaining: number;
     range: number;
     editable: boolean;
+    density?: 'full' | 'minimal';
     onset: (ms: number) => void;
   }>();
   let svg: SVGSVGElement;
@@ -103,7 +104,7 @@
   <path d={sectorPath(angle / 360)} fill="var(--tk-peach)" />
   {#each Array(range).fill(0) as _, i}
     {@const major = i % 5 === 0}
-    {@const p = pointAt((i / range) * 360, major ? 120 : 124)}
+    {@const p = pointAt((i / range) * 360, major ? (density === 'minimal' ? 114 : 120) : 124)}
     {@const q = pointAt((i / range) * 360, 130)}
     <line
       x1={p.x}
@@ -111,43 +112,49 @@
       x2={q.x}
       y2={q.y}
       stroke={major ? 'var(--tk-muted)' : 'var(--tk-line)'}
-      stroke-width={major ? 2.6 : 1.2}
+      stroke-width={major ? (density === 'minimal' ? 3.4 : 2.6) : 1.2}
       stroke-linecap="round"
     />
   {/each}
-  {#each Array(range / 5).fill(0) as _, i}
-    {@const p = pointAt((i / (range / 5)) * 360, 99)}
-    <text
-      x={p.x}
-      y={p.y}
-      dy=".35em"
-      text-anchor="middle"
-      fill="var(--tk-ink)"
-      font-size="19"
-      font-weight="650">{i * 5}</text
-    >
-  {/each}
+  {#if density !== 'minimal'}
+    {#each Array(range / 5).fill(0) as _, i}
+      {@const p = pointAt((i / (range / 5)) * 360, 99)}
+      <text
+        x={p.x}
+        y={p.y}
+        dy=".35em"
+        text-anchor="middle"
+        fill="var(--tk-ink)"
+        font-size="19"
+        font-weight="650">{i * 5}</text
+      >
+    {/each}
+  {/if}
   <line
     x1="150"
     y1="150"
     x2={tip.x}
     y2={tip.y}
     stroke="var(--tk-accent)"
-    stroke-width="4.5"
+    stroke-width={density === 'minimal' ? 6 : 4.5}
     stroke-linecap="round"
   />
-  <circle cx="150" cy="150" r="10" fill="var(--tk-accent)" /><circle
+  <circle cx="150" cy="150" r={density === 'minimal' ? 11 : 10} fill="var(--tk-accent)" /><circle
     cx="150"
     cy="150"
     r="3.5"
     fill="white"
   />
-  {#if editable}<circle
+  {#if editable}
+    <circle
       cx={tip.x}
       cy={tip.y}
       r="5.5"
       fill="white"
       stroke="var(--tk-accent)"
       stroke-width="2.5"
-    />{/if}
+    />
+    <!-- 바늘 끝 조작 반경에만 드래그 예외를 두어, 바늘을 돌릴 때는 시간 조절이 되고 다이얼 나머지를 잡으면 위젯 창이 끌리게 합니다. -->
+    <circle cx={tip.x} cy={tip.y} r="30" fill="transparent" data-no-drag />
+  {/if}
 </svg>

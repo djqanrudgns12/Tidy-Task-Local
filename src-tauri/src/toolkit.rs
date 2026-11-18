@@ -49,8 +49,9 @@ fn defaults() -> Value {
     let mut hourglass = with_sounds("water-drop", "signal", "happy-bells");
     hourglass["showRemainingTime"] = json!(true);
     let clock = json!({"face":"digital","showSeconds":true,"hour12":true,"title":"","titleHidden":false,"standardTimeSync":true,"analogCaption":true,"analogMinuteNumbers":false});
+    let timer_display = json!({"titleScale":100,"noteScale":100,"noteAlign":"auto","layoutFocus":"balanced","widgetBounds":null});
     json!({"schemaVersion":12,"revision":0,"toolkit":{"theme":"sage","darkMode":false,"uiFontFamily":"메이플스토리 L","enabled":false,"orientation":"horizontal","toolbarSize":2,"alwaysOnTop":true,"collapsed":false,"visibleToolIds":DEFAULT_VISIBLE_TOOL_IDS,"toolOrderIds":TOOL_ORDER_IDS,"hiddenPlatformIds":[],"externalToolsEnabled":true,"position":null},
-        "preferences":{"digital":digital,"analog":analog,"hourglass":hourglass,"stopwatch":{"tickEnabled":true,"tickSound":"button-click"},"clock":clock}})
+        "preferences":{"digital":digital,"analog":analog,"hourglass":hourglass,"stopwatch":{"tickEnabled":true,"tickSound":"button-click"},"clock":clock,"timerDisplay":timer_display}})
 }
 fn tool_enabled(toolkit: &Value, id: &Value) -> bool {
     if id == "external" {
@@ -126,6 +127,44 @@ fn field_valid(scope: &str, key: &str, value: &Value) -> bool {
             _ => false,
         };
     }
+    if scope == "timerDisplay" {
+        return match key {
+            "titleScale" => value.as_u64().is_some_and(|n| (80..=160).contains(&n)),
+            "noteScale" => value.as_u64().is_some_and(|n| (80..=180).contains(&n)),
+            "noteAlign" => matches!(value.as_str(), Some("auto" | "center" | "left")),
+            "layoutFocus" => matches!(value.as_str(), Some("balanced" | "note" | "timer")),
+            // 위젯 위치·크기는 JS timerDisplayPreferences.js의 isValidWidgetBounds와 같은 규칙으로 검증합니다.
+            "widgetBounds" => {
+                value.is_null()
+                    || value.as_object().is_some_and(|o| {
+                        let req = [
+                            "physicalX",
+                            "physicalY",
+                            "logicalX",
+                            "logicalY",
+                            "width",
+                            "height",
+                        ];
+                        o.len() == req.len()
+                            && req.iter().all(|k| o.contains_key(*k))
+                            && ["physicalX", "physicalY", "logicalX", "logicalY"]
+                                .iter()
+                                .all(|k| {
+                                    o[*k]
+                                        .as_f64()
+                                        .is_some_and(|n| n.is_finite() && n > -10000.0 && n < 100000.0)
+                                })
+                            && o["width"]
+                                .as_f64()
+                                .is_some_and(|w| w.is_finite() && (200.0..=1600.0).contains(&w))
+                            && o["height"]
+                                .as_f64()
+                                .is_some_and(|h| h.is_finite() && (116.0..=1200.0).contains(&h))
+                    })
+            }
+            _ => false,
+        };
+    }
     if !KINDS.contains(&scope) {
         return false;
     }
@@ -161,7 +200,7 @@ fn normalized(raw: Option<Value>) -> Result<Value, String> {
         return Err("지원하지 않는 툴킷 설정 버전입니다. 원본을 보존합니다.".into());
     }
     result["revision"] = json!(raw["revision"].as_u64().unwrap_or(0));
-    for scope in ["toolkit", "digital", "analog", "hourglass", "stopwatch", "clock"] {
+    for scope in ["toolkit", "digital", "analog", "hourglass", "stopwatch", "clock", "timerDisplay"] {
         let source = if scope == "toolkit" {
             &raw[scope]
         } else {
@@ -400,7 +439,8 @@ fn work_window_size(role: &str) -> Option<WorkWindowSize> {
     const WIDE: (f64, f64) = (0.82, 0.88);
     const TALL: (f64, f64) = (0.46, 0.86);
     let (base, min, ratio, max) = match role {
-        kind if KINDS.contains(&kind) => ((960.0, 680.0), (380.0, 520.0), FOCUS, (1480.0, 960.0)),
+        // 타이머 4종은 처음 열릴 때는 크게(960×680 기준) 열리되, 플로팅 위젯과 자유로운 테두리 축소를 위해 200×116까지 줄일 수 있습니다.
+        kind if KINDS.contains(&kind) => ((960.0, 680.0), (200.0, 116.0), FOCUS, (1480.0, 960.0)),
         "focus-bell" => ((960.0, 720.0), (640.0, 480.0), FOCUS, (1480.0, 960.0)),
         // 주사위도 수업 화면 한쪽에 띄워 두는 도구라 집중벨 규칙을 따르되, 3개와 합계가 들어가는 520×480까지 줄일 수 있습니다.
         "dice" => ((960.0, 720.0), (520.0, 480.0), FOCUS, (1480.0, 960.0)),
@@ -1052,5 +1092,79 @@ mod tests {
         assert!(take_center_request().is_none());
         // 버린 요청은 자리에서도 사라집니다.
         assert!(CENTER_REQUEST.lock().unwrap().is_none());
+    }
+
+    #[test]
+    fn timer_display_preferences_are_validated_and_survive_reload() {
+        let base = defaults();
+        assert_eq!(base["preferences"]["timerDisplay"]["titleScale"], 100);
+        assert_eq!(base["preferences"]["timerDisplay"]["noteScale"], 100);
+        assert_eq!(base["preferences"]["timerDisplay"]["noteAlign"], "auto");
+        assert_eq!(base["preferences"]["timerDisplay"]["layoutFocus"], "balanced");
+        assert_eq!(base["preferences"]["timerDisplay"]["widgetBounds"], Value::Null);
+
+        let bounds = json!({
+            "physicalX": 1400.0,
+            "physicalY": 60.0,
+            "logicalX": 700.0,
+            "logicalY": 30.0,
+            "width": 340.0,
+            "height": 236.0
+        });
+        let saved = merge(
+            base.clone(),
+            "timerDisplay",
+            json!({
+                "titleScale": 135,
+                "noteScale": 150,
+                "noteAlign": "left",
+                "layoutFocus": "note",
+                "widgetBounds": bounds
+            }),
+        )
+        .unwrap();
+        let reloaded = normalized(Some(saved)).unwrap();
+        assert_eq!(reloaded["preferences"]["timerDisplay"]["titleScale"], 135);
+        assert_eq!(reloaded["preferences"]["timerDisplay"]["noteScale"], 150);
+        assert_eq!(reloaded["preferences"]["timerDisplay"]["noteAlign"], "left");
+        assert_eq!(reloaded["preferences"]["timerDisplay"]["layoutFocus"], "note");
+        assert_eq!(reloaded["preferences"]["timerDisplay"]["widgetBounds"], bounds);
+
+        // 범위 초과·최소화 좌표(-32000)·알 수 없는 값은 저장을 거부합니다.
+        for bad in [
+            json!({}),
+            json!({"titleScale": 79}),
+            json!({"titleScale": 161}),
+            json!({"noteScale": 181}),
+            json!({"noteAlign": "justify"}),
+            json!({"layoutFocus": "tiny"}),
+            json!({"widgetBounds": {"physicalX": -32000.0, "physicalY": 0.0, "logicalX": 0.0, "logicalY": 0.0, "width": 340.0, "height": 240.0}}),
+            json!({"widgetBounds": {"physicalX": 0.0, "physicalY": 0.0, "logicalX": 0.0, "logicalY": 0.0, "width": 199.0, "height": 240.0}}),
+            json!({"widgetBounds": {"physicalX": 0.0, "physicalY": 0.0, "logicalX": 0.0, "logicalY": 0.0, "width": 340.0, "height": 115.0}}),
+        ] {
+            assert!(merge(base.clone(), "timerDisplay", bad).is_err());
+        }
+
+        // 파일에 손상된 값이 있더라도 해당 항목만 기본값으로 읽고 정상 항목은 보존합니다.
+        let broken = normalized(Some(json!({
+            "schemaVersion": 12,
+            "preferences": {
+                "timerDisplay": {
+                    "titleScale": 125,
+                    "noteScale": 999,
+                    "noteAlign": "center",
+                    "layoutFocus": "bad",
+                    "widgetBounds": {"physicalX": -32000.0, "physicalY": 0.0, "logicalX": 0.0, "logicalY": 0.0, "width": 340.0, "height": 240.0}
+                }
+            }
+        })))
+        .unwrap();
+        assert_eq!(broken["preferences"]["timerDisplay"]["titleScale"], 125);
+        assert_eq!(broken["preferences"]["timerDisplay"]["noteScale"], 100);
+        assert_eq!(broken["preferences"]["timerDisplay"]["noteAlign"], "center");
+        assert_eq!(broken["preferences"]["timerDisplay"]["layoutFocus"], "balanced");
+        assert_eq!(broken["preferences"]["timerDisplay"]["widgetBounds"], Value::Null);
+        // 타이머 최소 창 크기는 200×116으로 열려 있어야 위젯·자유 크기 조절이 가능합니다.
+        assert_eq!(work_window_size("digital").unwrap().min, (200.0, 116.0));
     }
 }

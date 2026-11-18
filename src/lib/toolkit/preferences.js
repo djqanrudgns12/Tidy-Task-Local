@@ -1,10 +1,15 @@
 import { TOOLKIT_THEMES } from './themes.js';
 import { defaultClockPreferences, normalizeClockPreferences, isValidClockField } from '../clock/clockPreferences.js';
+import {
+  defaultTimerDisplayPreferences,
+  normalizeTimerDisplayPreferences,
+  isValidTimerDisplayField,
+} from '../timers/timerDisplayPreferences.js';
 import { DEFAULT_SOUNDS, SOUND_KEYS, isSoundId } from '../timers/soundLibrary.js';
 /** @typedef {{tickEnabled:boolean,tickSound?:string,warningEnabled?:boolean,warningSound?:string,endEnabled?:boolean,endSound?:string,warningLeadSeconds?:number,warningDurationSeconds?:number|null,dialRangeMinutes?:number,showRemainingTime?:boolean}} Preferences
  * tickSound·warningSound·endSound: 고른 소리 id(목록: src/lib/timers/soundLibrary.js). 스톱워치는 tickSound만 있습니다. */
 /** @typedef {{schemaVersion:number,revision:number,toolkit:{theme:string,darkMode:boolean,uiFontFamily:string,enabled:boolean,externalToolsEnabled:boolean,orientation:string,toolbarSize:number,alwaysOnTop:boolean,collapsed:boolean,visibleToolIds:string[],toolOrderIds:string[],hiddenPlatformIds:string[],position:Record<string,number>|null},preferences:Record<string,Preferences>}} Settings
- * preferences.clock은 타이머와 모양이 다른 시계 설정(clockPreferences.js)입니다. 읽을 때는 normalizeClockPreferences를 거칩니다. */
+ * preferences.clock·preferences.timerDisplay는 타이머 설정과 모양이 다른 공통 설정입니다. 읽을 때는 각각의 normalize 함수를 거칩니다. */
 export const TOOLBAR_SIZES = [
   { label: '매우 작게', scale: 0.9 },
   { label: '작게', scale: 0.95 },
@@ -112,6 +117,7 @@ export function defaults() {
     preferences: {
       ...Object.fromEntries(TIMER_KINDS.map((kind) => [kind, defaultPreferences(kind)])),
       clock: /** @type {any} */ (defaultClockPreferences()),
+      timerDisplay: /** @type {any} */ (defaultTimerDisplayPreferences()),
     },
   };
 }
@@ -186,6 +192,7 @@ export function normalizeSettings(input) {
   for (const kind of TIMER_KINDS)
     out.preferences[kind] = normalizePreferences(kind, input?.preferences?.[kind]);
   out.preferences.clock = /** @type {any} */ (normalizeClockPreferences(input?.preferences?.clock));
+  out.preferences.timerDisplay = /** @type {any} */ (normalizeTimerDisplayPreferences(input?.preferences?.timerDisplay));
   return out;
 }
 /** @param {Settings} input @param {string} scope @param {Record<string,unknown>} patch */
@@ -196,6 +203,14 @@ export function applySettingsPatch(input, scope, patch) {
     if (!patch || !Object.keys(patch).length || Object.entries(patch).some(([key, value]) => !isValidClockField(key, value)))
       throw new Error('저장할 수 없는 설정입니다.');
     out.preferences.clock = /** @type {any} */ (normalizeClockPreferences({ ...out.preferences.clock, ...patch }));
+    out.revision++;
+    return normalizeSettings(out);
+  }
+  if (scope === 'timerDisplay') {
+    // 4종 타이머가 공통으로 쓰는 표시 취향·위젯 위치입니다(Rust merge와 같은 규칙으로 한 항목이라도 어긋나면 거부).
+    if (!patch || !Object.keys(patch).length || Object.entries(patch).some(([key, value]) => !isValidTimerDisplayField(key, value)))
+      throw new Error('저장할 수 없는 설정입니다.');
+    out.preferences.timerDisplay = /** @type {any} */ (normalizeTimerDisplayPreferences({ ...out.preferences.timerDisplay, ...patch }));
     out.revision++;
     return normalizeSettings(out);
   }

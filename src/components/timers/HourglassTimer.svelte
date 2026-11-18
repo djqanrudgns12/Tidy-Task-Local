@@ -1,6 +1,10 @@
 <script lang="ts">
   import { sandHeights } from '../../lib/timers/geometry.js';
-  let { fraction, running } = $props<{ fraction: number; running: boolean }>();
+  let { fraction, running, compact = false } = $props<{
+    fraction: number;
+    running: boolean;
+    compact?: boolean;
+  }>();
   const uid = $props.id();
   const heights = $derived(sandHeights(fraction));
 </script>
@@ -25,7 +29,7 @@
     d="M79 58 H241 Q253 58 253 70 Q253 124 177 178 Q175 180 177 182 Q253 236 253 294 Q253 306 241 306 H79 Q67 306 67 294 Q67 236 143 182 Q145 180 143 178 Q67 124 67 70 Q67 58 79 58 Z"
     fill="var(--tk-panel)"
     stroke="var(--tk-line)"
-    stroke-width="2.5"
+    stroke-width={compact ? 3.5 : 2.5}
   />
   <rect
     x="70"

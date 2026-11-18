@@ -189,3 +189,65 @@ test('타이머 소리 선택은 타이머마다 예전 소리가 기본이고, 
   assert.throws(() => applySettingsPatch(base, 'stopwatch', { warningSound: 'time-signal' }));
   assert.throws(() => applySettingsPatch(base, 'stopwatch', { endSound: 'cheer' }));
 });
+
+test('타이머 공통 표시·위젯 설정(timerDisplay)은 기본값·경계값·최소화 좌표 거부를 따릅니다', () => {
+  const base = defaults();
+  assert.deepEqual(/** @type {any} */ (base.preferences).timerDisplay, {
+    titleScale: 100,
+    noteScale: 100,
+    noteAlign: 'auto',
+    layoutFocus: 'balanced',
+    widgetBounds: null,
+  });
+  // 구버전(스키마 12·timerDisplay 없음)에서도 안전하게 기본값이 채워집니다.
+  const old = normalizeSettings({ schemaVersion: 12, preferences: {} });
+  assert.equal(/** @type {any} */ (old.preferences).timerDisplay.titleScale, 100);
+
+  const bounds = { physicalX: 120, physicalY: 80, logicalX: 120, logicalY: 80, width: 340, height: 240 };
+  const saved = applySettingsPatch(old, 'timerDisplay', {
+    titleScale: 135,
+    noteScale: 160,
+    noteAlign: 'left',
+    layoutFocus: 'note',
+    widgetBounds: bounds,
+  });
+  const reloaded = normalizeSettings(JSON.parse(JSON.stringify(saved)));
+  assert.deepEqual(/** @type {any} */ (reloaded.preferences).timerDisplay, {
+    titleScale: 135,
+    noteScale: 160,
+    noteAlign: 'left',
+    layoutFocus: 'note',
+    widgetBounds: bounds,
+  });
+
+  // 경계값·잘못된 값·최소화 좌표(-32000)는 저장 시 거부하고, 손상 파일 읽기에서는 해당 필드만 기본값으로 되돌립니다.
+  assert.throws(() => applySettingsPatch(saved, 'timerDisplay', {}));
+  assert.throws(() => applySettingsPatch(saved, 'timerDisplay', { titleScale: 79 }));
+  assert.throws(() => applySettingsPatch(saved, 'timerDisplay', { titleScale: 161 }));
+  assert.throws(() => applySettingsPatch(saved, 'timerDisplay', { noteScale: 181 }));
+  assert.throws(() => applySettingsPatch(saved, 'timerDisplay', { noteAlign: 'right' }));
+  assert.throws(() => applySettingsPatch(saved, 'timerDisplay', { layoutFocus: 'huge' }));
+  assert.throws(() => applySettingsPatch(saved, 'timerDisplay', { widgetBounds: { ...bounds, physicalX: -32000 } }));
+  assert.throws(() => applySettingsPatch(saved, 'timerDisplay', { widgetBounds: { ...bounds, width: 199 } }));
+  assert.throws(() => applySettingsPatch(saved, 'timerDisplay', { widgetBounds: { ...bounds, height: 115 } }));
+
+  const broken = normalizeSettings({
+    schemaVersion: 12,
+    preferences: {
+      timerDisplay: {
+        titleScale: 120,
+        noteScale: 999,
+        noteAlign: 'left',
+        layoutFocus: 'unknown',
+        widgetBounds: { ...bounds, physicalY: -32000 },
+      },
+    },
+  });
+  assert.deepEqual(/** @type {any} */ (broken.preferences).timerDisplay, {
+    titleScale: 120,
+    noteScale: 100,
+    noteAlign: 'left',
+    layoutFocus: 'balanced',
+    widgetBounds: null,
+  });
+});

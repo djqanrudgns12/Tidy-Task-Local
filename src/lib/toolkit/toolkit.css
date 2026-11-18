@@ -877,10 +877,6 @@
 }
 /* The time is the dominant object; controls are grouped by task. */
 .timer-frame {
-  /* 설명 글줄이 차지할 수 있는 높이입니다(1.65em = 한 줄). 창이 높을수록 넉넉히 내주되
-     2~7줄 사이로 둡니다. 이보다 긴 글은 칸 안에서 스크롤됩니다(잘리지 않습니다).
-     em은 설명 칸의 글자 크기를 따르므로, 글씨가 커져도 줄 수 기준이 그대로 맞습니다. */
-  --timer-note-room: clamp(3.3em, calc(100dvh - 620px), 11.55em);
   position: relative;
   display: flex;
   flex-direction: column;
@@ -890,19 +886,100 @@
   border-radius: 19px;
   overflow: hidden;
 }
-/* 스톱워치에는 분 증감 줄이 없어 그만큼 설명 칸에 더 내줄 수 있습니다(2~8줄). */
-.timer-frame.stopwatch-frame {
-  --timer-note-room: clamp(3.3em, calc(100dvh - 575px), 13.2em);
+.timer-frame.fullscreen {
+  border: 0;
+  border-radius: 0;
 }
+/* 전체화면에서 3초간 움직임이 없으면 창 틀·도구 버튼·조작 독을 부드럽게 숨깁니다. */
+.timer-frame:not(.clk-frame) .timer-titlebar,
+.timer-frame:not(.clk-frame) .timer-heading-tools,
+.timer-frame:not(.clk-frame) .timer-control-area {
+  transition: opacity 0.35s ease;
+}
+.timer-frame:not(.clk-frame).idle {
+  cursor: none;
+}
+.timer-frame:not(.clk-frame).idle .timer-titlebar,
+.timer-frame:not(.clk-frame).idle .timer-heading-tools,
+.timer-frame:not(.clk-frame).idle .timer-control-area {
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* 8방향 뷰포트 리사이즈 가장자리 및 모서리 손잡이(전체화면 더블클릭 포함) */
+.timer-resize-edge {
+  position: fixed;
+  z-index: 60;
+  background: transparent;
+  touch-action: none;
+}
+.timer-resize-edge.edge-north {
+  top: 0;
+  left: 16px;
+  right: 16px;
+  height: 6px;
+  cursor: ns-resize;
+}
+.timer-resize-edge.edge-south {
+  bottom: 0;
+  left: 16px;
+  right: 16px;
+  height: 7px;
+  cursor: ns-resize;
+}
+.timer-resize-edge.edge-west {
+  left: 0;
+  top: 16px;
+  bottom: 16px;
+  width: 7px;
+  cursor: ew-resize;
+}
+.timer-resize-edge.edge-east {
+  right: 0;
+  top: 16px;
+  bottom: 16px;
+  width: 7px;
+  cursor: ew-resize;
+}
+/* 위젯 6px 바깥 그림자 여백을 넘어 카드 테두리까지 넉넉히 잡히게 합니다. */
+.timer-resize-edge.snug.edge-north,
+.timer-resize-edge.snug.edge-south {
+  height: 10px;
+  left: 20px;
+  right: 20px;
+}
+.timer-resize-edge.snug.edge-west,
+.timer-resize-edge.snug.edge-east {
+  width: 10px;
+  top: 20px;
+  bottom: 20px;
+}
+
 .timer-resize-corner {
-  position: absolute;
-  width: 14px;
-  height: 14px;
+  position: fixed;
+  width: 16px;
+  height: 16px;
   padding: 0;
   border: 0;
   background: transparent;
-  z-index: 50;
+  z-index: 65;
   touch-action: none;
+}
+/* ClockApp 등 .timer-frame 내부에 직접 배치하는 기존 창과의 호환 유지 */
+.clk-frame .timer-resize-corner {
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  z-index: 50;
+}
+.timer-resize-corner.snug {
+  width: 20px;
+  height: 20px;
+}
+.timer-resize-corner.fullscreen {
+  width: 24px;
+  height: 24px;
+  cursor: pointer;
 }
 .timer-resize-corner.north-west {
   top: 0;
@@ -924,16 +1001,79 @@
   bottom: 0;
   cursor: nwse-resize;
 }
+.timer-resize-corner.fullscreen.north-west,
+.timer-resize-corner.fullscreen.north-east,
+.timer-resize-corner.fullscreen.south-west,
+.timer-resize-corner.fullscreen.south-east {
+  cursor: pointer;
+}
 .timer-resize-corner.inactive {
   pointer-events: none;
 }
+.timer-resize-corner .corner-arc {
+  position: absolute;
+  width: 9px;
+  height: 9px;
+  border: 2px solid color-mix(in srgb, var(--tk-accent) 70%, transparent);
+  opacity: 0;
+  transition: opacity 0.16s ease;
+  pointer-events: none;
+}
+.timer-resize-corner:hover .corner-arc {
+  opacity: 0.85;
+}
+.timer-resize-corner.north-west .corner-arc {
+  top: 4px;
+  left: 4px;
+  border-right: 0;
+  border-bottom: 0;
+  border-top-left-radius: 5px;
+}
+.timer-resize-corner.north-east .corner-arc {
+  top: 4px;
+  right: 4px;
+  border-left: 0;
+  border-bottom: 0;
+  border-top-right-radius: 5px;
+}
+.timer-resize-corner.south-west .corner-arc {
+  bottom: 4px;
+  left: 4px;
+  border-right: 0;
+  border-top: 0;
+  border-bottom-left-radius: 5px;
+}
+.timer-resize-corner.south-east .corner-arc {
+  bottom: 4px;
+  right: 4px;
+  border-left: 0;
+  border-top: 0;
+  border-bottom-right-radius: 5px;
+}
+.timer-resize-corner.snug.north-west .corner-arc {
+  top: 8px;
+  left: 8px;
+}
+.timer-resize-corner.snug.north-east .corner-arc {
+  top: 8px;
+  right: 8px;
+}
+.timer-resize-corner.snug.south-west .corner-arc {
+  bottom: 8px;
+  left: 8px;
+}
+.timer-resize-corner.snug.south-east .corner-arc {
+  bottom: 8px;
+  right: 8px;
+}
+
 .timer-titlebar {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  height: 40px;
+  height: 36px;
   flex: none;
-  padding: 0 10px 0 15px;
+  padding: 0 8px 0 14px;
   user-select: none;
 }
 .timer-kind {
@@ -944,8 +1084,8 @@
   color: var(--tk-muted);
 }
 .timer-kind img {
-  width: 22px;
-  height: 22px;
+  width: 20px;
+  height: 20px;
   object-fit: contain;
 }
 .titlebar-dot {
@@ -960,20 +1100,32 @@
   width: 1px;
   height: 14px;
   background: var(--tk-line);
-  margin: 0 5px;
+  margin: 0 4px;
 }
 .window-actions button {
   display: grid;
   place-items: center;
-  width: 30px;
-  height: 29px;
+  width: 28px;
+  height: 27px;
   border: 0;
   border-radius: 8px;
   background: transparent;
   color: var(--tk-muted);
 }
+.window-actions button.widget-toggle-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  width: auto;
+  height: 27px;
+  padding: 0 9px;
+  font-size: 11.5px;
+  font-weight: 650;
+  border-radius: 8px;
+}
 .window-actions button:hover {
   background: var(--tk-soft);
+  color: var(--tk-ink);
 }
 .window-actions button.pinned {
   background: var(--tk-soft);
@@ -983,114 +1135,138 @@
   color: var(--tk-accent);
   background: var(--tk-soft);
 }
+
 .timer-workspace {
   display: flex;
   flex: 1;
   flex-direction: column;
   min-height: 0;
-  padding: 16px 24px 23px;
+  padding: 6px 12px 12px;
   position: relative;
 }
-.timer-settings-toggle {
-  display: flex;
+.timer-settings-toggle,
+.timer-laps-toggle {
+  display: inline-flex;
   align-items: center;
-  gap: 7px;
-  min-height: 38px;
-  padding: 8px 11px;
+  gap: 6px;
+  min-height: 34px;
+  padding: 5px 10px;
   border: 0;
-  border-radius: 11px;
+  border-radius: 10px;
   background: var(--tk-bg);
   color: var(--tk-muted);
-  font-size: 13px !important;
+  font-size: 12.5px !important;
+  font-weight: 650;
   flex: none;
+  white-space: nowrap;
 }
-.timer-settings-toggle.active {
-  background: var(--tk-bg);
+.timer-settings-toggle.active,
+.timer-laps-toggle.active {
+  background: var(--tk-soft);
   color: var(--tk-accent);
 }
-.timer-settings-toggle:hover {
+.timer-settings-toggle:hover,
+.timer-laps-toggle:hover {
   background: var(--tk-soft);
+  color: var(--tk-ink);
+}
+.lap-count-badge {
+  font-style: normal;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--tk-action);
+  color: var(--tk-on-action);
+  font-size: 11px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
 }
 .timer-layout {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  gap: 17px;
+  gap: 12px;
   flex: 1;
   min-height: 0;
+  position: relative;
 }
 .timer-layout.with-laps {
-  grid-template-columns: minmax(0, 1fr) 260px;
+  grid-template-columns: minmax(0, 1fr) 252px;
 }
 .timer-layout.with-settings:not(.with-laps) {
-  grid-template-columns: minmax(0, 1fr) clamp(360px, 31vw, 400px);
+  grid-template-columns: minmax(0, 1fr) clamp(336px, 31vw, 392px);
 }
 .timer-layout.with-laps.with-settings {
-  grid-template-columns: minmax(0, 1fr) 218px 246px;
+  grid-template-columns: minmax(0, 1fr) 252px;
+}
+.timer-layout.with-laps.with-settings .timer-settings-panel {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: min(360px, calc(100% - 24px));
+  z-index: 20;
+  box-shadow: 0 12px 32px rgba(24, 34, 28, 0.16);
 }
 .timer-main {
+  position: relative;
   display: flex;
   flex-direction: column;
   min-width: 0;
   min-height: 0;
   background: var(--tk-panel);
   border: 1px solid var(--tk-line);
-  border-radius: 24px;
+  border-radius: 22px;
   overflow: hidden;
-  padding: 16px 18px 19px;
+  padding: 12px 18px 12px;
 }
-/* 머리 영역은 두 줄 격자입니다.
-   1줄: [빈 칸] [제목] [설정 버튼] — 설정 버튼을 제목 줄에 올려, 버튼만 있는 줄이 휑하게 남지 않게 합니다.
-   2줄: [설명(세 칸 전체)] — 제목 바로 밑에 부제처럼 놓입니다.
-   양옆 칸이 같은 너비(1fr)라 제목과 설명이 모두 패널 정중앙, 곧 시계와 같은 세로 축에 섭니다.
-   오른쪽 칸은 설정 버튼보다 좁아지지 않으므로(max-content), 창이 좁아져도 겹치지 않습니다. */
+
+/* 개방형 활동 보드: 상단 불필요한 가로선 구분 없이 제목과 설명을 넉넉한 스마트 크기로 둡니다. */
 .timer-panel-heading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 0 0 6px;
+  flex: none;
+  min-width: 0;
+}
+.timer-title-row {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, auto) minmax(max-content, 1fr);
   align-items: center;
   column-gap: 8px;
-  row-gap: 0;
-  padding: 2px 0 13px;
-  border-bottom: 1px solid var(--tk-line);
-  flex: none;
+  width: 100%;
+  min-width: 0;
 }
-/* 제목은 가운데 칸 안에서만 넓어집니다. 칸 밖으로 번지면 오른쪽 설정 버튼과 겹칩니다. */
-.timer-panel-heading > .timer-title-input {
-  grid-row: 1;
+.timer-title-row > .timer-title-input {
   grid-column: 2;
   justify-self: center;
   max-width: 100%;
 }
-.timer-panel-heading > .timer-heading-tools {
-  grid-row: 1;
+.timer-title-row > .timer-heading-tools {
   grid-column: 3;
-  width: auto;
+  justify-self: end;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: none;
 }
-.timer-panel-heading > .timer-note {
-  grid-row: 2;
-  grid-column: 1 / -1;
-  justify-self: center;
-}
-/* 제목 칸은 글자 길이만큼만 넓습니다(field-sizing). 그래야 양옆 칸이 같은 몫을 받아 제목이
-   시계와 같은 세로 축, 즉 패널 정중앙에 놓입니다. 칸을 고정 폭으로 넓게 잡으면 오른쪽 설정 버튼
-   몫 때문에 왼쪽 칸만 줄어들어 제목이 한쪽으로 쏠립니다.
-   제목이 아주 길면 왼쪽 여백부터 양보하고, 그래도 모자라면 말줄임(…)으로 줄어듭니다. */
-.timer-title-input {
+.timer-frame .timer-title-input {
   field-sizing: content;
   width: auto;
   min-width: min(100%, 4em);
   max-width: 100%;
   flex: none;
-  height: 43px;
-  padding: 0 9px;
+  min-height: calc(var(--timer-title-px, 28px) * 1.25 + 4px);
+  padding: 2px 10px;
   border: 0;
   border-bottom: 2px solid transparent;
   border-radius: 8px 8px 3px 3px;
   background: transparent;
   color: var(--tk-ink);
-  font-size: clamp(23px, 3vw, 32px) !important;
+  font-size: var(--timer-title-px, 28px);
   font-weight: 750;
-  line-height: 1.2;
-  letter-spacing: -0.045em;
+  line-height: 1.22;
+  letter-spacing: -0.04em;
   text-align: center;
   text-overflow: ellipsis;
 }
@@ -1098,56 +1274,41 @@
   color: var(--tk-ink);
   opacity: 1;
 }
-/* field-sizing을 모르는 WebView에서는 예전처럼 넉넉한 고정 폭으로 둡니다(겹치지는 않습니다). */
 @supports not (field-sizing: content) {
-  .timer-title-input {
-    width: min(100%, 520px);
+  .timer-frame .timer-title-input {
+    width: min(100%, 540px);
   }
 }
 .timer-title-input:hover {
-  background: var(--tk-panel);
+  background: color-mix(in srgb, var(--tk-soft) 55%, transparent);
 }
 .timer-title-input:focus {
+  outline: none;
   background: var(--tk-panel);
   border-bottom-color: var(--tk-accent);
 }
-/* 설정 버튼만 오른쪽 끝에 둡니다(설명 버튼은 없앴습니다). 제목이 아무리 길어도
-   버튼 자리를 침범하지 않도록 버튼 칸은 제 너비를 지킵니다. */
 .timer-heading-tools {
   display: flex;
   justify-content: flex-end;
   align-items: center;
-  width: 100%;
+  gap: 6px;
   flex: none;
 }
-/* 설명은 제목 바로 아래에 부제처럼 놓입니다(접기 버튼 없음). 제목·시계·버튼이 모두 패널
-   한가운데 세로 축에 서 있으므로, 설명도 가운데 정렬해야 제목과 한 덩어리로 읽힙니다.
-   두 가지 모습만 있습니다.
-   - 접힘(.compact): 비어 있고 쓰는 중도 아닐 때. 제목 밑에 "설명 추가"가 작은 글씨(13px)로
-     붙어 있을 뿐이라 시계 자리를 거의 차지하지 않습니다.
-   - 펼침: 누르거나 내용이 있을 때. 학생이 멀리서 읽을 글이므로 창 크기에 맞춰 커집니다.
-   크기는 누를 때만 바뀌고 글을 치는 동안에는 바뀌지 않아, 첫 글자에서 칸이 튀지 않습니다. */
-.timer-note {
-  --note-pad-y: 4px;
+
+.timer-frame .timer-note {
+  --note-pad-y: 5px;
   display: flex;
   align-items: flex-start;
   justify-content: center;
-  /* 한 줄이 너무 길면 줄 끝에서 다음 줄 처음을 찾기 어렵습니다. 읽기 좋은 폭에서 줄을 바꿉니다. */
-  width: min(100%, 38em);
-  /* 폭은 위에서 정했으니 글 내용이 폭 계산에 끼지 않게 막습니다. 막지 않으면 긴 글을 "한 줄로
-     폈을 때 너비"가 머리 격자의 오른쪽 칸(설정 버튼 칸)을 부풀려 제목이 왼쪽으로 밀리고
-     패널이 옆으로 넘칩니다. 높이는 그대로 글 줄 수를 따릅니다. */
+  width: min(100%, var(--timer-note-width, 760px));
   contain: inline-size;
-  /* 마우스를 올리거나 쓸 때 떠오르는 바탕·테두리가 제목에 딱 붙지 않을 만큼만 띄웁니다. */
-  margin-top: 4px;
-  font-size: clamp(14px, 0.8vw + 7px, 20px);
+  margin-top: 2px;
+  font-size: var(--timer-note-px, 22px);
   cursor: text;
 }
-/* 접힘: 아이콘과 글자만큼의 작은 알약입니다. 마우스를 올리면 바탕이 떠올라 누를 수 있는 곳임을 알립니다. */
-.timer-note.compact {
+.timer-frame .timer-note.compact {
   --note-pad-y: 0px;
   gap: 5px;
-  /* 접힌 알약은 "설명 추가" 글자만큼만 넓어야 하므로 내용으로 폭을 정합니다(짧아서 격자를 부풀리지 않습니다). */
   width: auto;
   max-width: 100%;
   contain: none;
@@ -1160,12 +1321,10 @@
     background 0.16s ease,
     color 0.16s ease;
 }
-.timer-note.compact:hover {
+.timer-frame .timer-note.compact:hover {
   background: var(--tk-soft);
   color: var(--tk-ink);
 }
-/* 아이콘은 접혀 있을 때만 보입니다. 펼친 뒤 가운데 정렬된 여러 줄 글 옆에 아이콘이 붙어 있으면
-   글 덩어리가 한쪽으로 밀려 보입니다. */
 .timer-note .note-mark {
   display: none;
 }
@@ -1174,20 +1333,14 @@
   flex: none;
   width: 1.15em;
   height: 1.15em;
-  /* 줄 높이(1.5em) 안에서 세로 가운데 */
   margin-top: 0.175em;
 }
-/* 왜 테두리 없는 칸인가: 시계가 주인공인 화면에서 상자를 하나 더 그리면 시선이 갈라집니다.
-   평소에는 배경 없는 글자처럼 보이다가, 마우스를 올리면 은은한 바탕이, 쓰기 시작하면
-   테두리가 떠올라 "여기에 적는 곳"임을 알려 줍니다.
-   높이는 field-sizing: content가 글 줄 수에 맞춰 스스로 맞추고, --timer-note-room에서 멈춘 뒤로는
-   칸 안에서 스크롤됩니다(글자는 잘리지 않습니다). */
-.timer-note .timer-note-input {
+.timer-frame .timer-note .timer-note-input {
   display: block;
   flex: 1;
   min-width: 0;
-  min-height: calc(1.65em + 2 * var(--note-pad-y) + 2px);
-  max-height: calc(var(--timer-note-room, 11.55em) + 2 * var(--note-pad-y) + 2px);
+  min-height: calc(1.56em + 2 * var(--note-pad-y) + 2px);
+  max-height: calc(var(--timer-note-max-h, 240px) + 2 * var(--note-pad-y) + 2px);
   field-sizing: content;
   margin: 0;
   padding: var(--note-pad-y) 14px;
@@ -1195,44 +1348,46 @@
   border-radius: 10px;
   background: transparent;
   color: var(--tk-ink);
-  font-weight: 500;
-  line-height: 1.65;
+  font-weight: 600;
+  line-height: 1.56;
   text-align: center;
   resize: none;
   overflow-x: hidden;
   overflow-y: auto;
   white-space: pre-wrap;
-  /* 긴 영문·주소도 칸 밖으로 넘치지 않게 끊어 줍니다. */
-  overflow-wrap: anywhere;
+  word-break: keep-all;
+  overflow-wrap: break-word;
   scrollbar-width: thin;
   scrollbar-color: var(--tk-line) transparent;
   transition:
     background 0.16s ease,
     border-color 0.16s ease;
 }
-/* 접힌 칸은 "설명 추가" 글자 폭만큼만(field-sizing) 넓고 테두리·여백이 없습니다.
-   바탕과 글자색은 바깥 알약(label)이 맡습니다. */
-.timer-note.compact .timer-note-input {
+.timer-frame .timer-note.align-left .timer-note-input {
+  text-align: left;
+}
+.timer-frame .timer-note.compact .timer-note-input {
   flex: none;
   min-height: 0;
+  max-height: none;
   padding: 0;
   border: 0;
   border-radius: 0;
   color: inherit;
+  font-weight: 500;
   line-height: 1.5;
   text-align: left;
   overflow: hidden;
 }
-/* 한도를 줄 수 단위로 끊습니다. 한도가 1.4줄처럼 어중간하면 마지막 줄이 반쯤 잘려 보입니다. */
 @supports (width: round(down, 10px, 3px)) {
-  .timer-note .timer-note-input {
+  .timer-frame .timer-note .timer-note-input {
     max-height: calc(
-      round(down, var(--timer-note-room, 11.55em), 1.65em) + 2 * var(--note-pad-y) + 2px
+      max(1.56em, round(down, var(--timer-note-max-h, 240px), 1.56em)) + 2 * var(--note-pad-y) + 2px
     );
   }
 }
 .timer-note:not(.compact):hover .timer-note-input:not(:focus) {
-  background: var(--tk-soft);
+  background: color-mix(in srgb, var(--tk-soft) 72%, transparent);
 }
 .timer-note .timer-note-input::placeholder {
   color: var(--tk-muted);
@@ -1246,11 +1401,6 @@
   background: var(--tk-bg);
   border-color: var(--tk-accent);
 }
-/* 칸 안에서 스크롤될 때만, 글이 더 이어지는 쪽 가장자리를 서서히 흐리게 합니다.
-   맨 위에 있으면 아래쪽만, 맨 아래에 있으면 위쪽만 흐려져 "여기서 이어진다"가 읽히고,
-   경계에 반쯤 걸친 줄은 딱 끊기지 않고 흐려지며 사라집니다.
-   스크롤할 것이 없으면 스크롤 타임라인이 멈춰 있어 아무 효과도 없습니다.
-   글을 쓰는 동안(:focus)에는 커서가 가려지지 않도록 끕니다. */
 @property --note-fade-top {
   syntax: '<length>';
   inherits: false;
@@ -1292,58 +1442,51 @@
     mask-image: none;
   }
 }
-/* field-sizing을 모르는 오래된 WebView에서는 높이를 고정하고 안에서 스크롤합니다.
-   (자동으로 자라지 않을 뿐, 글자가 잘리지는 않습니다) */
 @supports not (field-sizing: content) {
   .timer-note .timer-note-input {
-    height: calc(3.3em + 2 * var(--note-pad-y) + 2px);
+    height: calc(3.12em + 2 * var(--note-pad-y) + 2px);
   }
   .timer-note.compact .timer-note-input {
-    height: calc(1.65em + 2 * var(--note-pad-y) + 2px);
+    height: calc(1.5em + 2 * var(--note-pad-y) + 2px);
   }
 }
-/* 설명이 길어지면 이 칸이 줄어들며 자리를 내줍니다(설명 칸은 flex: none).
-   다만 시계를 알아볼 수 없을 만큼 납작해지지는 않도록 바닥 높이를 둡니다.
-   바닥에 닿은 뒤로는 설명 칸이 제 한도(--timer-note-room)에서 멈추고 안에서 스크롤됩니다. */
+
 .timer-stage {
   position: relative;
   flex: 1;
-  min-height: 168px;
+  min-height: 140px;
   display: flex;
   align-items: center;
   justify-content: center;
   flex-direction: column;
   container-type: size;
-  padding: 4px 8px;
+  padding: 4px 6px;
 }
 .digital-board {
   position: relative;
   display: flex;
-  width: min(92%, 760px);
-  min-height: min(66%, 330px);
-  /* 위아래 여백은 시계 칸 높이(cqh)를 따라 줄어듭니다. 설명을 펼쳐 칸이 낮아져도
-     숫자·진행 막대가 판 밖으로 밀려나지 않게 하려는 것이며, 기본 창 크기에서는 예전 값 그대로입니다. */
-  padding: clamp(14px, 7cqh, 24px) 40px clamp(16px, 8.7cqh, 30px);
+  width: min(96%, 980px);
+  min-height: min(76%, 440px);
+  padding: clamp(12px, 6cqh, 24px) clamp(20px, 4cqw, 40px) clamp(14px, 7.5cqh, 28px);
   flex-direction: column;
   align-items: center;
   justify-content: center;
   border: 1px solid #2e5c52;
-  border-radius: 26px;
-  background:
-    linear-gradient(180deg, #234b45 0%, #173b36 52%, #12342f 100%);
+  border-radius: 24px;
+  background: linear-gradient(180deg, #234b45 0%, #173b36 52%, #12342f 100%);
   box-shadow:
     inset 0 1px 0 #ffffff1f,
     inset 0 -9px 22px #051d1a38,
-    0 13px 30px #24483d1b;
+    0 12px 28px #24483d1a;
   color: #f8f3df;
   overflow: hidden;
 }
 .digital-board::before {
   content: '';
   position: absolute;
-  inset: 12px;
+  inset: 11px;
   border: 1px solid #8fb4a536;
-  border-radius: 17px;
+  border-radius: 16px;
   pointer-events: none;
 }
 .digital-board::after {
@@ -1357,7 +1500,7 @@
 }
 .board-rivets {
   position: absolute;
-  inset: 17px;
+  inset: 16px;
   z-index: 1;
   pointer-events: none;
 }
@@ -1390,7 +1533,7 @@
   position: relative;
   z-index: 1;
   display: flex;
-  width: 78%;
+  width: 82%;
   align-items: center;
   justify-content: space-between;
   margin-bottom: clamp(4px, 2.4cqh, 8px);
@@ -1417,22 +1560,16 @@
   font-weight: 550;
   letter-spacing: 0.11em;
 }
-/* 숫자 크기·위치·자간은 현재 글꼴을 잰 값(--tk-num-*, fontMetrics.js)으로 정합니다.
-   왜: 글꼴마다 숫자의 키·놓이는 높이·폭·옆 여백이 달라, 고정 줄 높이(0.98)와 좁힌 자간(-0.055em)만으로는
-   여기어때 잘난체처럼 숫자가 줄 상자 위로 솟아 "남은 시간 / 분 : 초"를 덮거나, 숫자끼리 맞닿았습니다.
-   - 줄 상자 = 숫자 잉크 높이(--num-ink). 위아래 여백은 잉크 높이에 비례해 기본 글꼴의 모습(위 0.0865, 아래 0.1699)을 그대로 둡니다.
-   - top: 글꼴마다 기준선 위치가 달라 처지거나 뜨는 만큼을 되돌려 잉크를 줄 상자에 딱 맞춥니다(배치에는 영향 없음).
-   - 자간: 디자인 값(-0.055em)을 쓰되, 이웃한 숫자가 닿는 글꼴이면 닿지 않을 만큼만 넓힙니다(최대 0.08em).
-   - 글자 크기 = 세 값 중 가장 작은 값: ① 너비 기준(기본 글꼴 22cqw와 같은 폭) ② 높이 기준(기본 글꼴 31cqh와
-     같은 줄 높이) ③ 판 안쪽 폭 안에 "00:00"이 반드시 들어가는 크기. ③ 덕분에 넓은 글꼴도 판 밖으로 잘리지 않습니다.
-   괄호 안 기본값은 기본 글꼴(메이플스토리 L)을 잰 값이라, 측정 전에도 예전 크기·위치 그대로 보입니다. */
 .digital-time {
   --num-ink: var(--tk-num-ink, 0.78);
   --num-track: clamp(-0.055, var(--tk-num-track-min, 0.006), 0.08);
-  --num-run: calc(4 * var(--tk-num-advance, 0.675) + var(--tk-num-colon, 0.246));
-  --num-fit-w: 22cqw;
-  --num-fit-h: 31cqh;
-  --num-room: calc(min(92cqw, 760px) - 88px);
+  --num-run: var(
+    --num-run-dynamic,
+    calc(4 * var(--tk-num-advance, 0.675) + var(--tk-num-colon, 0.246))
+  );
+  --num-fit-w: 25cqw;
+  --num-fit-h: 40cqh;
+  --num-room: calc(min(96cqw, 980px) - 72px);
   position: relative;
   z-index: 1;
   top: calc(var(--tk-num-shift, -0.0325) * -1em);
@@ -1464,10 +1601,10 @@
 .digital-progress {
   position: relative;
   z-index: 1;
-  width: 78%;
+  width: 82%;
   height: 8px;
   flex: none;
-  margin-top: clamp(10px, 6.4cqh, 22px);
+  margin-top: clamp(8px, 5.5cqh, 20px);
   border-radius: 10px;
   background: #082723a3;
   box-shadow: inset 0 1px 3px #001713a3;
@@ -1490,31 +1627,11 @@
   border-radius: 50%;
   transform: translateX(-50%);
 }
-.stopwatch-decoration {
-  position: relative;
-  z-index: 1;
-  display: flex;
-  align-items: center;
-  gap: 13px;
-  height: 15px;
-  margin-top: 28px;
-}
-.stopwatch-decoration span {
-  height: 5px;
-  width: 5px;
-  border-radius: 50%;
-  background: var(--tk-action);
-}
-.stopwatch-decoration span:nth-child(3) {
-  width: 8px;
-  height: 8px;
-  background: var(--tk-soft);
-}
 .analog-clock {
-  height: calc(100cqh - 68px);
-  width: calc(100cqh - 68px);
-  max-width: 100%;
-  max-height: 390px;
+  height: min(calc(100cqh - 54px), 92cqw);
+  width: min(calc(100cqh - 54px), 92cqw);
+  max-width: 660px;
+  max-height: 660px;
   flex: none;
   overflow: visible;
   touch-action: none;
@@ -1529,19 +1646,18 @@
 .analog-caption {
   display: flex;
   align-items: center;
-  gap: 15px;
+  gap: 14px;
   justify-content: center;
   flex: none;
-  margin-top: 9px;
+  margin-top: 6px;
 }
-/* 자간은 디자인 값(-0.045em)을 쓰되, 숫자끼리 닿는 글꼴이면 닿지 않을 만큼만 넓힙니다(.digital-time과 같은 측정값). */
 .secondary-time {
   font-family: var(--tk-font);
   font-variant-numeric: tabular-nums;
   font-weight: 650;
   letter-spacing: calc(clamp(-0.045, var(--tk-num-track-min, 0.006), 0.08) * 1em);
-  font-size: 34px;
-  line-height: 1.2;
+  font-size: clamp(24px, min(8cqw, 14cqh), 46px);
+  line-height: 1.15;
   color: var(--tk-ink);
 }
 .dial-range {
@@ -1552,9 +1668,9 @@
   color: var(--tk-muted);
 }
 .hourglass-visual {
-  height: calc(100cqh - 59px);
-  width: calc((100cqh - 59px) * 0.889);
-  max-height: 365px;
+  height: min(calc(100cqh - 48px), 92cqw);
+  width: calc(min(calc(100cqh - 48px), 92cqw) * 0.889);
+  max-height: 620px;
   max-width: 100%;
   flex: none;
 }
@@ -1590,7 +1706,7 @@
   animation: finish-in 0.3s ease-out;
 }
 .is-complete .timer-stage {
-  padding-bottom: 38px;
+  padding-bottom: 34px;
 }
 .is-complete .digital-time {
   animation: finish-pop 0.45s ease-out;
@@ -1610,139 +1726,731 @@
     transform: scale(1.02);
   }
 }
+
+/* 슬림 하단 조작 독(기존 ~199px 2단 박스를 슬림 1줄 알약 독으로 압축해 상단 공간 극대화) */
 .timer-control-area {
-  padding-top: 16px;
+  padding-top: 8px;
   flex: none;
+}
+.control-dock {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 8px 12px;
+  width: fit-content;
+  max-width: 100%;
+  margin: 0 auto;
+  padding: 6px 10px;
+  border: 1px solid color-mix(in srgb, var(--tk-line) 75%, transparent);
+  border-radius: 16px;
+  background: var(--tk-bg);
 }
 .primary-controls {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 10px;
+  gap: 8px;
 }
-.primary-action,
-.secondary-action {
+.timer-frame .primary-action,
+.timer-frame .secondary-action {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
-  height: 46px;
-  padding: 0 20px;
-  border-radius: 14px;
+  gap: 7px;
+  height: 40px;
+  padding: 0 16px;
+  border-radius: 12px;
   font: inherit;
-  font-size: 14px;
-  font-weight: 600;
+  font-size: 13.5px;
+  font-weight: 650;
   cursor: pointer;
   border: 0;
+  white-space: nowrap;
 }
-.primary-action {
-  min-width: 145px;
-  background: var(--tk-soft);
+.timer-frame .primary-action {
+  min-width: 128px;
+  background: var(--tk-action);
+  color: var(--tk-on-action);
+}
+.timer-frame .primary-action:hover:not(:disabled) {
+  filter: brightness(1.08);
+}
+.timer-frame .secondary-action {
+  background: var(--tk-panel);
+  border: 1px solid color-mix(in srgb, var(--tk-line) 75%, transparent);
   color: var(--tk-ink);
 }
-.primary-action:hover {
+.timer-frame .secondary-action:hover:not(:disabled) {
   background: var(--tk-soft);
 }
-.secondary-action {
-  background: var(--tk-bg);
-  color: var(--tk-muted);
-}
-.secondary-action:hover {
-  background: var(--tk-soft);
-}
-.time-adjustment-panel {
-  --time-increase: light-dark(#286950, #9bdfbc);
-  --time-increase-soft: light-dark(#e5f0e9, #263e35);
-  width: min(100%, 540px);
-  margin: 16px auto 0;
-  padding: 12px;
-  border: 1px solid var(--tk-line);
-  border-radius: 16px;
-  background: var(--tk-bg);
-}
-.time-adjustment-heading {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 10px;
-}
-.time-adjustment-heading h2 {
-  margin: 0;
-  color: var(--tk-ink);
-  font-size: 13px;
-  font-weight: 700;
-}
-.time-adjustment-legend,
-.time-adjustment-legend > span {
-  display: flex;
-  align-items: center;
-}
-.time-adjustment-legend {
-  gap: 12px;
-  font-size: 11px;
-}
-.time-adjustment-legend > span {
-  gap: 3px;
-}
-.time-adjustment-panel .decrease {
-  color: var(--tk-danger);
-}
-.time-adjustment-panel .increase {
-  color: var(--time-increase);
-}
-.time-adjustments {
+.dock-adjustments {
   display: flex;
   flex-wrap: wrap;
-  justify-content: center;
-  gap: 6px;
-}
-.time-adjustment-step {
-  flex: 1 1 70px;
-  max-width: 100px;
-  min-width: 0;
-  padding: 8px 2px 5px;
-  border: 1px solid color-mix(in srgb, var(--tk-line) 70%, transparent);
-  border-radius: 11px;
-  background: var(--tk-panel);
-}
-.time-adjustment-label {
-  display: block;
-  margin-bottom: 6px;
-  font-size: 13px;
-  font-weight: 700;
-  font-variant-numeric: tabular-nums;
-  text-align: center;
-  color: var(--tk-ink);
-}
-.time-adjustment-buttons {
-  display: flex;
   align-items: center;
   justify-content: center;
-  gap: 2px;
+  gap: 5px;
 }
-.time-adjustments button {
+.dock-step {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  height: 34px;
+  padding: 2px 3px;
+  border: 1px solid color-mix(in srgb, var(--tk-line) 72%, transparent);
+  border-radius: 10px;
+  background: var(--tk-panel);
+}
+.dock-step-label {
+  padding: 0 4px;
+  font-size: 12px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--tk-ink);
+  white-space: nowrap;
+}
+.dock-step button {
   display: grid;
   place-items: center;
-  flex: 0 0 32px;
-  width: 32px;
-  height: 32px;
+  width: 26px;
+  height: 26px;
   padding: 0;
   border: 1px solid transparent;
-  border-radius: 8px;
+  border-radius: 7px;
 }
-.time-adjustments .decrease {
+/* light-dark()를 쓰지 않아 Vite LightningCSS 프로덕션 빌드에서도 색상이 소실되지 않습니다. */
+.dock-step .decrease {
+  color: var(--tk-danger);
   background: var(--tk-danger-soft);
 }
-.time-adjustments .increase {
-  background: var(--time-increase-soft);
+.dock-step .increase {
+  color: var(--tk-accent);
+  background: color-mix(in srgb, var(--tk-accent) 15%, var(--tk-panel));
 }
-.time-adjustments button:hover:not(:disabled) {
+.dock-step button:hover:not(:disabled) {
   border-color: currentColor;
   box-shadow: 0 2px 5px color-mix(in srgb, currentColor 12%, transparent);
 }
-.time-adjustments button:focus-visible {
+.dock-step button:focus-visible {
   outline-color: currentColor;
+}
+.timer-frame.compact-controls .timer-control-area {
+  padding-top: 6px;
+}
+.timer-frame.compact-controls .control-dock {
+  gap: 6px 8px;
+  padding: 5px 7px;
+  border-radius: 13px;
+}
+.timer-frame.compact-controls .primary-action,
+.timer-frame.compact-controls .secondary-action {
+  height: 35px;
+  padding: 0 12px;
+  font-size: 12.5px;
+  border-radius: 10px;
+}
+.timer-frame.compact-controls .primary-action {
+  min-width: 102px;
+}
+.timer-frame.compact-controls .dock-step {
+  height: 30px;
+  border-radius: 8px;
+}
+.timer-frame.compact-controls .dock-step button {
+  width: 23px;
+  height: 23px;
+  border-radius: 6px;
+}
+.timer-frame.compact-controls .dock-step-label {
+  font-size: 11px;
+  padding: 0 3px;
+}
+
+/* ── 착 달라붙은 플로팅 위젯 모드 (학급 온도계 ThermometerDisplay 설계 차용) ── */
+.timer-frame.snug-widget {
+  padding: 6px;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  overflow: visible;
+}
+.timer-frame.snug-widget .timer-workspace {
+  padding: 0;
+  overflow: visible;
+}
+.timer-frame.snug-widget .timer-layout {
+  display: flex;
+  gap: 0;
+  min-height: 0;
+  height: 100%;
+}
+.timer-frame.snug-widget .timer-main {
+  flex: 1;
+  width: 100%;
+  height: 100%;
+  border-radius: 18px;
+  padding: 11px 13px 11px;
+  gap: 5px;
+  justify-content: space-between;
+  container: widget-card / size;
+  cursor: grab;
+  box-shadow:
+    0 4px 16px rgba(24, 34, 28, 0.14),
+    0 1px 3px rgba(24, 34, 28, 0.08);
+}
+.timer-frame.snug-widget .timer-main:active {
+  cursor: grabbing;
+}
+.timer-frame.snug-widget[data-scheme='dark'] .timer-main {
+  box-shadow:
+    0 6px 20px rgba(0, 0, 0, 0.4),
+    0 0 0 1px rgba(255, 255, 255, 0.06);
+}
+
+/* 전광판 위젯은 칠판 자체를 단일 위젯 표면으로 융합해 박스 안 박스 중첩을 없앱니다. */
+.timer-frame.snug-widget[data-kind='digital'] .timer-main {
+  background: linear-gradient(
+    180deg,
+    var(--tk-display-bg),
+    color-mix(in srgb, var(--tk-display-bg) 82%, black)
+  );
+  border-color: color-mix(in srgb, var(--tk-display-ink) 18%, var(--tk-line));
+  color: var(--tk-display-ink);
+}
+.timer-frame.snug-widget[data-kind='digital'] .digital-board {
+  width: 100%;
+  min-height: 0;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+.timer-frame.snug-widget[data-kind='digital'] .digital-board::before,
+.timer-frame.snug-widget[data-kind='digital'] .digital-board::after {
+  display: none;
+}
+.timer-frame.snug-widget[data-kind='digital'] .widget-title-input,
+.timer-frame.snug-widget[data-kind='digital'] .widget-title-input::placeholder,
+.timer-frame.snug-widget[data-kind='digital'] .widget-note-preview,
+.timer-frame.snug-widget[data-kind='digital'] .widget-note-textarea {
+  color: var(--tk-display-ink);
+}
+.timer-frame.snug-widget[data-kind='digital'] .widget-note-textarea {
+  background: rgba(0, 0, 0, 0.22);
+  border-color: var(--tk-gold);
+}
+.timer-frame.snug-widget[data-kind='digital'] .widget-note-add {
+  color: rgba(255, 255, 255, 0.78);
+}
+.timer-frame.snug-widget[data-kind='digital'] .widget-note-add:hover {
+  background: rgba(255, 255, 255, 0.14);
+  color: #ffffff;
+}
+/* 전광판 위젯 바탕은 테마 강조색(--tk-action)과 같으므로 주요 버튼은 황금 포인트(--tk-gold)로 대비 확보 */
+.timer-frame.snug-widget[data-kind='digital'] .widget-primary-btn {
+  background: var(--tk-gold);
+  color: #1a2421;
+}
+.timer-frame.snug-widget[data-kind='digital'] .widget-secondary-btn,
+.timer-frame.snug-widget[data-kind='digital'] .widget-step-chip {
+  background: rgba(255, 255, 255, 0.14);
+  border-color: rgba(255, 255, 255, 0.22);
+  color: var(--tk-display-ink);
+}
+.timer-frame.snug-widget[data-kind='digital'] .widget-secondary-btn:hover:not(:disabled),
+.timer-frame.snug-widget[data-kind='digital'] .widget-step-chip:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.22);
+}
+.timer-frame.snug-widget[data-kind='digital'] .widget-micro-actions {
+  background: color-mix(in srgb, var(--tk-display-bg) 88%, black);
+  border-color: rgba(255, 255, 255, 0.16);
+}
+.timer-frame.snug-widget[data-kind='digital'] .widget-micro-actions button {
+  color: rgba(255, 255, 255, 0.85);
+}
+.timer-frame.snug-widget[data-kind='digital'] .widget-micro-actions button:hover {
+  background: rgba(255, 255, 255, 0.16);
+  color: #ffffff;
+}
+.timer-frame.snug-widget[data-kind='digital'] .widget-status-dot.running {
+  background: var(--tk-gold);
+}
+
+.widget-ribbon {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  width: 100%;
+  flex: none;
+}
+.widget-status-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex: none;
+  background: color-mix(in srgb, var(--tk-muted) 55%, transparent);
+}
+.widget-status-dot.running {
+  background: var(--tk-accent);
+  animation: widget-pulse 1.5s ease-in-out infinite;
+}
+.widget-status-dot.complete {
+  background: var(--tk-danger);
+}
+@keyframes widget-pulse {
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.45;
+    transform: scale(1.25);
+  }
+}
+
+.timer-frame.snug-widget .widget-title-input {
+  flex: 1;
+  width: 100%;
+  min-width: 0;
+  min-height: calc(var(--timer-title-px, 16px) * 1.25);
+  padding: 0 4px;
+  text-align: left;
+  font-size: var(--timer-title-px, 16px);
+  font-weight: 750;
+  line-height: 1.2;
+}
+.timer-frame.snug-widget .widget-title-input.promoted::placeholder {
+  opacity: 0.92;
+  font-weight: 700;
+}
+
+.widget-micro-actions {
+  position: absolute;
+  top: 7px;
+  right: 7px;
+  z-index: 30;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px;
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--tk-panel) 90%, transparent);
+  border: 1px solid color-mix(in srgb, var(--tk-line) 75%, transparent);
+  backdrop-filter: blur(8px);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.16s ease;
+}
+.timer-frame.snug-widget .timer-main:is(:hover, :focus-within) .widget-micro-actions {
+  opacity: 1;
+  pointer-events: auto;
+}
+.widget-micro-actions button {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--tk-muted);
+}
+.widget-micro-actions button:hover {
+  background: var(--tk-soft);
+  color: var(--tk-ink);
+}
+.widget-micro-actions button.active {
+  color: var(--tk-accent);
+}
+.widget-micro-actions button.close:hover {
+  color: var(--tk-danger);
+}
+
+.timer-frame.snug-widget .widget-note-preview {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: var(--widget-note-lines, 2);
+  overflow: hidden;
+  width: 100%;
+  margin: 0;
+  padding: 2px 5px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--tk-ink);
+  font-size: var(--timer-note-px, 14px);
+  font-weight: 600;
+  line-height: 1.45;
+  text-align: var(--timer-note-align, left);
+  white-space: pre-line;
+  word-break: keep-all;
+  overflow-wrap: break-word;
+  cursor: text;
+  flex: none;
+}
+.timer-frame.snug-widget .widget-note-preview:hover {
+  background: color-mix(in srgb, var(--tk-soft) 55%, transparent);
+}
+.timer-frame.snug-widget[data-kind='digital'] .widget-note-preview:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+.widget-note-editor {
+  display: block;
+  width: 100%;
+  flex: none;
+}
+.timer-frame.snug-widget .widget-note-textarea {
+  width: 100%;
+  min-height: 2.9em;
+  max-height: calc(var(--timer-note-max-h, 84px));
+  padding: 4px 7px;
+  font-size: var(--timer-note-px, 14px);
+  font-weight: 600;
+  line-height: 1.45;
+  text-align: left;
+  background: color-mix(in srgb, var(--tk-bg) 82%, transparent);
+  border: 1px solid var(--tk-accent);
+  border-radius: 8px;
+  color: var(--tk-ink);
+  resize: none;
+  overflow-y: auto;
+  word-break: keep-all;
+  overflow-wrap: break-word;
+}
+.timer-frame.snug-widget .widget-note-add {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 22px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--tk-muted);
+  font-size: 11.5px;
+  font-weight: 600;
+  opacity: 0.78;
+  flex: none;
+}
+.timer-frame.snug-widget .widget-note-add:hover {
+  background: var(--tk-soft);
+  color: var(--tk-ink);
+  opacity: 1;
+}
+
+.widget-controls {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  flex: none;
+  min-width: 0;
+}
+.timer-frame.snug-widget .widget-primary-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  height: 32px;
+  padding: 0 13px;
+  border: 0;
+  border-radius: 10px;
+  background: var(--tk-action);
+  color: var(--tk-on-action);
+  font-size: 12.5px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.timer-frame.snug-widget .widget-primary-btn:hover:not(:disabled) {
+  filter: brightness(1.08);
+}
+.timer-frame.snug-widget .widget-secondary-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  height: 30px;
+  min-width: 30px;
+  padding: 0 8px;
+  border: 1px solid var(--tk-line);
+  border-radius: 9px;
+  background: var(--tk-bg);
+  color: var(--tk-muted);
+  font-size: 11.5px;
+  font-weight: 650;
+  white-space: nowrap;
+}
+.timer-frame.snug-widget .widget-secondary-btn:hover:not(:disabled) {
+  background: var(--tk-soft);
+  color: var(--tk-ink);
+}
+.timer-frame.snug-widget .widget-step-chip {
+  height: 28px;
+  padding: 0 7px;
+  border: 1px solid var(--tk-line);
+  border-radius: 8px;
+  background: var(--tk-bg);
+  color: var(--tk-ink);
+  font-size: 11.5px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.timer-frame.snug-widget .widget-step-chip:hover:not(:disabled) {
+  background: var(--tk-soft);
+}
+
+/* 4가지 위젯 폼팩터별 최적화 (strip · tile · tall · card) */
+.timer-frame.snug-widget[data-form='strip'] .timer-main {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-rows: auto minmax(0, 1fr);
+  align-items: center;
+  column-gap: 8px;
+  row-gap: 2px;
+  padding: 7px 11px 9px;
+}
+.timer-frame.snug-widget[data-form='strip'] .widget-ribbon {
+  grid-column: 1 / -1;
+  grid-row: 1;
+}
+.timer-frame.snug-widget[data-form='strip'] .timer-stage {
+  grid-column: 1;
+  grid-row: 2;
+  min-height: 0;
+  height: 100%;
+  width: 100%;
+  flex-direction: row;
+  justify-content: flex-start;
+  gap: 9px;
+  padding: 0;
+}
+.timer-frame.snug-widget[data-form='strip'] .widget-controls {
+  grid-column: 2;
+  grid-row: 2;
+}
+.timer-frame.snug-widget[data-form='strip'] .digital-board {
+  align-items: flex-start;
+}
+.timer-frame.snug-widget[data-form='strip'] .digital-time {
+  --num-fit-w: 24cqw;
+  --num-fit-h: 66cqh;
+  --num-room: calc(100cqw - 6px);
+}
+.timer-frame.snug-widget[data-form='strip'] .digital-progress {
+  position: absolute;
+  left: 11px;
+  right: 11px;
+  bottom: 0;
+  width: auto;
+  height: 3px;
+  margin: 0;
+  border-radius: 3px;
+}
+.timer-frame.snug-widget[data-form='strip'] .digital-progress > i {
+  display: none;
+}
+.timer-frame.snug-widget[data-form='strip'] .analog-clock {
+  height: min(92cqh, 58px);
+  width: min(92cqh, 58px);
+}
+.timer-frame.snug-widget[data-form='strip'] .analog-caption {
+  margin-top: 0;
+}
+.timer-frame.snug-widget[data-form='strip'] .hourglass-visual {
+  height: min(92cqh, 56px);
+  width: calc(min(92cqh, 56px) * 0.889);
+}
+.timer-frame.snug-widget[data-form='strip'] .secondary-time {
+  margin-top: 0;
+  font-size: clamp(19px, min(19cqw, 62cqh), 38px);
+}
+.timer-frame.snug-widget[data-form='strip'] .stopwatch-minimal {
+  flex-direction: row;
+  justify-content: flex-start;
+  align-items: baseline;
+  gap: 7px;
+}
+.timer-frame.snug-widget[data-form='strip'] .sw-minimal-time {
+  order: -1;
+  font-size: clamp(19px, min(22cqw, 66cqh), 38px);
+}
+@container widget-card (width < 275px) {
+  .timer-frame.snug-widget[data-form='strip'] .analog-clock,
+  .timer-frame.snug-widget[data-form='strip'] .hourglass-visual {
+    height: 42px;
+    width: 42px;
+  }
+  .timer-frame.snug-widget[data-form='strip'] .widget-primary-btn {
+    padding: 0 9px;
+    height: 29px;
+  }
+  .timer-frame.snug-widget[data-form='strip'] .widget-secondary-btn {
+    height: 28px;
+    min-width: 28px;
+    padding: 0 6px;
+  }
+}
+
+.timer-frame.snug-widget[data-form='tile'] .timer-main {
+  padding: 8px 10px 9px;
+  gap: 3px;
+}
+.timer-frame.snug-widget[data-form='tile'] .timer-stage {
+  min-height: 0;
+  padding: 1px 0;
+}
+.timer-frame.snug-widget[data-form='tile'] .analog-clock {
+  height: min(calc(100cqh - 24px), 86cqw);
+  width: min(calc(100cqh - 24px), 86cqw);
+}
+.timer-frame.snug-widget[data-form='tile'] .analog-caption {
+  margin-top: 2px;
+}
+.timer-frame.snug-widget[data-form='tile'] .hourglass-visual {
+  height: min(calc(100cqh - 22px), 86cqw);
+  width: calc(min(calc(100cqh - 22px), 86cqw) * 0.889);
+}
+.timer-frame.snug-widget[data-form='tile'] .secondary-time {
+  margin-top: 2px;
+  font-size: clamp(15px, min(14cqw, 20cqh), 24px);
+}
+.timer-frame.snug-widget[data-form='tile'] .digital-time {
+  --num-fit-w: 27cqw;
+  --num-fit-h: 52cqh;
+  --num-room: calc(100cqw - 8px);
+}
+.timer-frame.snug-widget[data-form='tile'] .digital-progress {
+  width: 88%;
+  height: 5px;
+  margin-top: clamp(3px, 4cqh, 8px);
+}
+.timer-frame.snug-widget[data-form='tile'] .digital-progress > i {
+  width: 10px;
+  height: 10px;
+  top: -2.5px;
+  border-width: 2px;
+}
+
+.timer-frame.snug-widget[data-form='card'] .timer-stage,
+.timer-frame.snug-widget[data-form='tall'] .timer-stage {
+  min-height: 0;
+  padding: 2px 0;
+}
+.timer-frame.snug-widget[data-form='card'] .analog-clock,
+.timer-frame.snug-widget[data-form='tall'] .analog-clock {
+  height: min(calc(100cqh - 28px), 88cqw);
+  width: min(calc(100cqh - 28px), 88cqw);
+}
+.timer-frame.snug-widget[data-form='card'] .analog-caption,
+.timer-frame.snug-widget[data-form='tall'] .analog-caption {
+  margin-top: 3px;
+}
+.timer-frame.snug-widget[data-form='card'] .hourglass-visual,
+.timer-frame.snug-widget[data-form='tall'] .hourglass-visual {
+  height: min(calc(100cqh - 26px), 88cqw);
+  width: calc(min(calc(100cqh - 26px), 88cqw) * 0.889);
+}
+.timer-frame.snug-widget[data-form='card'] .secondary-time,
+.timer-frame.snug-widget[data-form='tall'] .secondary-time {
+  margin-top: 2px;
+  font-size: clamp(18px, min(12cqw, 16cqh), 30px);
+}
+.timer-frame.snug-widget[data-form='card'] .digital-time,
+.timer-frame.snug-widget[data-form='tall'] .digital-time {
+  --num-fit-w: 27cqw;
+  --num-fit-h: 50cqh;
+  --num-room: calc(100cqw - 10px);
+}
+.timer-frame.snug-widget[data-form='card'] .digital-progress,
+.timer-frame.snug-widget[data-form='tall'] .digital-progress {
+  width: 88%;
+  height: 6px;
+  margin-top: clamp(5px, 5cqh, 12px);
+}
+.timer-frame.snug-widget[data-form='card'] .digital-progress > i,
+.timer-frame.snug-widget[data-form='tall'] .digital-progress > i {
+  width: 11px;
+  height: 11px;
+  top: -2.5px;
+  border-width: 2px;
+}
+@container widget-card (width < 250px) {
+  .timer-frame.snug-widget[data-form='tall'] .widget-secondary-btn span {
+    display: none;
+  }
+  .timer-frame.snug-widget[data-form='tall'] .widget-step-chip {
+    padding: 0 5px;
+    font-size: 11px;
+  }
+  .timer-frame.snug-widget[data-form='tall'] .widget-primary-btn {
+    padding: 0 9px;
+    font-size: 12px;
+  }
+}
+
+.widget-mini-laps {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding-top: 6px;
+  border-top: 1px solid color-mix(in srgb, var(--tk-line) 70%, transparent);
+  flex: none;
+}
+.widget-mini-lap {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+  color: var(--tk-muted);
+}
+.widget-mini-lap time {
+  color: var(--tk-ink);
+  font-weight: 650;
+}
+
+/* 작은 위젯창 안에서도 대화상자가 잘리지 않도록 인라인 확인 시트를 띄웁니다. */
+.timer-compact-confirm {
+  position: absolute;
+  inset: 6px;
+  z-index: 80;
+  border-radius: 18px;
+  background: color-mix(in srgb, var(--tk-panel) 95%, transparent);
+  backdrop-filter: blur(10px);
+  border: 1px solid var(--tk-line);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 12px;
+  text-align: center;
+}
+.timer-compact-confirm p {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--tk-ink);
+  word-break: keep-all;
+}
+.compact-confirm-actions {
+  display: flex;
+  gap: 8px;
+}
+.timer-compact-confirm .primary-action,
+.timer-compact-confirm .secondary-action {
+  height: 32px;
+  min-width: 72px;
+  padding: 0 12px;
+  font-size: 12px;
+  border-radius: 9px;
 }
 /* 타이머 설정 패널
    - 글자는 12px 이상: 교실 화면·배율이 낮은 모니터에서도 읽히게 합니다.
@@ -1798,6 +2506,183 @@
   color: var(--tk-muted);
   font-size: 12px;
   line-height: 1.4;
+}
+
+/* ── 글자와 화면 공통 커스터마이징 섹션 ── */
+.display-heading-copy {
+  flex: 1;
+  min-width: 0;
+}
+.display-heading-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.display-shared-badge {
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--tk-accent) 14%, var(--tk-panel));
+  color: var(--tk-accent);
+  font-size: 10.5px;
+  font-weight: 700;
+  line-height: 1.5;
+  white-space: nowrap;
+}
+.timer-settings-panel .display-reset-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 28px;
+  padding: 0 9px;
+  border: 1px solid var(--tk-line);
+  border-radius: 9px;
+  background: var(--tk-bg);
+  color: var(--tk-muted);
+  font-size: 11.5px;
+  font-weight: 650;
+  flex: none;
+  white-space: nowrap;
+}
+.timer-settings-panel .display-reset-btn:hover {
+  background: var(--tk-soft);
+  color: var(--tk-ink);
+}
+.display-control-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+.display-scale-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid var(--tk-line);
+  border-radius: 13px;
+  background: var(--tk-bg);
+}
+.display-scale-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.display-scale-head strong {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--tk-ink);
+}
+.display-stepper {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.timer-settings-panel .display-stepper button {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 1px solid var(--tk-line);
+  border-radius: 7px;
+  background: var(--tk-panel);
+  color: var(--tk-ink);
+}
+.timer-settings-panel .display-stepper button:hover:not(:disabled) {
+  background: var(--tk-soft);
+  border-color: var(--tk-accent);
+}
+.display-stepper span {
+  min-width: 42px;
+  text-align: center;
+  font-size: 12px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--tk-muted);
+}
+.display-stepper span.custom {
+  color: var(--tk-accent);
+}
+.display-chip-row {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 5px;
+}
+.timer-settings-panel .display-chip-row button {
+  height: 29px;
+  padding: 0 4px;
+  border: 1px solid var(--tk-line);
+  border-radius: 8px;
+  background: var(--tk-panel);
+  color: var(--tk-muted);
+  font-size: 11.5px;
+  font-weight: 650;
+  white-space: nowrap;
+}
+.timer-settings-panel .display-chip-row button:hover {
+  background: var(--tk-soft);
+  color: var(--tk-ink);
+}
+.timer-settings-panel .display-chip-row button.selected {
+  background: var(--tk-action);
+  border-color: var(--tk-action);
+  color: var(--tk-on-action);
+}
+.display-option-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 12px;
+  border: 1px solid var(--tk-line);
+  border-radius: 13px;
+  background: var(--tk-bg);
+}
+.display-option-row > span {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--tk-ink);
+  white-space: nowrap;
+}
+.display-segmented {
+  display: inline-grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(0, 1fr);
+  gap: 2px;
+  padding: 2px;
+  border-radius: 9px;
+  background: var(--tk-panel);
+  border: 1px solid color-mix(in srgb, var(--tk-line) 75%, transparent);
+}
+.timer-settings-panel .display-segmented button {
+  height: 27px;
+  padding: 0 9px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--tk-muted);
+  font-size: 11.5px;
+  font-weight: 650;
+  white-space: nowrap;
+}
+.timer-settings-panel .display-segmented button:hover {
+  color: var(--tk-ink);
+  background: var(--tk-soft);
+}
+.timer-settings-panel .display-segmented button.selected {
+  background: var(--tk-soft);
+  color: var(--tk-accent);
+  font-weight: 700;
+}
+@container timer-settings (max-width: 285px) {
+  .display-option-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .display-segmented {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
 }
 .time-inputs {
   display: grid;
@@ -2409,322 +3294,35 @@
   flex: 1;
   min-width: 0;
 }
-@media (max-width: 899px) {
-  .timer-workspace {
-    padding: 12px 16px 16px;
-  }
-  .timer-layout {
-    gap: 13px;
-  }
-  .timer-layout.with-laps {
-    grid-template-columns: minmax(0, 1fr) 232px;
-  }
-  .timer-layout.with-settings:not(.with-laps) {
-    grid-template-columns: minmax(0, 1fr) clamp(310px, 38vw, 330px);
-  }
-  .timer-layout.with-laps.with-settings {
-    grid-template-columns: minmax(0, 1fr) 232px;
-  }
-  .timer-layout.with-laps.with-settings .timer-settings-panel {
-    position: absolute;
-    right: 16px;
-    top: 12px;
-    bottom: 16px;
-    width: 232px;
-    z-index: 10;
-    box-shadow: 0 4px 20px #20352a16;
-  }
-  .timer-settings-panel {
-    padding: 18px 16px 16px;
-  }
-  .timer-main {
-    padding: 12px 12px 16px;
-  }
-  .primary-action {
-    min-width: 125px;
-  }
-  .primary-action,
-  .secondary-action {
-    padding: 0 14px;
-  }
-  .digital-time {
-    --num-fit-h: 30cqh;
-  }
+.timer-frame.snug-widget .timer-error {
+  position: absolute;
+  left: 10px;
+  right: 10px;
+  bottom: 10px;
+  z-index: 45;
+  margin: 0;
+  padding: 6px 10px;
+  font-size: 11.5px;
 }
-@media (min-width: 600px) and (max-width: 760px) {
-  .timer-workspace {
-    overflow: auto;
-  }
-  .timer-layout.with-settings:not(.with-laps) {
-    display: flex;
-    min-height: 100%;
-    flex: none;
-    flex-direction: column;
-  }
-  .timer-layout.with-settings:not(.with-laps) .timer-main {
-    min-height: 500px;
-    flex: none;
-  }
-  /* 이 배치는 창 전체가 스크롤되므로, 설명이 길어져도 시계를 줄이지 않고 패널을 늘립니다. */
-  .timer-layout.with-settings:not(.with-laps) .timer-main .timer-stage {
-    min-height: 240px;
-  }
-  .timer-layout.with-settings:not(.with-laps) .timer-settings-panel {
-    width: 100%;
-    overflow: visible;
-  }
+
+/* 창 너비가 좁거나 낮을 때(overlayPanels)는 시계·설명을 압축하지 않고 설정/기록 패널을 우측 서랍으로 띄웁니다. */
+.timer-layout.overlay-panels {
+  grid-template-columns: minmax(0, 1fr) !important;
 }
-@media (max-width: 599px) {
-  .timer-workspace {
-    overflow: auto;
-    padding: 11px 12px 14px;
-  }
-  .timer-titlebar {
-    height: 36px;
-    padding-left: 12px;
-  }
-  .timer-kind {
-    font-size: 10px;
-    gap: 4px;
-  }
-  .timer-kind > span:first-of-type,
-  .titlebar-dot {
-    display: none;
-  }
-  .window-actions button {
-    width: 27px;
-    height: 27px;
-  }
-  .timer-layout,
-  .timer-layout.with-settings,
-  .timer-layout.with-laps,
-  .timer-layout.with-laps.with-settings {
-    display: flex;
-    flex-direction: column;
-    flex: none;
-    min-height: 100%;
-    gap: 13px;
-  }
-  .timer-main {
-    min-height: 430px;
-    flex: none;
-    padding: 14px 12px 15px;
-    border-radius: 19px;
-  }
-  .timer-panel-heading {
-    padding: 0 4px 12px;
-    column-gap: 8px;
-  }
-  .timer-title-input {
-    height: 39px;
-    font-size: 23px !important;
-  }
-  .timer-heading-tools > .timer-settings-toggle {
-    min-height: 34px;
-    padding: 6px 10px;
-    font-size: 12px !important;
-  }
-  /* 좁은 창에서도 설명은 2~5줄에서 멈춥니다. 설명이 제목 밑(시계 위)에 있으므로 한도가 없으면
-     긴 글이 시계를 화면 아래로 밀어내 스크롤해야 시계가 보입니다. 넘치는 글은 칸 안에서 스크롤됩니다. */
-  .timer-frame,
-  .timer-frame.stopwatch-frame {
-    --timer-note-room: clamp(3.3em, calc(100dvh - 470px), 8.25em);
-  }
-  /* 시계 칸은 기본 220px이되, 패널 최소 높이 때문에 남는 자리가 있으면 그만큼 커집니다.
-     (스톱워치처럼 분 증감 줄이 없거나 설명이 접혀 있을 때) 고정 높이로 두면 그 몫이
-     패널 바닥에 빈자리로 남아, 설명 아래가 휑하게 비어 보입니다. */
-  .timer-stage {
-    height: auto;
-    flex: 1 0 220px;
-  }
-  .timer-stage.analog,
-  .timer-stage.hourglass {
-    flex-basis: 255px;
-  }
-  /* 좁은 창의 시계 칸은 높이가 고정입니다. '시간 끝' 안내가 아래 공간을 차지하면
-     시계·남은 시간 글자가 칸 밖으로 밀려나므로, 칸 높이(cqh)에 맞춰 조금 줄어들게 합니다. */
-  .analog-clock {
-    height: min(190px, calc(100cqh - 46px));
-    width: min(190px, calc(100cqh - 46px));
-  }
-  .analog-clock text {
-    font-size: 20px;
-  }
-  .secondary-time {
-    font-size: 29px;
-  }
-  .dial-range {
-    font-size: 11px;
-  }
-  .hourglass-visual {
-    height: min(213px, calc(100cqh - 43px));
-    width: calc(min(213px, calc(100cqh - 43px)) * 0.889);
-  }
-  .timer-control-area {
-    padding-top: 12px;
-  }
-  .digital-board {
-    width: 100%;
-    min-height: 176px;
-    padding: 21px 20px 24px;
-    border-radius: 20px;
-  }
-  .digital-board::before {
-    inset: 9px;
-    border-radius: 13px;
-  }
-  .board-rivets {
-    inset: 13px;
-  }
-  .board-caption {
-    width: 82%;
-    margin-bottom: 7px;
-    font-size: 12px;
-  }
-  .board-caption small {
-    font-size: 9px;
-  }
-  /* 좁은 창은 판이 칸을 꽉 채우고(좌우 여백 20px) 높이 제한 없이 너비로만 크기를 정합니다. */
-  .digital-time {
-    --num-fit-w: 23cqw;
-    --num-fit-h: 1000cqh;
-    --num-room: calc(100cqw - 48px);
-  }
-  .digital-progress {
-    width: 82%;
-    margin-top: 16px;
-  }
-  .primary-action,
-  .secondary-action {
-    height: 43px;
-    padding: 0 15px;
-    font-size: 13px;
-    gap: 7px;
-  }
-  .primary-action {
-    min-width: 128px;
-  }
-  .time-adjustment-panel {
-    margin-top: 12px;
-  }
-  .timer-settings-panel {
-    overflow: visible;
-    padding: 20px;
-    border-radius: 18px;
-  }
-  .time-inputs input {
-    width: 100%;
-  }
-  .time-inputs > button {
-    padding: 10px 12px;
-  }
-  .lap-panel {
-    min-height: 210px;
-    max-height: 350px;
-  }
-  .timer-layout.with-laps.with-settings .timer-settings-panel {
-    position: static;
-    box-shadow: none;
-    width: auto;
-  }
-  .lap-top time {
-    font-size: 17px;
-  }
-  .completion-message {
-    font-size: 13px;
-  }
-  /* 좁은 창의 시계 칸은 flex-basis가 기본 높이입니다(남는 자리는 위 규칙대로 더 받습니다). */
-  .timer-stage.digital {
-    flex-basis: 220px;
-  }
-  .stopwatch-frame .timer-stage {
-    flex-basis: 210px;
-  }
-  .stopwatch-frame .primary-controls {
-    gap: 7px;
-  }
-  .stopwatch-frame .primary-action {
-    min-width: 107px;
-  }
-  .stopwatch-frame .secondary-action {
-    padding: 0 10px;
-  }
+.timer-layout.overlay-panels .timer-settings-panel,
+.timer-layout.overlay-panels .lap-panel {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: min(344px, calc(100% - 12px));
+  z-index: 25;
+  box-shadow: 0 12px 32px rgba(24, 34, 28, 0.18);
 }
-@media (max-height: 540px) and (min-width: 600px) {
-  .timer-workspace {
-    padding: 8px 15px 14px;
-  }
-  .timer-main {
-    padding: 10px 12px 12px;
-    overflow-y: auto;
-  }
-  /* 낮은 창: 시계 칸을 지키려고 설명 칸이 자랄 수 있는 한도를 좁힙니다(2~3줄).
-     1줄까지 줄이면 다음 줄 윗부분이 칸 아래에 비쳐 답답해 보이므로 2줄은 지킵니다.
-     넘치는 글은 칸 안에서 스크롤되므로 읽는 데는 지장이 없습니다. */
-  .timer-frame {
-    --timer-note-room: clamp(3.3em, calc(100dvh - 500px), 4.95em);
-  }
-  .timer-frame.stopwatch-frame {
-    --timer-note-room: clamp(3.3em, calc(100dvh - 460px), 6.6em);
-  }
-  /* 낮은 창에서는 시계 바닥 높이도 함께 낮춰야 패널이 넘치지 않습니다. */
-  .timer-stage {
-    min-height: 120px;
-  }
-  .timer-panel-heading {
-    column-gap: 6px;
-    padding-bottom: 9px;
-  }
-  .timer-title-input {
-    height: 34px;
-    font-size: 21px !important;
-  }
-  .timer-heading-tools > .timer-settings-toggle {
-    min-height: 32px;
-    padding-top: 4px;
-    padding-bottom: 4px;
-  }
-  .timer-control-area {
-    padding-top: 9px;
-  }
-  .primary-action,
-  .secondary-action {
-    height: 39px;
-    padding: 0 13px;
-  }
-  .time-adjustment-panel {
-    margin-top: 8px;
-  }
-  .analog-clock {
-    height: calc(100cqh - 46px);
-    width: calc(100cqh - 46px);
-  }
-  .analog-caption {
-    margin-top: 5px;
-    gap: 9px;
-  }
-  .secondary-time {
-    font-size: 26px;
-  }
-  .dial-range {
-    font-size: 10px;
-  }
-  .digital-board {
-    min-height: min(65%, 225px);
-    padding-top: clamp(12px, 7cqh, 18px);
-    padding-bottom: clamp(12px, 8cqh, 20px);
-  }
-  .digital-progress {
-    margin-top: clamp(8px, 5cqh, 12px);
-  }
-  .hourglass-visual {
-    height: calc(100cqh - 37px);
-    width: calc((100cqh - 37px) * 0.889);
-  }
-  .timer-settings-panel {
-    padding: 15px 13px;
-  }
+.timer-layout.overlay-panels.with-laps.with-settings .timer-settings-panel {
+  z-index: 26;
 }
+
 /* 툴킷은 Windows "애니메이션 효과"(prefers-reduced-motion) 설정을 따르지 않습니다.
    학교 PC는 이 설정이 꺼진 경우가 많아, 따르면 집중벨·타이머 같은 교실 도구가 소리만 나고 멈춰 보였습니다.
    움직임을 줄이고 싶으면 각 도구 안의 "동작 줄이기" 스위치(뽑기·토너먼트·주사위)로만 끕니다. */
@@ -2739,11 +3337,9 @@
   margin-bottom: 0;
 }
 
-/* 스톱워치는 소리 하나만 있어 기록 목록 위에 작게 겹쳐 뜹니다.
-   카드 틀은 다른 타이머와 같게 두고, 여백만 줄여 좁은 폭에서도 이름·듣기가 한 줄에 들어가게 합니다. */
 .timer-settings-panel.stopwatch-settings {
   min-width: 0;
-  padding: 14px;
+  padding: 16px;
 }
 .stopwatch-settings .settings-section-heading > div {
   min-width: 0;
@@ -2757,33 +3353,9 @@
     display: none;
   }
 }
-@media (min-width: 600px) {
-  .timer-layout.with-laps.with-settings {
-    grid-template-columns: minmax(0, 1fr) 260px;
-  }
-  .timer-layout.with-laps.with-settings .timer-settings-panel {
-    position: absolute;
-    right: 24px;
-    top: 16px;
-    bottom: auto;
-    width: 260px;
-    max-height: min(260px, calc(100% - 32px));
-    z-index: 10;
-    box-shadow: 0 5px 18px #243c2c14;
-  }
-}
-@media (min-width: 600px) and (max-width: 899px) {
-  .timer-layout.with-laps.with-settings {
-    grid-template-columns: minmax(0, 1fr) 232px;
-  }
-  .timer-layout.with-laps.with-settings .timer-settings-panel {
-    right: 16px;
-    width: 232px;
-  }
-}
 /* 낮은 화면(예: 1366×768 노트북): 소리마다 "소리 종류" 줄이 생겨 모든 타이머 패널이 길어졌습니다
    (아날로그는 "한 바퀴 기준" 묶음까지 있어 가장 깁니다). 글자 크기는 그대로 두고 여백만 줄여
-   스크롤을 최소로 합니다. 스톱워치 겹침 패널은 자기 여백 규칙(.stopwatch-settings)을 그대로 씁니다. */
+   스크롤을 최소로 합니다. */
 @media (min-width: 900px) and (max-height: 720px) {
   .timer-settings-panel {
     padding: 14px 16px 12px;
@@ -2814,6 +3386,16 @@
   }
   .analog-settings .dial-settings-section .settings-section-heading p {
     display: none;
+  }
+  .display-control-stack {
+    gap: 7px;
+  }
+  .display-scale-card {
+    gap: 6px;
+    padding: 8px 10px;
+  }
+  .display-option-row {
+    padding: 6px 10px;
   }
   .timer-settings-panel .setting-card-list {
     gap: 6px;
