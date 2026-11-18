@@ -1,0 +1,363 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>Tidy Task — Microsoft Store 이미지 원본</title>
+<!--
+  Microsoft Store 등록 이미지 원본 템플릿.
+  왜 HTML로 만드나: 스토어 스크린샷은 실제 앱 화면이어야 하고(생성 이미지 금지), 한글 문구는 이미지 생성기보다
+  웹 폰트로 그려야 또렷하기 때문입니다. 화면 자체는 _source/의 실제 캡처만 쓰고, 문구·배경만 덧입힙니다.
+  다시 만들기: artwork/store/_build/render.cjs 참고.
+-->
+<style>
+  @font-face { font-family: 'Maple'; src: url('../../../public/fonts/MaplestoryB.woff2') format('woff2'); font-weight: 700; }
+  @font-face { font-family: 'Maple'; src: url('../../../public/fonts/MaplestoryL.woff2') format('woff2'); font-weight: 300; }
+
+  :root {
+    --cream: #FAF6EE;
+    --cream-2: #F3EDE1;
+    --ink: #1F4A3A;
+    --ink-soft: #4E6B5F;
+    --mint: #DCEFE6;
+    --mint-2: #EAF6F0;
+    --mint-line: #C5E3D5;
+    --peach: #F7D6AE;
+    --lav: #ECE6F7;   --lav-ink: #5B4B8A;
+    --sky: #E1ECFA;   --sky-ink: #2F5C9A;
+    --leaf: #E2F1E8;  --leaf-ink: #2D6A4F;
+    --butter: #FBF0CF; --butter-ink: #8A6516;
+    --rose: #FBE3E6;  --rose-ink: #A3425A;
+    --shadow: 0 30px 60px -20px rgba(31, 74, 58, .28), 0 12px 24px -12px rgba(31, 74, 58, .18);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: #888; font-family: 'Maple', sans-serif; color: var(--ink); }
+
+  /* ───────── 공통 슬라이드 (1920×1080 CSS px → 렌더 배율로 2560×1440 출력) ───────── */
+  .slide {
+    position: relative; width: 1920px; height: 1080px; overflow: hidden;
+    background: radial-gradient(1200px 800px at 85% 10%, #FFFDF8 0%, var(--cream) 55%, var(--cream-2) 100%);
+    margin-bottom: 40px;
+  }
+  .brand { position: absolute; left: 110px; top: 72px; display: flex; align-items: center; gap: 16px; z-index: 5; }
+  .brand img { width: 58px; height: 58px; }
+  .brand span { font-weight: 700; font-size: 34px; letter-spacing: -.5px; }
+  .pager { position: absolute; right: 110px; top: 84px; font-weight: 300; font-size: 22px; color: var(--ink-soft); letter-spacing: 2px; z-index: 5; }
+
+  .eyebrow {
+    display: inline-block; font-weight: 700; font-size: 28px; padding: 12px 26px; border-radius: 999px;
+    background: #F1E6D3; color: #6B5432; letter-spacing: -.3px;
+  }
+  h1 { font-weight: 700; letter-spacing: -2px; line-height: 1.16; }
+  h1 mark {
+    background: linear-gradient(transparent 58%, var(--peach) 58%, var(--peach) 92%, transparent 92%);
+    color: inherit; padding: 0 6px; margin: 0 -6px;
+  }
+  .sub { font-weight: 300; color: var(--ink-soft); line-height: 1.55; letter-spacing: -.4px; }
+  .sub b { font-weight: 700; color: var(--ink); }
+  .chips { display: flex; flex-wrap: wrap; gap: 14px; list-style: none; }
+  .chips li { font-weight: 700; font-size: 26px; padding: 12px 24px; border-radius: 18px; letter-spacing: -.3px; }
+  .c-lav { background: var(--lav); color: var(--lav-ink); }
+  .c-sky { background: var(--sky); color: var(--sky-ink); }
+  .c-leaf { background: var(--leaf); color: var(--leaf-ink); }
+  .c-butter { background: var(--butter); color: var(--butter-ink); }
+  .c-rose { background: var(--rose); color: var(--rose-ink); }
+
+  /* 레이아웃 A: 왼쪽 문구 + 오른쪽 무대 */
+  .split .copy { position: absolute; left: 110px; top: 210px; width: 720px; display: flex; flex-direction: column; gap: 34px; z-index: 4; }
+  .split h1 { font-size: 92px; }
+  .split .sub { font-size: 33px; }
+  .split .stage {
+    position: absolute; left: 880px; top: 64px; width: 960px; height: 952px; border-radius: 56px;
+    background: linear-gradient(160deg, var(--mint-2), var(--mint)); border: 2px solid var(--mint-line);
+  }
+  /* 오른쪽 무대가 위쪽 끝까지 차므로, 기능 이름표가 화면 카드의 닫기 버튼과 겹치지 않게 숨김 */
+  .split .pager { display: none; }
+
+  /* 레이아웃 B: 위쪽 문구 띠 + 넓은 화면 */
+  .wide .band { position: absolute; left: 110px; right: 110px; top: 160px; display: flex; align-items: flex-end; justify-content: space-between; gap: 60px; z-index: 4; }
+  .wide .band .l { display: flex; flex-direction: column; gap: 22px; }
+  .wide h1 { font-size: 72px; white-space: nowrap; }
+  .wide .sub { font-size: 29px; text-align: right; max-width: 760px; padding-bottom: 8px; }
+  .wide .floor { position: absolute; left: 0; right: 0; top: 352px; bottom: 0; background: linear-gradient(180deg, transparent, rgba(220, 239, 230, .75) 30%, var(--mint)); }
+
+  /* 실제 화면 카드 */
+  .card { position: absolute; border-radius: 22px; overflow: hidden; box-shadow: var(--shadow); background: #fff; border: 1.5px solid rgba(31, 74, 58, .10); }
+  .crop { position: relative; overflow: hidden; }
+  .crop > img { position: absolute; left: 0; top: 0; display: block; image-rendering: auto; }
+
+  .bubble {
+    position: absolute; z-index: 6; font-weight: 700; font-size: 30px; padding: 18px 30px; border-radius: 26px;
+    background: #fff; color: var(--ink); box-shadow: 0 14px 30px -12px rgba(31, 74, 58, .35); letter-spacing: -.4px; white-space: nowrap;
+  }
+  .bubble.dark { background: var(--ink); color: #fff; }
+  .spark { position: absolute; z-index: 6; width: 34px; height: 34px; }
+  .spark svg { width: 100%; height: 100%; }
+
+  .legend { display: flex; flex-direction: column; gap: 14px; list-style: none; }
+  .legend li { display: flex; align-items: center; gap: 18px; font-size: 27px; font-weight: 300; color: var(--ink-soft); }
+  .legend li b { font-weight: 700; color: var(--ink); min-width: 150px; }
+  .legend .dot { width: 26px; height: 26px; border-radius: 50%; box-shadow: inset 0 -3px 0 rgba(0,0,0,.12); }
+
+  .tick { display: grid; grid-template-columns: 1fr 1fr; gap: 16px 22px; list-style: none; }
+  .tick li { display: flex; align-items: center; gap: 14px; font-size: 29px; font-weight: 700; }
+  .tick li i { width: 42px; height: 42px; border-radius: 50%; background: var(--ink); color: #fff; display: grid; place-items: center; font-style: normal; font-size: 24px; }
+
+  .label { position: absolute; z-index: 6; font-weight: 700; font-size: 22px; padding: 8px 18px; border-radius: 999px; background: rgba(255,255,255,.92); color: var(--ink); box-shadow: 0 6px 14px -8px rgba(31,74,58,.4); }
+
+  /* ───────── 포스터 아트 2:3 (720×1080 → ×2 = 1440×2160) ───────── */
+  .poster { position: relative; width: 720px; height: 1080px; overflow: hidden; background: var(--cream); margin-bottom: 40px; }
+  .poster .bg { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: center bottom; }
+  .poster .top { position: absolute; left: 0; right: 0; top: 78px; display: flex; flex-direction: column; align-items: center; gap: 26px; text-align: center; }
+  .poster .wm { display: flex; align-items: center; gap: 12px; font-weight: 700; font-size: 30px; }
+  .poster .wm img { width: 48px; height: 48px; }
+  .poster h1 { font-size: 66px; letter-spacing: -1.5px; }
+  .poster .sub { font-size: 25px; }
+
+  /* ───────── 박스 아트 1:1 (1080×1080 → ×2 = 2160×2160) ───────── */
+  .box { position: relative; width: 1080px; height: 1080px; display: grid; place-items: center; margin-bottom: 40px; background: radial-gradient(circle at 50% 40%, #FFFDF8, var(--cream) 60%, #F1E9DA); }
+  .box.clear { background: transparent; }
+  .box svg { width: 760px; height: 760px; filter: drop-shadow(0 34px 40px rgba(150, 110, 50, .28)); }
+  .box.clear svg { width: 1000px; height: 1000px; filter: none; }
+
+  /* ───────── 홍보용 와이드 16:9 (1920×1080 → ×2) ───────── */
+  .promo { position: relative; width: 1920px; height: 1080px; overflow: hidden; background: var(--cream); margin-bottom: 40px; }
+  .promo .bg { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+  .promo .copy { position: absolute; left: 130px; top: 0; bottom: 0; width: 900px; display: flex; flex-direction: column; justify-content: center; gap: 36px; }
+  .promo h1 { font-size: 116px; }
+  .promo .sub { font-size: 38px; }
+</style>
+</head>
+<body>
+
+<!-- 아이콘을 벡터로 다시 그린 것: 박스 아트를 2160px로 뽑으면 512px 원본 PNG는 흐려지기 때문 -->
+<svg width="0" height="0" style="position:absolute">
+  <defs>
+    <linearGradient id="g-tile" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#EDD39B"/><stop offset="1" stop-color="#CFA872"/>
+    </linearGradient>
+    <linearGradient id="g-tile-u" gradientUnits="userSpaceOnUse" x1="0" y1="64" x2="0" y2="448">
+      <stop offset="0" stop-color="#EDD39B"/><stop offset="1" stop-color="#CFA872"/>
+    </linearGradient>
+    <symbol id="tidy-icon" viewBox="0 0 512 512">
+      <rect x="64" y="64" width="384" height="384" rx="92" fill="url(#g-tile-u)"/>
+      <g stroke="#B88F58" stroke-opacity=".38" stroke-width="2.4">
+        <line x1="120" y1="161" x2="392" y2="161"/><line x1="120" y1="224" x2="392" y2="224"/>
+        <line x1="120" y1="287" x2="392" y2="287"/><line x1="120" y1="350" x2="392" y2="350"/>
+      </g>
+      <path d="M182 258 L226 309 L340 184" fill="none" stroke="#fff" stroke-width="34" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M182 258 L226 309 L340 184" fill="none" stroke="url(#g-tile-u)" stroke-width="20" stroke-linecap="round" stroke-linejoin="round"/>
+    </symbol>
+    <symbol id="spark" viewBox="0 0 24 24"><path d="M12 0 C13 8 16 11 24 12 C16 13 13 16 12 24 C11 16 8 13 0 12 C8 11 11 8 12 0Z" fill="#B9DCCB"/></symbol>
+  </defs>
+</svg>
+
+<!-- 01 HERO ─────────────────────────────────────────── -->
+<section class="slide split" id="s01">
+  <header class="brand"><img src="../../../src-tauri/icons/icon.png" alt=""><span>Tidy Task</span></header>
+  <div class="copy" style="top:220px">
+    <span class="eyebrow" style="align-self:flex-start">선생님을 위한 무료 데스크톱 도구</span>
+    <h1>수업은 즐겁게,<br><mark>준비는 가볍게.</mark></h1>
+    <p class="sub">바탕화면 <b>메모·할 일</b>부터<br><b>타이머·뽑기·투표·자리 배치</b>까지<br>프로그램 하나로 끝.</p>
+    <ul class="chips"><li class="c-lav">메모·할 일</li><li class="c-sky">교실 도구 12가지</li><li class="c-leaf">가입 없이 무료</li></ul>
+  </div>
+  <div class="stage"></div>
+  <div class="card" style="left:930px; top:150px; z-index:2"><div class="crop" data-src="../_source/blog-memo.jpg" data-x="30" data-y="30" data-w="417" data-h="580" style="width:500px"></div></div>
+  <div class="card" style="left:1352px; top:112px; z-index:3"><div class="crop" data-src="../_source/blog-memo.jpg" data-x="472" data-y="123" data-w="420" data-h="360" style="width:446px"></div></div>
+  <div class="card" style="left:1390px; top:560px; z-index:4"><div class="crop" data-src="../_source/blog-time.jpg" data-x="20" data-y="20" data-w="570" data-h="640" style="width:380px"></div></div>
+  <div class="bubble" style="left:1020px; top:84px">할 일은 바탕화면에 착</div>
+  <div class="bubble dark" style="left:1100px; top:900px">수업 도구는 클릭 한 번</div>
+  <div class="spark" style="left:1300px; top:540px"><svg><use href="#spark"/></svg></div>
+  <div class="spark" style="left:1800px; top:500px; width:24px; height:24px"><svg><use href="#spark"/></svg></div>
+</section>
+
+<!-- 02 할 일·마감일 ─────────────────────────────────── -->
+<section class="slide split" id="s02">
+  <header class="brand"><img src="../../../src-tauri/icons/icon.png" alt=""><span>Tidy Task</span></header>
+  <div class="pager">할 일 · 마감일</div>
+  <div class="copy" style="top:200px">
+    <h1>마감일은 색으로,<br><mark>놓치지 않게.</mark></h1>
+    <p class="sub">마감이 가까울수록 날짜 태그 색이 바뀌어요.<br>리마인더가 <b>한 번 더</b> 챙겨 드립니다.</p>
+    <ul class="legend">
+      <li><span class="dot" style="background:#E5484D"></span><b>오늘 마감</b>오늘 꼭 확인할 일</li>
+      <li><span class="dot" style="background:#F2843A"></span><b>1~3일 남음</b>마감이 가까워진 일</li>
+      <li><span class="dot" style="background:#3FBF7F"></span><b>4~7일 남음</b>이번 주 안에 준비할 일</li>
+      <li><span class="dot" style="background:#3E7BD6"></span><b>8일 이상</b>미리 적어 둔 다음 일정</li>
+      <li><span class="dot" style="background:#8452C9"></span><b>마감 지남</b>놓친 일 없는지 다시 확인</li>
+    </ul>
+  </div>
+  <div class="stage"></div>
+  <div class="card" style="left:1030px; top:120px; z-index:2"><div class="crop" data-src="../_source/blog-dates.jpg" data-x="44" data-y="186" data-w="537" data-h="608" style="width:700px"></div></div>
+  <div class="bubble" style="left:940px; top:880px">끝낸 일은 체크하면 아래로 쏙</div>
+  <div class="bubble dark" style="left:1560px; top:200px">알림 다시 받기</div>
+</section>
+
+<!-- 03 Tiny Note + 보관함 ────────────────────────────── -->
+<section class="slide split" id="s03">
+  <header class="brand"><img src="../../../src-tauri/icons/icon.png" alt=""><span>Tidy Task</span></header>
+  <div class="pager">TINY NOTE · 보관함</div>
+  <div class="copy" style="top:230px">
+    <h1>떠오른 생각은<br><mark>바탕화면에 착!</mark></h1>
+    <p class="sub">포스트잇처럼 붙이고, 접고, <b>항상 위</b>에.<br>다시 쓸 문구는 <b>보관함</b>에 모아 두고<br>필요할 때 꺼내 쓰세요.</p>
+    <ul class="chips"><li class="c-leaf">최대 10장</li><li class="c-butter">색·서식 자유</li><li class="c-sky">검색되는 보관함</li></ul>
+  </div>
+  <div class="stage"></div>
+  <div class="card" style="left:930px; top:470px; z-index:2"><div class="crop" data-src="../_source/blog-archive.jpg" data-x="25" data-y="25" data-w="918" data-h="498" style="width:860px"></div></div>
+  <div class="card" style="left:950px; top:130px; z-index:3; transform:rotate(-2.5deg)"><div class="crop" data-src="../_source/blog-tiny.jpg" data-x="58" data-y="240" data-w="456" data-h="294" style="width:430px"></div></div>
+  <div class="card" style="left:1380px; top:170px; z-index:4; transform:rotate(2deg)"><div class="crop" data-src="../_source/blog-tiny.jpg" data-x="566" data-y="240" data-w="456" data-h="294" style="width:410px"></div></div>
+  <div class="bubble dark" style="left:1450px; top:430px">보관함에 쏙</div>
+</section>
+
+<!-- 04 툴킷 ─────────────────────────────────────────── -->
+<section class="slide split" id="s04">
+  <header class="brand"><img src="../../../src-tauri/icons/icon.png" alt=""><span>Tidy Task</span></header>
+  <div class="pager">TIDY 툴킷</div>
+  <div class="copy" style="top:200px">
+    <h1>수업 도구 12가지,<br><mark>툴바에서 바로.</mark></h1>
+    <p class="sub">타이머 4종·시계·주사위·집중벨·뽑기·투표…<br>필요한 도구만 골라 <b>별도 창</b>으로 꺼내고<br>전자칠판에 크게 띄우세요.</p>
+    <div class="card" style="position:relative; width:720px"><div class="crop" data-src="../_source/blog-toolbar.jpg" data-x="0" data-y="0" data-w="810" data-h="76" style="width:720px"></div></div>
+    <ul class="chips"><li class="c-leaf">전체 화면</li><li class="c-sky">항상 위</li><li class="c-butter">소리 골라 쓰기</li></ul>
+  </div>
+  <div class="stage"></div>
+  <div class="card" style="left:924px; top:104px; z-index:2"><div class="crop" data-src="../_source/blog-time.jpg" data-x="20" data-y="20" data-w="570" data-h="640" style="width:430px"></div></div>
+  <div class="card" style="left:1376px; top:104px; z-index:2"><div class="crop" data-src="../_source/blog-time.jpg" data-x="610" data-y="20" data-w="570" data-h="640" style="width:430px"></div></div>
+  <div class="card" style="left:924px; top:632px; z-index:2"><div class="crop" data-src="../_source/blog-time.jpg" data-x="20" data-y="680" data-w="570" data-h="360" style="width:430px"></div></div>
+  <div class="card" style="left:1376px; top:632px; z-index:2"><div class="crop" data-src="../_source/blog-time.jpg" data-x="610" data-y="680" data-w="570" data-h="360" style="width:430px"></div></div>
+  <div class="label" style="left:944px; top:604px">전광판 타이머</div>
+  <div class="label" style="left:1396px; top:604px">아날로그 타이머</div>
+  <div class="label" style="left:944px; top:920px">시계</div>
+  <div class="label" style="left:1396px; top:920px">주사위</div>
+</section>
+
+<!-- 05 뽑기 ─────────────────────────────────────────── -->
+<section class="slide wide" id="s05">
+  <header class="brand"><img src="../../../src-tauri/icons/icon.png" alt=""><span>Tidy Task</span></header>
+  <div class="pager">간단 뽑기</div>
+  <div class="band">
+    <div class="l"><h1>이번엔 누구 차례? <mark>두근두근 인형 뽑기</mark></h1></div>
+    <p class="sub">학급 명단에서 바로 뽑아요. 클래식·인형 뽑기·풍선 다트,<br><b>‘한 번씩 골고루’</b>로 뽑힌 친구는 자동 제외!</p>
+  </div>
+  <div class="floor"></div>
+  <div class="card" style="left:160px; top:330px; z-index:2"><div class="crop" data-src="../_source/blog-picker.jpg" data-x="0" data-y="0" data-w="1920" data-h="855" style="width:1600px"></div></div>
+  <div class="bubble dark" style="left:1500px; top:300px">Space 키로도 뽑기</div>
+</section>
+
+<!-- 06 학급 투표 ─────────────────────────────────────── -->
+<section class="slide wide" id="s06">
+  <header class="brand"><img src="../../../src-tauri/icons/icon.png" alt=""><span>Tidy Task</span></header>
+  <div class="pager">학급 투표</div>
+  <div class="band">
+    <div class="l"><h1>회장 선거도 공정하게, <mark>비밀 투표</mark></h1></div>
+    <p class="sub">한 명씩 <b>숫자키</b>로 투표하면 다음 친구 화면으로 자동 전환.<br>개표 방송·실시간 레이스로 두근두근 개표까지!</p>
+  </div>
+  <div class="floor"></div>
+  <div class="card" style="left:160px; top:330px; z-index:2"><div class="crop" data-src="../_source/blog-vote.jpg" data-x="0" data-y="0" data-w="1920" data-h="855" style="width:1600px"></div></div>
+  <div class="bubble dark" style="left:130px; top:960px">개표 방법 6가지</div>
+</section>
+
+<!-- 07 자리 배치 ─────────────────────────────────────── -->
+<section class="slide wide" id="s07">
+  <header class="brand"><img src="../../../src-tauri/icons/icon.png" alt=""><span>Tidy Task</span></header>
+  <div class="pager">자리 배치</div>
+  <div class="band">
+    <div class="l"><h1>자리 바꾸기, <mark>조건까지 한 번에</mark></h1></div>
+    <p class="sub">떨어져 앉기·앞자리 지정·지난 짝 반복 줄이기.<br>3·2·1 공개 연출과 <b>PNG 저장</b>까지 한 번에!</p>
+  </div>
+  <div class="floor"></div>
+  <div class="card" style="left:160px; top:330px; z-index:2"><div class="crop" data-src="../_source/blog-seating.jpg" data-x="0" data-y="0" data-w="1920" data-h="855" style="width:1600px"></div></div>
+  <div class="bubble" style="left:1490px; top:960px">학급 명단과 자동 연결</div>
+</section>
+
+<!-- 08 점수판 + 온도계 ───────────────────────────────── -->
+<section class="slide wide" id="s08">
+  <header class="brand"><img src="../../../src-tauri/icons/icon.png" alt=""><span>Tidy Task</span></header>
+  <div class="pager">점수판 · 학급 온도계</div>
+  <div class="band">
+    <div class="l"><h1>함께한 노력을 <mark>눈에 보이게</mark></h1></div>
+    <p class="sub">모둠 점수판으로 칭찬은 크게,<br><b>학급 온도계</b>로 우리 반 목표는 함께 채워요.</p>
+  </div>
+  <div class="floor"></div>
+  <div class="card" style="left:120px; top:330px; z-index:2"><div class="crop" data-src="../_source/blog-scoreboard.jpg" data-x="0" data-y="0" data-w="1920" data-h="855" style="width:1180px"></div></div>
+  <div class="card" style="left:640px; top:520px; z-index:3"><div class="crop" data-src="../_source/blog-thermometer.jpg" data-x="0" data-y="0" data-w="1920" data-h="855" style="width:1160px"></div></div>
+  <div class="bubble dark" style="left:1490px; top:440px">목표 달성 도장까지</div>
+</section>
+
+<!-- 09 알림장 + 급식 ─────────────────────────────────── -->
+<section class="slide wide" id="s09">
+  <header class="brand"><img src="../../../src-tauri/icons/icon.png" alt=""><span>Tidy Task</span></header>
+  <div class="pager">알림장 · 급식</div>
+  <div class="band">
+    <div class="l"><h1>알림장은 크게, <mark>급식은 한눈에</mark></h1></div>
+    <p class="sub"><b>화이트 보드</b> 전체 화면으로 내일 준비물 안내.<br>우리 학교 급식과 알레르기 표시도 바로 확인!</p>
+  </div>
+  <div class="floor"></div>
+  <div class="card" style="left:120px; top:330px; z-index:2"><div class="crop" data-src="../_source/blog-noticeboard.jpg" data-x="0" data-y="0" data-w="1920" data-h="855" style="width:1500px"></div></div>
+  <div class="card" style="left:1430px; top:300px; z-index:3"><div class="crop" data-src="../_source/blog-meal-safe.jpg" data-x="0" data-y="0" data-w="344" data-h="574" style="width:400px"></div></div>
+  <div class="bubble dark" style="left:1290px; top:930px">나이스 급식 자동 조회</div>
+</section>
+
+<!-- 10 테마·마무리 ──────────────────────────────────── -->
+<section class="slide split" id="s10">
+  <header class="brand"><img src="../../../src-tauri/icons/icon.png" alt=""><span>Tidy Task</span></header>
+  <div class="pager">테마 · 글꼴</div>
+  <div class="copy" style="top:200px">
+    <h1>매일 보는 메모,<br><mark>내 취향대로.</mark></h1>
+    <p class="sub"><b>15가지 테마</b>와 다크 모드, 손글씨 글꼴까지.<br>책상 위 분위기를 마음대로 바꿔 보세요.</p>
+    <ul class="tick">
+      <li><i>✓</i>완전 무료</li><li><i>✓</i>가입 없이 바로</li>
+      <li><i>✓</i>내 PC에 저장</li><li><i>✓</i>자동 업데이트</li>
+    </ul>
+  </div>
+  <div class="stage"></div>
+  <div class="card" style="left:924px; top:100px; z-index:2"><div class="crop" data-src="../_source/blog-themes.jpg" data-x="58" data-y="239" data-w="456" data-h="404" style="width:430px"></div></div>
+  <div class="card" style="left:1376px; top:100px; z-index:2"><div class="crop" data-src="../_source/blog-themes.jpg" data-x="567" data-y="239" data-w="456" data-h="404" style="width:430px"></div></div>
+  <div class="card" style="left:924px; top:540px; z-index:2"><div class="crop" data-src="../_source/blog-themes.jpg" data-x="567" data-y="734" data-w="456" data-h="404" style="width:430px"></div></div>
+  <div class="card" style="left:1376px; top:540px; z-index:2"><div class="crop" data-src="../_source/blog-headers.jpg" data-x="58" data-y="781" data-w="456" data-h="450" style="width:430px"></div></div>
+  <div class="label" style="left:944px; top:72px">씨글라스 틸</div>
+  <div class="label" style="left:1396px; top:72px">애프리콧 베일</div>
+  <div class="label" style="left:944px; top:512px">모브 헤이즈</div>
+  <div class="label" style="left:1396px; top:512px">다크 모드</div>
+</section>
+
+<!-- 포스터 아트 2:3 ─────────────────────────────────── -->
+<section class="poster" id="poster">
+  <img class="bg" src="../_source/gen-poster-art.jpg" alt="">
+  <div class="top">
+    <div class="wm"><img src="../../../src-tauri/icons/icon.png" alt="">Tidy Task</div>
+    <h1>수업은 즐겁게,<br><mark>준비는 가볍게.</mark></h1>
+    <p class="sub">선생님을 위한 메모 + 교실 도구 12가지</p>
+  </div>
+</section>
+
+<!-- 박스 아트 1:1 (배경 있음 / 투명) ─────────────────── -->
+<section class="box" id="box"><svg viewBox="0 0 512 512"><use href="#tidy-icon"/></svg></section>
+<section class="box clear" id="box-clear"><svg viewBox="0 0 512 512"><use href="#tidy-icon"/></svg></section>
+
+<!-- 홍보용 16:9 (블로그·SNS·스토어 홍보) ────────────── -->
+<section class="promo" id="promo">
+  <img class="bg" src="../_source/gen-hero-art.jpg" alt="">
+  <div class="copy">
+    <span class="eyebrow" style="align-self:flex-start">Microsoft Store에서 무료로 받기</span>
+    <h1>수업은 즐겁게,<br><mark>준비는 가볍게.</mark></h1>
+    <p class="sub">메모·할 일 + 교실 도구 12가지<br>선생님의 하루를 한 프로그램에.</p>
+  </div>
+</section>
+
+<script>
+  // data-x/y/w/h 영역만 보여 주도록 원본 이미지를 확대·이동합니다(원본 파일은 그대로 둠).
+  const crops = [...document.querySelectorAll('.crop')];
+  Promise.all(crops.map(el => new Promise(res => {
+    const img = new Image();
+    img.onload = () => {
+      const x = +el.dataset.x, y = +el.dataset.y, w = +el.dataset.w, h = +el.dataset.h;
+      const W = parseFloat(el.style.width); const s = W / w;
+      el.style.height = (h * s) + 'px';
+      img.style.width = (img.naturalWidth * s) + 'px';
+      img.style.left = (-x * s) + 'px'; img.style.top = (-y * s) + 'px';
+      el.appendChild(img); res();
+    };
+    img.onerror = () => { el.style.outline = '6px solid red'; res(); };
+    img.src = el.dataset.src;
+  }))).then(() => document.fonts.ready).then(() => { window.__ready = true; });
+</script>
+</body>
+</html>
