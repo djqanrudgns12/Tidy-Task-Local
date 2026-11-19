@@ -252,17 +252,23 @@
   border-block: 1px solid var(--tk-line);
   z-index: 3;
 }
-.nb-format select {
-  max-width: 136px;
-  width: 130px;
+.nb-format select,
+.nb-format .nb-font-trigger {
+  max-width: 142px;
+  width: 136px;
   height: 32px;
-  border: 0;
+  min-height: 32px;
+  border: 1px solid transparent;
   background: var(--tk-bg);
   border-radius: 7px;
-  padding: 0 6px;
+  padding: 0 7px 0 8px;
   font: inherit;
   font-size: 12px;
   color: var(--tk-ink);
+}
+.nb-format .nb-font-trigger:hover,
+.nb-format .nb-font-trigger.is-open {
+  border-color: var(--tk-accent);
 }
 .nb-format button {
   min-height: 31px;
@@ -746,10 +752,12 @@
   border-top: 0;
   border-bottom: 1px solid var(--tk-line);
 }
-.board .nb-format select {
-  width: 148px;
-  max-width: 148px;
+.board .nb-format select,
+.board .nb-format .nb-font-trigger {
+  width: 152px;
+  max-width: 152px;
   height: 36px;
+  min-height: 36px;
   font-size: 13px;
 }
 .board .nb-format button {
@@ -928,8 +936,9 @@
   .nb-format {
     padding: 7px 10px;
   }
-  .nb-format select {
-    width: 110px;
+  .nb-format select,
+  .nb-format .nb-font-trigger {
+    width: 112px;
   }
   .nb-zoom {
     margin-left: 0;

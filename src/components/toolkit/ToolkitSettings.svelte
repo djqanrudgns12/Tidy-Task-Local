@@ -19,6 +19,7 @@
   import ToolIcon from './ToolIcon.svelte';
   import ToolkitSwitch from './ToolkitSwitch.svelte';
   import ToolkitSelect from './ToolkitSelect.svelte';
+  import FontPickerTrigger from '../fontPicker/FontPickerTrigger.svelte';
   import { TOOLKIT_THEMES } from '../../lib/toolkit/themes.js';
   import { uiFontChoices, uiFontStack, watchCustomFonts } from '../../lib/toolkit/appearance.js';
   import type { CustomFont } from '../../lib/toolkit/appearance.js';
@@ -31,15 +32,6 @@
   const fontChoices = $derived(uiFontChoices(customFonts));
   // 등록 글꼴이 Tidy Task에서 지워졌으면 목록에 없으므로, 지금 값을 따로 보여 주어 선택 상자가 비지 않게 합니다.
   const fontMissing = $derived(customFontsLoaded && !fontChoices.some((font) => font.name === config.uiFontFamily));
-  const fontOptions = $derived([
-    ...(fontMissing ? [{ value: config.uiFontFamily, label: config.uiFontFamily, note: '찾을 수 없음' }] : []),
-    ...fontChoices.map((font) => ({
-      value: font.name,
-      label: font.name,
-      font: uiFontStack({ uiFontFamily: font.name }),
-      note: font.custom ? '내 글꼴' : undefined,
-    })),
-  ]);
   let externalExpanded = $state(false);
   let draggedId = $state('');
   let toolsSaving = $state(false);
@@ -210,9 +202,19 @@
       <div class="settings-heading"><div><h2>UI 설정</h2><p>툴킷 화면에 쓰는 글꼴을 골라요</p></div></div>
       <div class="theme-picker-row ui-font-row">
         <span class="ui-font-icon" aria-hidden="true"><Type size={16} /></span>
-        <ToolkitSelect label="UI 글꼴" value={config.uiFontFamily}
-          options={fontOptions}
-          onchange={(uiFontFamily) => change({ uiFontFamily })} />
+        <FontPickerTrigger
+          pickerKey="toolkit-ui-font"
+          value={config.uiFontFamily}
+          variant="field"
+          align="end"
+          themeSource="toolkit"
+          themeId={config.theme}
+          isDarkMode={config.darkMode}
+          {customFonts}
+          ariaLabel="UI 글꼴"
+          triggerClass="tk-select"
+          onselect={(uiFontFamily) => change({ uiFontFamily })}
+        />
       </div>
       <p class="ui-font-preview" aria-hidden="true" style:font-family={uiFontStack(config)}>가나다라 Aa 0123</p>
       {#if fontMissing}

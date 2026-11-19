@@ -334,6 +334,15 @@ pub fn run() {
                 let windows = app.webview_windows();
                 let destroyed_label = window.label();
 
+                // 글꼴 선택 팝업을 열어 둔 호스트 창이 강제 종료되어도 팝업이 허공에 남지 않도록 즉시 닫힘을 알립니다.
+                if destroyed_label != "font-picker" && app.get_webview_window("font-picker").is_some() {
+                    let _ = app.emit_to(
+                        "font-picker",
+                        "font-picker:requester-destroyed",
+                        serde_json::json!({ "label": destroyed_label }),
+                    );
+                }
+
                 // 메모 창이 닫히면 남은 창들이 매니저를 다시 뽑도록 알립니다.
                 // 왜 Rust가 알리는가: 창이 스스로 알리는 방식은 닫기 처리기가 실행되지 못한 경우
                 //   (강제 종료·오류로 창이 사라진 경우)에 아무도 권한을 이어받지 못했습니다.

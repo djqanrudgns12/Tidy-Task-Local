@@ -1,25 +1,49 @@
 @import "tailwindcss";
 
-/* ── 1. 38종 외부 폰트 내장 (woff2 최적화 적용) ── */
+/* ── 1. 62종 내장 글꼴 (woff2 최적화 적용 · 기존 38종 무삭제 보존 + 신규 24종 추가) ── */
 
-/* 제목 및 강조용 */
+/* 포인트 · 제목용 */
+@font-face { font-family: '메이플스토리 L'; src: url('./assets/fonts/MaplestoryL.woff2') format('woff2'); font-display: swap; }
+@font-face { font-family: '메이플스토리 B'; src: url('./assets/fonts/MaplestoryB.woff2') format('woff2'); font-display: swap; }
+@font-face { font-family: '쿠키런 R'; src: url('./assets/fonts/CookieRun_Regular.woff2') format('woff2'); font-display: swap; }
+@font-face { font-family: '쿠키런 B'; src: url('./assets/fonts/CookieRun_Bold.woff2') format('woff2'); font-display: swap; }
+@font-face { font-family: '쿠키런 Bk'; src: url('./assets/fonts/CookieRun_Black.woff2') format('woff2'); font-display: swap; }
 @font-face { font-family: '여기어때 잘난체'; src: url('./assets/fonts/Jalnan.woff2') format('woff2'); font-display: swap; }
-@font-face { font-family: 'KCC 간판체'; src: url('./assets/fonts/KCC-Ganpan.woff2') format('woff2'); font-display: swap; }
+@font-face { font-family: '여기어때 잘난체 2'; src: url('./assets/fonts/Jalnan2.woff2') format('woff2'); font-display: swap; }
+@font-face { font-family: '여기어때 잘난체 고딕'; src: url('./assets/fonts/JalnanGothic.woff2') format('woff2'); font-display: swap; }
 @font-face { font-family: '배달의민족 도현'; src: url('./assets/fonts/BMDOHYEON.woff2') format('woff2'); font-display: swap; }
 @font-face { font-family: '배달의민족 주아'; src: url('./assets/fonts/BMJUA.woff2') format('woff2'); font-display: swap; }
 @font-face { font-family: '배달의민족 을지로'; src: url('./assets/fonts/BMEULJIROTTF.woff2') format('woff2'); font-display: swap; }
-@font-face { font-family: '메이플스토리 L'; src: url('./assets/fonts/MaplestoryL.woff2') format('woff2'); font-display: swap; }
-@font-face { font-family: '메이플스토리 B'; src: url('./assets/fonts/MaplestoryB.woff2') format('woff2'); font-display: swap; }
-@font-face { font-family: '학교안심 돌담 M'; src: url('./assets/fonts/HakgyoansimDoldamM.woff2') format('woff2'); font-display: swap; }
-@font-face { font-family: '학교안심 돌담 B'; src: url('./assets/fonts/HakgyoansimDoldamB.woff2') format('woff2'); font-display: swap; }
+@font-face { font-family: 'KCC 간판체'; src: url('./assets/fonts/KCC-Ganpan.woff2') format('woff2'); font-display: swap; }
 
-/* 고가독성 본문용 */
-@font-face { font-family: '리디바탕'; src: url('./assets/fonts/RIDIBatang.woff2') format('woff2'); font-display: swap; }
+/* 깔끔한 고딕 (본문 · 프레젠테이션) */
+@font-face { font-family: '프리젠테이션 R'; src: url('./assets/fonts/Freesentation-4Regular.woff2') format('woff2'); font-display: swap; }
+@font-face { font-family: '프리젠테이션 M'; src: url('./assets/fonts/Freesentation-5Medium.woff2') format('woff2'); font-display: swap; }
+@font-face { font-family: '프리젠테이션 SB'; src: url('./assets/fonts/Freesentation-6SemiBold.woff2') format('woff2'); font-display: swap; }
+@font-face { font-family: '프리젠테이션 B'; src: url('./assets/fonts/Freesentation-7Bold.woff2') format('woff2'); font-display: swap; }
+@font-face { font-family: '페이퍼로지 M'; src: url('./assets/fonts/Paperlogy-5Medium.woff2') format('woff2'); font-display: swap; }
+@font-face { font-family: '페이퍼로지 SB'; src: url('./assets/fonts/Paperlogy-6SemiBold.woff2') format('woff2'); font-display: swap; }
+@font-face { font-family: '페이퍼로지 B'; src: url('./assets/fonts/Paperlogy-7Bold.woff2') format('woff2'); font-display: swap; }
+@font-face { font-family: '페이퍼로지 EB'; src: url('./assets/fonts/Paperlogy-8ExtraBold.woff2') format('woff2'); font-display: swap; }
+@font-face { font-family: '페이퍼로지 Bk'; src: url('./assets/fonts/Paperlogy-9Black.woff2') format('woff2'); font-display: swap; }
+@font-face { font-family: 'G마켓 산스 L'; src: url('./assets/fonts/GmarketSansTTFLight.woff2') format('woff2'); font-display: swap; }
+@font-face { font-family: 'G마켓 산스 M'; src: url('./assets/fonts/GmarketSansTTFMedium.woff2') format('woff2'); font-display: swap; }
+@font-face { font-family: 'G마켓 산스 B'; src: url('./assets/fonts/GmarketSansTTFBold.woff2') format('woff2'); font-display: swap; }
+@font-face { font-family: '부크크 고딕 L'; src: url('./assets/fonts/BookkGothic_Light.woff2') format('woff2'); font-display: swap; }
+@font-face { font-family: '부크크 고딕 B'; src: url('./assets/fonts/BookkGothic_Bold.woff2') format('woff2'); font-display: swap; }
 @font-face { font-family: '엘리스 디지털배움'; src: url('./assets/fonts/EliceDigitalBaeumR.woff2') format('woff2'); font-display: swap; }
 @font-face { font-family: '엘리스 DX 널리 L'; src: url('./assets/fonts/EliceDXNeolliL.woff2') format('woff2'); font-display: swap; }
 @font-face { font-family: '엘리스 DX 널리 M'; src: url('./assets/fonts/EliceDXNeolliM.woff2') format('woff2'); font-display: swap; }
 
-/* 감성적인 손글씨 */
+/* 단정한 명조 */
+@font-face { font-family: '리디바탕'; src: url('./assets/fonts/RIDIBatang.woff2') format('woff2'); font-display: swap; }
+@font-face { font-family: '부크크 명조 L'; src: url('./assets/fonts/BookkMyungjo_Light.woff2') format('woff2'); font-display: swap; }
+@font-face { font-family: '부크크 명조 B'; src: url('./assets/fonts/BookkMyungjo_Bold.woff2') format('woff2'); font-display: swap; }
+@font-face { font-family: '을유1945 R'; src: url('./assets/fonts/Eulyoo1945-Regular.woff2') format('woff2'); font-display: swap; }
+@font-face { font-family: '을유1945 SB'; src: url('./assets/fonts/Eulyoo1945-SemiBold.woff2') format('woff2'); font-display: swap; }
+@font-face { font-family: 'Cafe24 단정해'; src: url('./assets/fonts/Cafe24Danjunghae-v2.0.woff2') format('woff2'); font-display: swap; }
+
+/* 감성 · 손글씨 */
 @font-face { font-family: '교보 손글씨 2019'; src: url('./assets/fonts/KyoboHandwriting2019.woff2') format('woff2'); font-display: swap; }
 @font-face { font-family: '교보 손글씨 2023'; src: url('./assets/fonts/KyoboHandwriting2023.woff2') format('woff2'); font-display: swap; }
 @font-face { font-family: '교보 손글씨 2024'; src: url('./assets/fonts/KyoboHandwriting2024.woff2') format('woff2'); font-display: swap; }
@@ -32,21 +56,23 @@
 @font-face { font-family: 'J개구쟁이체 L'; src: url('./assets/fonts/JNaughtyL.woff2') format('woff2'); font-display: swap; }
 @font-face { font-family: 'J개구쟁이체 M'; src: url('./assets/fonts/JNaughtyM.woff2') format('woff2'); font-display: swap; }
 
-/* 다양한 꾸밈용 */
-@font-face { font-family: '학교안심 봄방학'; src: url('./assets/fonts/HakgyoansimBombanghakR.woff2') format('woff2'); font-display: swap; }
-@font-face { font-family: '학교안심 분필'; src: url('./assets/fonts/HakgyoansimBunpilR.woff2') format('woff2'); font-display: swap; }
-@font-face { font-family: '학교안심 붓펜 L'; src: url('./assets/fonts/HakgyoansimButpenL.woff2') format('woff2'); font-display: swap; }
-@font-face { font-family: '학교안심 붓펜 M'; src: url('./assets/fonts/HakgyoansimButpenM.woff2') format('woff2'); font-display: swap; }
-@font-face { font-family: '학교안심 은하수'; src: url('./assets/fonts/HakgyoansimEunhasuR.woff2') format('woff2'); font-display: swap; }
+/* 학교안심 꾸밈용 */
+@font-face { font-family: '학교안심 돌담 M'; src: url('./assets/fonts/HakgyoansimDoldamM.woff2') format('woff2'); font-display: swap; }
+@font-face { font-family: '학교안심 돌담 B'; src: url('./assets/fonts/HakgyoansimDoldamB.woff2') format('woff2'); font-display: swap; }
 @font-face { font-family: '학교안심 가을소풍 L'; src: url('./assets/fonts/HakgyoansimGaeulsopungL.woff2') format('woff2'); font-display: swap; }
 @font-face { font-family: '학교안심 가을소풍 B'; src: url('./assets/fonts/HakgyoansimGaeulsopungB.woff2') format('woff2'); font-display: swap; }
+@font-face { font-family: '학교안심 나들이 L'; src: url('./assets/fonts/SchoolSafeNadeuriL.woff2') format('woff2'); font-display: swap; }
+@font-face { font-family: '학교안심 나들이 B'; src: url('./assets/fonts/SchoolSafeNadeuriB.woff2') format('woff2'); font-display: swap; }
+@font-face { font-family: '학교안심 붓펜 L'; src: url('./assets/fonts/HakgyoansimButpenL.woff2') format('woff2'); font-display: swap; }
+@font-face { font-family: '학교안심 붓펜 M'; src: url('./assets/fonts/HakgyoansimButpenM.woff2') format('woff2'); font-display: swap; }
+@font-face { font-family: '학교안심 봄방학'; src: url('./assets/fonts/HakgyoansimBombanghakR.woff2') format('woff2'); font-display: swap; }
+@font-face { font-family: '학교안심 분필'; src: url('./assets/fonts/HakgyoansimBunpilR.woff2') format('woff2'); font-display: swap; }
+@font-face { font-family: '학교안심 은하수'; src: url('./assets/fonts/HakgyoansimEunhasuR.woff2') format('woff2'); font-display: swap; }
 @font-face { font-family: '학교안심 꾸러기'; src: url('./assets/fonts/HakgyoansimGgooreogiR.woff2') format('woff2'); font-display: swap; }
 @font-face { font-family: '학교안심 꼬꼬마'; src: url('./assets/fonts/HakgyoansimKkokkomaR.woff2') format('woff2'); font-display: swap; }
 @font-face { font-family: '학교안심 맑은날 M'; src: url('./assets/fonts/HakgyoansimMalgeunnalM.woff2') format('woff2'); font-display: swap; }
 @font-face { font-family: '학교안심 몽글'; src: url('./assets/fonts/HakgyoansimMonggeulR.woff2') format('woff2'); font-display: swap; }
 @font-face { font-family: '학교안심 투호'; src: url('./assets/fonts/HakgyoansimTuhoR.woff2') format('woff2'); font-display: swap; }
-@font-face { font-family: '학교안심 나들이 L'; src: url('./assets/fonts/SchoolSafeNadeuriL.woff2') format('woff2'); font-display: swap; }
-@font-face { font-family: '학교안심 나들이 B'; src: url('./assets/fonts/SchoolSafeNadeuriB.woff2') format('woff2'); font-display: swap; }
 
 /* ── 2. Global Design Tokens ── */
 :root {

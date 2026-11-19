@@ -33,6 +33,7 @@
   import { openUrl } from "@tauri-apps/plugin-opener";
   import { BUILTIN_FONTS } from "../../lib/builtinFonts.js";
   import { registerFontFace } from "../../lib/fonts.js";
+  import FontPickerTrigger from "../fontPicker/FontPickerTrigger.svelte";
   import { dragRegion } from "../../lib/dragRegion.js";
   import { ensureWindowOnScreen } from "../../lib/windows/windowRegistry.js";
   import { repository, native } from "../../lib/noticeboard/repository.js";
@@ -61,6 +62,11 @@
   } from "../../lib/noticeboard/selection.js";
   import "./noticeboard.css";
 
+  let { themeId = "sage", isDarkMode = false } = $props<{
+    themeId?: string;
+    isDarkMode?: boolean;
+  }>();
+
   let recovery = $state<{ available: boolean; modified: number | null } | null>(
     null,
   );
@@ -87,7 +93,8 @@
   let rangeAnchor = "";
   let entries = $state<any[]>([]),
     trash = $state<any[]>([]),
-    fonts = $state<any[]>([...BUILTIN_FONTS]);
+    fonts = $state<any[]>([...BUILTIN_FONTS]),
+    customFonts = $state<{ name: string; path: string }[]>([]);
   let normalZoom = $state(100),
     boardZoom = $state(200),
     moreBelow = $state(false),
@@ -588,6 +595,9 @@
         store.get<any>("main"),
       ]);
       const custom = Array.isArray(storedFonts) ? storedFonts : [];
+      customFonts = custom
+        .filter((f) => f?.name && f?.path)
+        .map((f) => ({ name: f.name, path: f.path }));
       fonts = [
         ...BUILTIN_FONTS,
         ...custom.map((font) => ({
@@ -872,14 +882,22 @@
         aria-label="본문 서식"
         onpointerdown={() => editor?.holdForTools()}
       >
-        <select
-          aria-label="글꼴"
-          disabled={!ready || busy}
+        <FontPickerTrigger
+          pickerKey="noticeboard-font"
           value={ui.doc?.attrs?.fontId || DEFAULT_FONT}
-          onchange={(e) => format("font", e.currentTarget.value)}
-          >{#each fonts as f}<option value={f.name}>{f.name}</option
-            >{/each}</select
-        >
+          variant="toolbar"
+          align="start"
+          preserveEditorSelection={true}
+          themeSource="toolkit"
+          {themeId}
+          {isDarkMode}
+          {customFonts}
+          disabled={!ready || busy}
+          ariaLabel="글꼴"
+          triggerClass="nb-font-trigger"
+          onbeforeopen={() => editor?.holdForTools()}
+          onselect={(name) => format("font", name)}
+        />
         <div class="nb-size">
           <button
             aria-label="글자 크기 줄이기"

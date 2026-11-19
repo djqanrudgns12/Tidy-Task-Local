@@ -117,6 +117,7 @@ fn window_kind(label: &str) -> &'static str {
             "settings" => "settings",
             "archive" => "archive",
             "reminder" => "reminder",
+            "font-picker" => "other",
             _ => "other",
         }
     }

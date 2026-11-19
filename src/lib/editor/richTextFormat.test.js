@@ -61,6 +61,23 @@ test('matchFontName은 computed font-family에서 앱 폰트 이름을 정확 �
   assert.equal(matchFontName('"New Gulim", sans-serif', fonts), '새굴림');
   assert.equal(matchFontName('"메이플스토리 B", sans-serif', fonts), '메이플스토리 B');
   assert.equal(matchFontName('"Pretendard", sans-serif', fonts), 'Pretendard');
+
+  // 72종 신규·기존 접두어 겹침 서체(잘난체 3종 · 교보 4종 · 페이퍼로지 5종) 정확 매칭 검증
+  const extended = [
+    ...fonts,
+    { name: '여기어때 잘난체', family: '"여기어때 잘난체", sans-serif' },
+    { name: '여기어때 잘난체 2', family: '"여기어때 잘난체 2", sans-serif' },
+    { name: '여기어때 잘난체 고딕', family: '"여기어때 잘난체 고딕", sans-serif' },
+    { name: '교보 손글씨 2019', family: '"교보 손글씨 2019", sans-serif' },
+    { name: '교보 손글씨 2024', family: '"교보 손글씨 2024", sans-serif' },
+    { name: '페이퍼로지 M', family: '"페이퍼로지 M", sans-serif' },
+    { name: '페이퍼로지 EB', family: '"페이퍼로지 EB", sans-serif' },
+  ];
+  assert.equal(matchFontName('"여기어때 잘난체", sans-serif', extended), '여기어때 잘난체');
+  assert.equal(matchFontName('"여기어때 잘난체 2", sans-serif', extended), '여기어때 잘난체 2');
+  assert.equal(matchFontName('"여기어때 잘난체 고딕", sans-serif', extended), '여기어때 잘난체 고딕');
+  assert.equal(matchFontName('"교보 손글씨 2024", sans-serif', extended), '교보 손글씨 2024');
+  assert.equal(matchFontName('"페이퍼로지 EB", sans-serif', extended), '페이퍼로지 EB');
 });
 
 test('computeMenuBounds는 60색 팔레트 확장 시 모니터 하단·우측 경계 안으로 보정한다', () => {

@@ -86,6 +86,8 @@
     bind:this={formatBarRef}
     format={config.selectionFormat}
     fonts={config.fonts || BUILTIN_FONTS}
+    themeColor={config.themeColor || 'amber'}
+    isDarkMode={Boolean(config.isDarkMode)}
     maxFontPt={config.maxFontPt ?? STABLE_MAX_PT}
     onformat={(detail) => onliveaction({ kind: 'format', ...detail })}
   />

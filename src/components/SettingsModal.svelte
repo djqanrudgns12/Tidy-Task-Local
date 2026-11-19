@@ -16,7 +16,7 @@
   import { onMount, onDestroy, tick } from 'svelte';
   import { fade, scale } from 'svelte/transition';
   import {
-    ALargeSmall, Archive, ArrowUpRight, Bell, BellRing, ChevronDown, Download, Eye, FileText, FileType, LoaderCircle,
+    ALargeSmall, Archive, ArrowUpRight, Bell, BellRing, Download, Eye, FileText, FileType, LoaderCircle,
     Monitor, Moon, Palette, PanelTop, PenLine, Power, RotateCcw, Shapes, SlidersHorizontal, Sparkles, Trash2,
     TriangleAlert, Upload, VolumeX, Wrench, X,
   } from 'lucide-svelte';
@@ -41,6 +41,8 @@
   import ToolkitToggle from './toolkit/ToolkitToggle.svelte';
   import SettingsPanel from './settings/SettingsPanel.svelte';
   import SwitchRow from './settings/SwitchRow.svelte';
+  import FontPickerTrigger from './fontPicker/FontPickerTrigger.svelte';
+  import { fontPicker } from '../lib/fonts/fontPickerClient.svelte.js';
 
   /** @typedef {import('../lib/settings/settingsForm.js').SettingsTabId} SettingsTabId */
 
@@ -97,11 +99,14 @@
   // ── 탭 ──
   /** @type {HTMLDivElement | null} */
   let scrollBox = $state(null);
+  /** @type {HTMLDivElement | null} */
+  let uiFontFieldEl = $state(null);
 
   /** @param {SettingsTabId} id */
   function selectTab(id) {
     if (activeTab === id) return;
     releasePin();
+    fontPicker.close('requester', { toggleGrace: false });
     activeTab = id;
     // 탭마다 길이가 달라, 앞 탭의 스크롤 위치가 남으면 새 탭이 중간부터 보입니다.
     if (scrollBox) scrollBox.scrollTop = 0;
@@ -144,9 +149,8 @@
   /** @type {{ anchor: Element, top: number, until: number, frame: number } | null} */
   let pin = null;
 
-  /** @param {Event} event */
-  function holdInPlace(event) {
-    const anchor = event.currentTarget;
+  /** @param {Element | null} anchor */
+  function holdAnchorInPlace(anchor) {
     if (!scrollBox || !(anchor instanceof Element)) return;
     // 같은 컨트롤을 연달아 움직이는 동안에는 처음 잡은 위치를 그대로 기준으로 씁니다.
     // 왜: 매번 새로 재면 전환 중 조금씩 밀린 위치가 기준이 되어 오차가 쌓입니다.
@@ -159,6 +163,11 @@
     // 새 글자 크기가 DOM에 들어간 직후(그리기 전)에 한 번, 이후 전환 동안 매 프레임 맞춥니다.
     tick().then(correctDrift);
     if (!pin.frame) pin.frame = requestAnimationFrame(followPin);
+  }
+
+  /** @param {Event} event */
+  function holdInPlace(event) {
+    holdAnchorInPlace(event.currentTarget instanceof Element ? event.currentTarget : null);
   }
 
   /** 밀린 만큼 스크롤을 되돌리고, 실제로 되돌렸는지(=아직 화면이 움직이는 중인지) 알려 줍니다. */
@@ -578,17 +587,22 @@
 
           {:else if activeTab === 'text'}
             <SettingsPanel icon={PenLine} title="메모 글자" caption="할 일과 메모에 쓰는 글자">
-              <label class="st-field">
+              <div class="st-field">
                 <span class="st-field-label">글꼴</span>
-                <span class="st-select">
-                  <select bind:value={form.fontFamily} style="font-family:{memoFontStack};">
-                    {#each appState.allFonts as font}
-                      <option value={font.name} style="font-family:{font.family};">{font.name}</option>
-                    {/each}
-                  </select>
-                  <ChevronDown size={14} aria-hidden="true" />
-                </span>
-              </label>
+                <FontPickerTrigger
+                  pickerKey="settings-memo-font"
+                  value={form.fontFamily}
+                  variant="field"
+                  align="end"
+                  themeSource="tidy"
+                  themeId={form.themeColor}
+                  isDarkMode={form.isDarkMode}
+                  customFonts={appState.customFonts}
+                  ariaLabel="메모 글꼴"
+                  triggerClass="st-font-trigger"
+                  onselect={(name) => { form.fontFamily = name; }}
+                />
+              </div>
               <div class="st-field">
                 <span class="st-field-label" id="st-memo-size">크기</span>
                 <span class="st-slider">
@@ -611,17 +625,25 @@
             </SettingsPanel>
 
             <SettingsPanel icon={Monitor} title="화면 글자" caption="버튼 · 메뉴 · 제목에 쓰는 글자">
-              <label class="st-field">
+              <div class="st-field" bind:this={uiFontFieldEl}>
                 <span class="st-field-label">글꼴</span>
-                <span class="st-select">
-                  <select bind:value={form.uiFontFamily} onchange={holdInPlace}>
-                    {#each appState.allFonts as font}
-                      <option value={font.name} style="font-family:{font.family};">{font.name}</option>
-                    {/each}
-                  </select>
-                  <ChevronDown size={14} aria-hidden="true" />
-                </span>
-              </label>
+                <FontPickerTrigger
+                  pickerKey="settings-ui-font"
+                  value={form.uiFontFamily}
+                  variant="field"
+                  align="end"
+                  themeSource="tidy"
+                  themeId={form.themeColor}
+                  isDarkMode={form.isDarkMode}
+                  customFonts={appState.customFonts}
+                  ariaLabel="화면 글꼴"
+                  triggerClass="st-font-trigger"
+                  onselect={(name) => {
+                    holdAnchorInPlace(uiFontFieldEl);
+                    form.uiFontFamily = name;
+                  }}
+                />
+              </div>
               <div class="st-field">
                 <span class="st-field-label" id="st-ui-size">크기</span>
                 <span class="st-slider">
@@ -1139,36 +1161,25 @@
     font-weight: 700;
     color: var(--st-sub);
   }
-  .st-select {
-    position: relative;
-    display: block;
-  }
-  .st-select select {
+  .st-field :global(.st-font-trigger) {
     width: 100%;
-    padding: 0.5em 2em 0.5em 0.7em;
+    padding: 0.5em 0.7em;
     border: 1px solid var(--st-line);
     border-radius: 9px;
     background: var(--st-field);
     color: var(--st-ink);
     font-size: 0.84em;
-    appearance: none;
-    cursor: pointer;
     outline: none;
     transition: border-color 0.14s, box-shadow 0.14s;
   }
-  .st-select select:hover,
-  .st-select select:focus-visible {
+  .st-field :global(.st-font-trigger:hover),
+  .st-field :global(.st-font-trigger:focus-visible),
+  .st-field :global(.st-font-trigger.is-open) {
     border-color: var(--st-accent-line);
     box-shadow: 0 0 0 3px var(--st-accent-soft);
   }
-  .st-select option { background: var(--st-field); color: var(--st-ink); }
-  .st-select :global(svg) {
-    position: absolute;
-    top: 50%;
-    right: 9px;
-    transform: translateY(-50%);
+  .st-field :global(.st-font-trigger .fp-trigger-chev) {
     color: var(--st-muted);
-    pointer-events: none;
   }
   .st-slider {
     display: flex;

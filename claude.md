@@ -206,3 +206,10 @@
 - 작업 창 1280×820(최소 760×560), 선생님 창 440×760(최소 380×560) — Rust `work_window_size("vote" | "vote-teacher")`와 JS 미리보기 크기(`toolkit/windows.js`)가 같아야 합니다.
 - 준비 화면(`prep/PrepScreen.svelte`) 확인 카드의 체크는 실제 상태(전체 화면·놓인 모니터·소리 켜짐·눌러 본 키)에서 `$derived`로 계산합니다. `$effect` 안에서 읽은 상태를 다시 쓰면 무한 반복 오류(`effect_update_depth_exceeded`)로 창 전체의 화면 갱신이 멈춰 모든 버튼이 먹통이 됩니다(실제로 났던 사고). 오늘의 후보 판 크기는 `layout.js`의 `lineupGrid`가 정합니다.
 - 개발 시 `?toolkit-preview=vote`(선생님 창은 `vote-teacher`), 예시 채우기 `&vote-fixture=candidate9|opinion|yesno3|voting|counting-<방식>[-yesno]|result|result-tie|result-winner|archive`, 효과음 청취·음량 검수 `&vote-sounds`(모두 개발 전용, 배포 번들에 없음). 검수 기록은 `docs/QA-vote.md`.
+
+### 글꼴 카탈로그 · 독립 글꼴 선택 팝업 (`font-picker`)
+- `src/assets/fonts/`에 기존 38종을 모두 보존한 채 24종을 더해 총 62개 `.woff2` + 시스템 10종 = **72종 내장 글꼴**(6개 카테고리 · 43개 패밀리 행)을 `src/lib/fonts/fontCatalog.js`가 단일 진실 공급원으로 관리합니다. `BUILTIN_FONTS`는 `flattenBuiltinFonts()` 파생본으로 기존 `{ name, family }` 계약을 유지합니다. 기존 번들 글꼴(교보 손글씨 2019~2025, 여기어때 잘난체 1·2·고딕 등)은 삭제·개명하지 않습니다.
+- 글꼴 선택 UI는 `FontPickerPanel.svelte`(H3 상단 미니 카테고리 탭 + 인라인 굵기/시리즈 캡슐 + D1 에어리 포스트잇 스킨) 하나를 공유합니다. 굵기 칩에 커서/포커스를 올리면 해당 패밀리 행 이름이 실제 `.woff2` 글꼴로 즉시 미리보기 됩니다.
+- Tauri에서는 **비이동(Non-Draggable) 독립 팝업 창** `font-picker`(`FontPickerWindow.svelte`, Zero-Halo Flush Edge: `shadow: false` · `transparent: true` · 불투명 1px 내측 림)로 버튼 바로 아래/위(`2px` 간격)에 밀착해 열립니다. 호스트 창 이동·리사이즈·스크롤·우클릭 메뉴·비활성화 시 즉시 닫혀 허공에 남지 않습니다. 우클릭 `ctx-menu` 내부(`ContextFormatBar`)만 이중 팝업 충돌을 피하려 같은 패널의 `variant="inline"`을 씁니다.
+- `font-picker`는 비데이터 임시 창입니다(`isDataWindowLabel === false`, Rust `tray.rs::TRANSIENT_LABELS` 및 `analytics.rs::window_kind => "other"` 등록, `lib.rs` 호스트 `Destroyed` 시 `font-picker:requester-destroyed` 발행). `fontPickerTheme.js`는 `light-dark()`/`color-mix()` 없이 Tidy 15종 + Toolkit 6종 × 라이트/다크 42조합을 명시적 hex/rgba로 제공합니다.
+- 폰트 이름 비교에는 `.includes()` 대신 `matchFontName()`(`src/lib/editor/richTextFormat.js`)을 써야 접두어 겹침(`여기어때 잘난체` vs `여기어때 잘난체 2`/`고딕`)이 오인식되지 않습니다. 개발 미리보기는 `?font-picker-preview`, 설계 문서는 `docs/PRD-font-catalog-and-picker-popup.md`, 검수 기록은 `docs/QA-font-picker.md`.

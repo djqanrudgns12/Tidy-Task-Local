@@ -6,8 +6,11 @@
   import { openUrl } from "@tauri-apps/plugin-opener";
   import { getCurrentWindow } from "@tauri-apps/api/window";
   import FontSizeInput from "./FontSizeInput.svelte";
+  import FontPickerTrigger from "./fontPicker/FontPickerTrigger.svelte";
+  import { fontPicker } from "../lib/fonts/fontPickerClient.svelte.js";
   import { STABLE_MAX_PT } from "../lib/fontSize.js";
   import { PALETTE } from "../lib/editorConstants.js";
+  import { matchFontName } from "../lib/editor/richTextFormat.js";
 
   // ✨ [글자 크기 상한] Tiny Note는 무제한(Infinity), 그 외(메인/노트 창)는 안정 표출을 위해 40pt 캡
   // 왜 창별로 다른가: Tiny Note는 자유 저작 공간이고, Tidy Task 본창은 할 일/노트 레이아웃 안정이 우선입니다.
@@ -240,13 +243,7 @@
       if (document.queryCommandState('justifyCenter')) selAlign = 'center';
       else if (document.queryCommandState('justifyRight')) selAlign = 'right';
 
-      let rawFont = style.fontFamily.replace(/["']/g, ""); 
-      let cleanFont = rawFont.split(",")[0].trim();
-      const matchedFont = appState.allFonts.find(f => {
-        const baseFamily = f.family.split(',')[0].replace(/['"]/g, '').trim();
-        return rawFont.toLowerCase().includes(baseFamily.toLowerCase()) || rawFont.toLowerCase().includes(f.name.toLowerCase());
-      });
-      selFontName = matchedFont ? matchedFont.name : cleanFont;
+      selFontName = matchFontName(style.fontFamily, appState.allFonts) || style.fontFamily.replace(/["']/g, "").split(",")[0].trim();
 
       const fs = style.fontSize;
       if (fs) {
@@ -273,9 +270,11 @@
   let floatingSyncId = null;
 
   function onSelChange() {
+    const fontMenuOpen = fontPicker.openKey === 'floating-rte';
     if (appState.isEditMode) {
       visible = false;
       activePopup = null;
+      if (fontMenuOpen) fontPicker.close('requester', { toggleGrace: false });
       return;
     }
     if (floatingSyncId) return;
@@ -283,10 +282,11 @@
     floatingSyncId = requestAnimationFrame(() => {
       try {
         if (toolbarEl && toolbarEl.contains(document.activeElement)) return;
+        const isFontOpen = fontPicker.openKey === 'floating-rte';
         const sel = window.getSelection();
         
         if (!sel || sel.isCollapsed || sel.rangeCount === 0 || sel.toString().trim().length === 0) {
-          if (!toolbarEl?.contains(document.activeElement) && !activePopup) {
+          if (!toolbarEl?.contains(document.activeElement) && !activePopup && !isFontOpen) {
             visible = false;
             activePopup = null;
             isUserMoved = false; 
@@ -302,7 +302,7 @@
           : (anchorNode.closest ? anchorNode.closest('[contenteditable="true"]') : null);
 
         if (!isInsideEditor) {
-          if (!activePopup) {
+          if (!activePopup && !isFontOpen) {
             visible = false;
             activePopup = null;
           }
@@ -311,7 +311,7 @@
 
         const rect = sel.getRangeAt(0).getBoundingClientRect();
         if (rect.width === 0 && rect.height === 0) {
-          if (!activePopup) visible = false;
+          if (!activePopup && !isFontOpen) visible = false;
           return;
         }
 
@@ -320,7 +320,7 @@
           saveSelection();
           syncState();
           
-          if (!isUserMoved && !activePopup && !formatFreezeTimeout) {
+          if (!isUserMoved && !activePopup && !formatFreezeTimeout && fontPicker.openKey !== 'floating-rte') {
             pos = calcPos(rect);
           }
           visible = true;
@@ -334,7 +334,7 @@
   function handleGlobalMousedown(e) {
     if (!visible && !activePopup) return;
     const isInsideToolbar = toolbarEl && toolbarEl.contains(e.target);
-    const isInsidePopup = e.target.closest('.popup-safe-area');
+    const isInsidePopup = e.target.closest('.popup-safe-area, .fp-portal-float');
     
     if (activePopup && !isInsidePopup) {
       activePopup = null;
@@ -342,6 +342,7 @@
     if (visible && !isInsideToolbar && !isInsidePopup) {
       visible = false;
       activePopup = null;
+      if (fontPicker.openKey === 'floating-rte') fontPicker.close('outside');
     }
   }
 
@@ -349,6 +350,7 @@
     if (selTimeout) { clearTimeout(selTimeout); selTimeout = null; }
     visible = false;
     activePopup = null;
+    if (fontPicker.openKey === 'floating-rte') fontPicker.close('requester', { toggleGrace: false });
   }
 
   onMount(() => {
@@ -379,6 +381,13 @@
     if (appState.isEditMode) {
       visible = false;
       activePopup = null;
+      if (fontPicker.openKey === 'floating-rte') fontPicker.close('requester', { toggleGrace: false });
+    }
+  });
+
+  $effect(() => {
+    if (appState.isUpdateFrozen && fontPicker.openKey === 'floating-rte') {
+      fontPicker.close('frozen', { toggleGrace: false });
     }
   });
 </script>
@@ -410,21 +419,25 @@
           <GripVertical size={14} strokeWidth={2.5} />
         </div>
 
-        <select
+        <FontPickerTrigger
+          pickerKey="floating-rte"
           value={selFontName}
-          onmousedown={() => { saveSelection(); }}
-          onchange={(e) => {
-            selFontName = e.currentTarget.value;
-            const fontObj = appState.allFonts.find(f => f.name === selFontName);
+          variant="toolbar-compact"
+          align="start"
+          preserveEditorSelection={true}
+          themeSource="tidy"
+          themeId={appState.themeColor}
+          isDarkMode={appState.isDarkMode}
+          customFonts={appState.customFonts}
+          ariaLabel="글꼴"
+          triggerClass="text-[10px] bg-black/5 border border-transparent rounded h-[20px] outline-none cursor-pointer hover:bg-amber-100 transition-colors w-[72px] shrink-0 text-gray-800"
+          onbeforeopen={saveSelection}
+          onselect={(name) => {
+            selFontName = name;
+            const fontObj = appState.allFonts.find(f => f.name === name);
             if (fontObj) applyStyleDirect({ fontFamily: fontObj.family }, true);
           }}
-          class="text-[10px] bg-black/5 border-none rounded px-1 h-[20px] outline-none cursor-pointer hover:bg-amber-100 transition-colors w-[68px] truncate shrink-0"
-          title="글꼴"
-        >
-          {#each appState.allFonts as font}
-            <option value={font.name} style="font-family: {font.family.replace(/"/g, "'")}">{font.name}</option>
-          {/each}
-        </select>
+        />
 
         <!-- 글자 크기 (직접 입력 + 프리셋; Tiny Note는 무제한, 그 외 최대 40pt) — 옆 글꼴 박스와 외형 통일 -->
         <FontSizeInput

@@ -54,8 +54,11 @@
   import { emit } from "@tauri-apps/api/event";
   import { WebviewWindow } from "@tauri-apps/api/webviewWindow";
   import FontSizeInput from "./FontSizeInput.svelte";
+  import FontPickerTrigger from "./fontPicker/FontPickerTrigger.svelte";
+  import { fontPicker } from "../lib/fonts/fontPickerClient.svelte.js";
   import { STABLE_MAX_PT } from "../lib/fontSize.js";
   import { PALETTE, SYM_PAGES } from "../lib/editorConstants.js";
+  import { matchFontName } from "../lib/editor/richTextFormat.js";
 
   async function handleOpenArchive() {
     await openArchiveWindow();
@@ -277,13 +280,7 @@
       if (document.queryCommandState('justifyCenter')) selAlign = 'center';
       else if (document.queryCommandState('justifyRight')) selAlign = 'right';
 
-      let rawFont = style.fontFamily.replace(/["']/g, ""); 
-      let cleanFont = rawFont.split(",")[0].trim();
-      const matchedFont = appState.allFonts.find(f => {
-        const baseFamily = f.family.split(',')[0].replace(/['"]/g, '').trim();
-        return rawFont.toLowerCase().includes(baseFamily.toLowerCase()) || rawFont.toLowerCase().includes(f.name.toLowerCase());
-      });
-      selFontFamily = matchedFont ? matchedFont.name : cleanFont;
+      selFontFamily = matchFontName(style.fontFamily, appState.allFonts) || style.fontFamily.replace(/["']/g, "").split(",")[0].trim();
 
       const fs = style.fontSize;
       if (fs) {
@@ -419,12 +416,7 @@
         const target = doc.body.firstElementChild || doc.body;
         const style = /** @type {HTMLElement} */ (target).style;
 
-        let rawFont = style.fontFamily.replace(/["']/g, "").split(",")[0].trim();
-        const matchedFont = appState.allFonts.find(f => 
-          f.name === rawFont || 
-          (f.family && f.family.includes(rawFont))
-        );
-        selFontFamily = matchedFont ? matchedFont.name : rawFont;
+        selFontFamily = matchFontName(style.fontFamily, appState.allFonts) || style.fontFamily.replace(/["']/g, "").split(",")[0].trim();
 
         const fs = style.fontSize;
         if (fs) {
@@ -449,7 +441,7 @@
     /** @param {MouseEvent} event */
     function down(event) {
       if (!(event.target instanceof Element)) return;
-      if (event.target.closest('input, select, option')) return;
+      if (event.target.closest('input, select, option, .fp-trigger')) return;
       saveSelection();
       event.preventDefault();
     }
@@ -486,6 +478,12 @@
     position();
     return { destroy() { resize.disconnect(); window.removeEventListener('resize', position); document.removeEventListener('keydown', escape, true); } };
   }
+
+  $effect(() => {
+    if (appState.isUpdateFrozen && fontPicker.openKey === 'main-toolbar') {
+      fontPicker.close('frozen', { toggleGrace: false });
+    }
+  });
 
   function handleGlobalMousedown(e) {
     if (!activePopup) return;
@@ -780,21 +778,25 @@
   <div id="main-format-tools" class="format-tools" role="group" aria-label="글자 서식"
        style="border-color: {appState.isDarkMode ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.05)'};" use:editorControls>
     <div class="format-fields">
-    <select
+    <FontPickerTrigger
+      pickerKey="main-toolbar"
       value={selFontFamily}
-      onmousedown={() => { saveSelection(); }}
-      onchange={(e) => {
-        selFontFamily = e.currentTarget.value;
-        const fontObj = appState.allFonts.find(f => f.name === selFontFamily);
+      variant="toolbar"
+      align="start"
+      preserveEditorSelection={true}
+      themeSource="tidy"
+      themeId={appState.themeColor}
+      isDarkMode={appState.isDarkMode}
+      customFonts={appState.customFonts}
+      ariaLabel="글꼴"
+      triggerClass="header-font-trigger"
+      onbeforeopen={saveSelection}
+      onselect={(name) => {
+        selFontFamily = name;
+        const fontObj = appState.allFonts.find(f => f.name === name);
         if (fontObj) applyStyleDirect({ fontFamily: fontObj.family });
       }}
-      class="text-[10px] bg-white/60 border border-black/10 rounded-md px-0.5 h-5 outline-none cursor-pointer hover:border-amber-400 transition-colors w-[72px] truncate shrink-0"
-      title="글꼴" aria-label="글꼴"
-    >
-      {#each appState.allFonts as font}
-        <option value={font.name} style="font-family: {font.family.replace(/"/g, "'")}">{font.name}</option>
-      {/each}
-    </select>
+    />
 
     <!-- 글자 크기 (직접 입력 + 프리셋, 안정 표출 위해 최대 40pt로 캡) — 옆 글꼴 박스와 외형 통일 -->
     <FontSizeInput
@@ -1047,7 +1049,7 @@
   .main-toolbar-row { grid-template-columns:auto minmax(0,1fr) auto; }
   .classic .format-tools { padding:2px 8px; gap:3px; background:transparent; }
   .main-header.classic { --header-control-h:clamp(22px, calc(var(--ui-font-size, 10pt) * 1.4), 30px); }
-  .classic .format-fields > select { height:var(--header-control-h); }
+  .classic .format-fields > :global(.header-font-trigger) { height:var(--header-control-h); }
   .classic .format-tools :global(.header-font-size) { height:var(--header-control-h); }
   .classic .main-toolbar-row input { font-size:min(.917em, max(11px, 4cqi)); }
 
@@ -1093,7 +1095,10 @@
   .format-fields { gap:3px; flex:0 1 max(130px, 10.833em); }
   .format-buttons { flex:0 1 149px; gap:1px; margin-left:auto; }
   .format-buttons > button { flex:1 1 0; min-width:0; margin:0; width:0; height:max(25px, var(--header-control-h)); border-radius:6px; color:var(--header-ink); }
-  .format-fields > select { flex:1 1 64px; min-width:0; width:0; height:var(--header-control-h); font-size:min(.917em, max(9px, 3.65cqi)); color:var(--header-ink); background:var(--header-field); border-color:var(--header-line); border-radius:7px; }
+  .format-fields > :global(.header-font-trigger) { flex:1 1 68px; min-width:0; width:0; height:var(--header-control-h); font-size:min(.917em, max(9.5px, 3.65cqi)); color:var(--header-ink); background:var(--header-field); border:1px solid var(--header-line); border-radius:7px; }
+  .format-fields > :global(.header-font-trigger:hover),
+  .format-fields > :global(.header-font-trigger.is-open) { border-color:var(--header-accent); }
+  .format-fields > :global(.header-font-trigger.is-open) { box-shadow:0 0 0 2px color-mix(in srgb,var(--header-accent) 18%,transparent); }
   .format-fields > :global(div) { flex:0 1 61px; min-width:0; }
   .format-tools :global(input) { min-width:0; width:clamp(15px,8cqi,26px); font-size:min(.917em, max(9px, 3.65cqi)); flex:1 1 auto; }
   .format-tools :global(.header-font-size) { height:var(--header-control-h); padding-inline:clamp(1px,1cqi,4px); gap:1px; border:1px solid var(--header-line); border-radius:7px; background:var(--header-field); color:var(--header-ink); }

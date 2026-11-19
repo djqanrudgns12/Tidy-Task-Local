@@ -20,10 +20,10 @@
   import { ALLERGENS } from "../../lib/meal/mealFormat.js";
   import { SCALES } from "../../lib/meal/mealLayout.js";
   import { dateKey } from "../../lib/meal/mealDate.js";
-  import { BUILTIN_FONTS } from "../../lib/builtinFonts.js";
   import SettingsEmblem from "./SettingsEmblem.svelte";
   import { openUrl } from "@tauri-apps/plugin-opener";
   import ThemePicker from "../ThemePicker.svelte";
+  import FontPickerTrigger from "../fontPicker/FontPickerTrigger.svelte";
   /** @type {{settings:import('../../lib/meal/types').MealSettings;main?:import('../../lib/meal/types').MainAppearance;customFonts?:import('../../lib/meal/types').CustomFont[]}} */
   let { settings, main = {}, customFonts = [] } = $props();
   let confirm = $state(""),
@@ -355,15 +355,21 @@
                 ><option value="dark">다크</option></select
               ></label
             >
-            <label class="select-row"
-              ><span>글꼴</span><select
+            <div class="select-row"
+              ><span>글꼴</span><FontPickerTrigger
+                pickerKey="meal-settings-font"
                 value={settings.appearance.font}
-                onchange={(e) => set("appearance.font", e.currentTarget.value)}
-                ><option value="follow">메인 창과 동일</option
-                >{#each [...BUILTIN_FONTS.map((f) => f.name), ...customFonts.map((f) => f.name)] as font}<option
-                    value={font}>{font}</option
-                  >{/each}</select
-              ></label
+                variant="field"
+                align="end"
+                themeSource="tidy"
+                themeId={theme}
+                isDarkMode={Boolean(dark)}
+                {customFonts}
+                extraOptions={[{ value: "follow", label: "메인 창과 동일" }]}
+                ariaLabel="급식창 글꼴"
+                triggerClass="meal-font-trigger"
+                onselect={(v) => set("appearance.font", v)}
+              /></div
             >
           </div>{/if}
         <div class="size-label">
@@ -811,7 +817,8 @@
     font-size: 11px;
     padding: 8px 0;
   }
-  select {
+  select,
+  .select-row :global(.meal-font-trigger) {
     min-width: 0;
     max-width: 58%;
     background: var(--meal-surface);
@@ -820,6 +827,9 @@
     border-radius: 7px;
     padding: 7px;
     font-size: 11px !important;
+  }
+  .select-row :global(.meal-font-trigger) {
+    width: 58%;
   }
   .allergy-label {
     margin: 15px 0 0;

@@ -27,10 +27,12 @@ class ArchiveState {
   // ✨ [Full Toolbar] 상단 고정 서식 툴바의 글꼴 드롭다운용 폰트 목록
   //   기본값은 내장 폰트, init() 시점에 커스텀 폰트를 추가로 로드합니다.
   allFonts = $state([...BUILTIN_FONTS]);
+  customFonts = $state([]);
 
   // ✨ [Settings Sync] 앱 전역 설정 (메인 창 설정 동기화용)
   globalSettings = $state({
     fontFamily: '메이플스토리 L',
+    themeColor: 'amber',
     isDarkMode: false
   });
 
@@ -51,10 +53,12 @@ class ArchiveState {
       const mainData = await tauriStore.get('main');
       if (mainData) {
         this.globalSettings.fontFamily = mainData.fontFamily || '메이플스토리 L';
+        this.globalSettings.themeColor = mainData.themeColor || 'amber';
         this.globalSettings.isDarkMode = mainData.isDarkMode || false;
       } else {
         // 구버전(루트 키 방식)일 경우 대비
         this.globalSettings.fontFamily = await tauriStore.get('fontFamily') || '메이플스토리 L';
+        this.globalSettings.themeColor = await tauriStore.get('themeColor') || 'amber';
         this.globalSettings.isDarkMode = await tauriStore.get('isDarkMode') || false;
       }
 
@@ -95,6 +99,9 @@ class ArchiveState {
         }
       }
 
+      this.customFonts = custom
+        .filter((f) => f?.name && f?.path)
+        .map((f) => ({ name: f.name, path: f.path }));
       const customList = custom.map((f) => ({
         name: f.name,
         family: `"${f.name}", sans-serif`,

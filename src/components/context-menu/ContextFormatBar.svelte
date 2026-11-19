@@ -1,6 +1,6 @@
 <script>
   import { tick } from 'svelte';
-  import { Bold, Italic, Underline, ChevronDown, Check } from 'lucide-svelte';
+  import { Bold, Italic, Underline, ChevronDown } from 'lucide-svelte';
   import { PALETTE } from '../../lib/editorConstants.js';
   import { STABLE_MAX_PT } from '../../lib/fontSize.js';
   import {
@@ -9,6 +9,9 @@
     QUICK_TEXT_COLORS,
   } from '../../lib/contextMenuIcons.js';
   import { normalizeFontSizePt } from '../../lib/editor/richTextFormat.js';
+  import { BUILTIN_FONTS } from '../../lib/builtinFonts.js';
+  import { fontPickerThemeToStyle, resolveFontPickerTokens } from '../../lib/fonts/fontPickerTheme.js';
+  import FontPickerPanel from '../fontPicker/FontPickerPanel.svelte';
 
   /**
    * @typedef {{
@@ -28,6 +31,8 @@
    * @type {{
    *   format?: FormatState | null,
    *   fonts?: Array<{ name: string, family: string }>,
+   *   themeColor?: string,
+   *   isDarkMode?: boolean,
    *   maxFontPt?: number,
    *   onformat?: (payload: { op: 'font' | 'size' | 'bold' | 'italic' | 'underline' | 'color' | 'bg', value?: unknown }) => void,
    * }}
@@ -35,9 +40,21 @@
   let {
     format = null,
     fonts = [],
+    themeColor = 'amber',
+    isDarkMode = false,
     maxFontPt = STABLE_MAX_PT,
     onformat = undefined,
   } = $props();
+
+  const BUILTIN_NAMES = new Set(BUILTIN_FONTS.map((f) => f.name));
+  const customFontEntries = $derived(
+    fonts
+      .filter((f) => f?.name && !BUILTIN_NAMES.has(f.name))
+      .map((f) => ({ name: f.name })),
+  );
+  const inlineFontThemeStyle = $derived(
+    fontPickerThemeToStyle(resolveFontPickerTokens({ source: 'tidy', themeId: themeColor, isDarkMode })),
+  );
 
   /** @type {null | 'font' | 'size' | 'textColor' | 'bgColor'} */
   let activeDrawer = $state(null);
@@ -45,7 +62,7 @@
   let sizeInputText = $state('10');
   let sizeInputFocused = $state(false);
   /** @type {HTMLInputElement | null} */ let sizeInputEl = $state(null);
-  /** @type {HTMLDivElement | null} */ let fontListEl = $state(null);
+  /** @type {{ focusAndReveal: (viaKeyboard?: boolean) => Promise<void> } | null} */ let fontPanelRef = $state(null);
   /** @type {HTMLButtonElement | null} */ let fontTriggerEl = $state(null);
   /** @type {HTMLButtonElement | null} */ let sizeTriggerEl = $state(null);
   /** @type {HTMLButtonElement | null} */ let textColorTriggerEl = $state(null);
@@ -75,14 +92,11 @@
       : String(curFormat.fontSize);
   });
 
-  // 글꼴 드로어가 열리면 현재 선택된 글꼴 항목으로 자연스럽게 스크롤합니다.
+  // 글꼴 드로어가 열리면 공유 H3 패널이 현재 선택된 글꼴 위치로 자연스럽게 스크롤합니다.
   $effect(() => {
     if (activeDrawer !== 'font') return;
     void tick().then(() => {
-      const selected = fontListEl?.querySelector('[aria-selected="true"]');
-      if (selected instanceof HTMLElement) {
-        selected.scrollIntoView({ block: 'nearest' });
-      }
+      void fontPanelRef?.focusAndReveal(false);
     });
   });
 
@@ -309,22 +323,20 @@
 
   <!-- 3줄: 상호 배타적 인라인 드로어 (글꼴 / 크기 프리셋 / 글자색 / 형광펜) -->
   {#if activeDrawer === 'font'}
-    <div bind:this={fontListEl} class="fmt-drawer fmt-font-list" role="listbox" aria-label="글꼴 목록">
-      {#each fonts as font (font.name)}
-        {@const selected = !curFormat.isMixedFont && curFormat.fontFamily === font.name}
-        <button
-          type="button"
-          role="option"
-          aria-selected={selected}
-          class="fmt-font-opt"
-          class:selected
-          style="font-family:{font.family};"
-          onclick={() => pickFont(font.name)}
-        >
-          <span class="fmt-font-opt-name">{font.name}</span>
-          {#if selected}<Check size={10} strokeWidth={2.8} />{/if}
-        </button>
-      {/each}
+    <div class="fmt-drawer fmt-font-drawer">
+      <FontPickerPanel
+        bind:this={fontPanelRef}
+        value={curFormat.isMixedFont ? '' : curFormat.fontFamily}
+        customFonts={customFontEntries}
+        themeStyle={inlineFontThemeStyle}
+        variant="inline"
+        maxHeight={216}
+        onselect={(fontName) => pickFont(fontName)}
+        oncancel={() => {
+          activeDrawer = null;
+          fontTriggerEl?.focus();
+        }}
+      />
     </div>
   {:else if activeDrawer === 'size'}
     <div class="fmt-drawer" role="group" aria-label="글자 크기 프리셋">
@@ -586,50 +598,8 @@
     to { opacity: 1; transform: none; }
   }
 
-  .fmt-font-list {
-    display: flex;
-    flex-direction: column;
-    gap: 1px;
-    max-height: 132px;
-    overflow-y: auto;
-    padding-right: 1px;
-  }
-  .fmt-font-list::-webkit-scrollbar {
-    width: 4px;
-  }
-  .fmt-font-list::-webkit-scrollbar-thumb {
-    background: rgba(120, 130, 145, 0.35);
-    border-radius: 99px;
-  }
-  .fmt-font-opt {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 4px;
-    width: 100%;
-    height: 22px;
-    padding: 0 6px;
-    border: 0;
-    border-radius: 5px;
-    background: transparent;
-    color: var(--ctx-ink);
-    font-size: 10.5px;
-    text-align: left;
-    cursor: pointer;
-    flex-shrink: 0;
-  }
-  .fmt-font-opt:hover {
-    background: var(--ctx-hover);
-  }
-  .fmt-font-opt.selected {
-    background: var(--ctx-accent-soft);
-    color: var(--ctx-accent);
-    font-weight: 700;
-  }
-  .fmt-font-opt-name {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+  .fmt-font-drawer {
+    padding-top: 4px;
   }
 
   .fmt-size-grid {

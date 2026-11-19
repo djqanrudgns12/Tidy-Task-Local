@@ -5,6 +5,7 @@ import { isTauri } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { isMealWindowLabel } from "./lib/windows/windowLabels.js";
 import { DATE_PICKER_LABEL } from "./lib/datePicker/protocol.js";
+import { FONT_PICKER_LABEL } from "./lib/fonts/fontPickerProtocol.js";
 
 // 급식 창은 App의 저장·매니저 효과 자체를 실행하지 않는 독립 진입점을 사용합니다.
 const label = isTauri()
@@ -41,6 +42,15 @@ async function start() {
   if (!isTauri() && import.meta.env.DEV && new URLSearchParams(location.search).has("date-picker-preview")) {
     const { default: DatePickerPreview } = await import("./dev/DatePickerPreview.svelte");
     return mount(DatePickerPreview, { target });
+  }
+  // 글꼴 선택 독립 팝업 창도 저장소/매니저 초기화를 거치지 않도록 최상단에서 조기 분기합니다.
+  if (label === FONT_PICKER_LABEL) {
+    const { default: FontPickerWindow } = await import("./components/fontPicker/FontPickerWindow.svelte");
+    return mount(FontPickerWindow, { target });
+  }
+  if (!isTauri() && import.meta.env.DEV && new URLSearchParams(location.search).has("font-picker-preview")) {
+    const { default: FontPickerPreview } = await import("./dev/FontPickerPreview.svelte");
+    return mount(FontPickerPreview, { target });
   }
   if (
     label === 'dday-control' ||

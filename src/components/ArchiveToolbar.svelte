@@ -4,8 +4,10 @@
   import { Bold, Italic, Underline, Link, AlignJustify, Type, Highlighter } from "lucide-svelte";
   import { archiveState } from "../lib/archiveStore.svelte.js";
   import FontSizeInput from "./FontSizeInput.svelte";
+  import FontPickerTrigger from "./fontPicker/FontPickerTrigger.svelte";
   import { STABLE_MAX_PT } from "../lib/fontSize.js";
   import { PALETTE, SYM_PAGES } from "../lib/editorConstants.js";
+  import { matchFontName } from "../lib/editor/richTextFormat.js";
 
   // ✨ [Full Toolbar] 아카이브 인라인 편집용 고정 서식 툴바 (Svelte 5 runes)
   // 왜 appState를 쓰지 않는가:
@@ -225,12 +227,7 @@
       if (document.queryCommandState("justifyCenter")) selAlign = "center";
       else if (document.queryCommandState("justifyRight")) selAlign = "right";
 
-      const rawFont = style.fontFamily.replace(/["']/g, "");
-      const matched = archiveState.allFonts.find((f) => {
-        const base = f.family.split(",")[0].replace(/['"]/g, "").trim();
-        return rawFont.toLowerCase().includes(base.toLowerCase()) || rawFont.toLowerCase().includes(f.name.toLowerCase());
-      });
-      selFontName = matched ? matched.name : rawFont.split(",")[0].trim();
+      selFontName = matchFontName(style.fontFamily, archiveState.allFonts) || style.fontFamily.replace(/["']/g, "").split(",")[0].trim();
 
       const fs = style.fontSize;
       if (fs) {
@@ -292,22 +289,26 @@
   }}
 >
   <!-- 글꼴 -->
-  <select
+  <FontPickerTrigger
+    pickerKey="archive-toolbar"
     value={selFontName}
-    onmousedown={saveSelection}
-    onchange={(e) => {
-      const fontObj = archiveState.allFonts.find((f) => f.name === e.currentTarget.value);
+    variant="toolbar"
+    align="start"
+    preserveEditorSelection={true}
+    themeSource="tidy"
+    themeId={archiveState.globalSettings.themeColor || 'amber'}
+    isDarkMode={dark}
+    customFonts={archiveState.customFonts}
+    ariaLabel="글꼴"
+    triggerClass="text-[10px] rounded-md h-[24px] outline-none cursor-pointer transition-all flex-1 min-w-[58px] max-w-[104px]"
+    triggerStyle="background-color: {dark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.04)'}; color: {dark ? '#e2e8f0' : '#374151'}; border: 1px solid {dark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)'};"
+    onbeforeopen={saveSelection}
+    onselect={(name) => {
+      selFontName = name;
+      const fontObj = archiveState.allFonts.find((f) => f.name === name);
       if (fontObj) applyStyleDirect({ fontFamily: fontObj.family });
     }}
-    class="text-[10px] rounded-md px-1 h-[24px] outline-none cursor-pointer transition-all flex-1 min-w-[50px] max-w-[90px] truncate"
-    style="background-color: {dark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.04)'}; color: {dark ? '#e2e8f0' : '#374151'}; border: 1px solid {dark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)'};"
-    title="글꼴"
-  >
-    <option value="" disabled hidden></option>
-    {#each archiveState.allFonts as font}
-      <option value={font.name} style="font-family: {font.family.replace(/\"/g, `'`)}">{font.name}</option>
-    {/each}
-  </select>
+  />
 
   <!-- 글자 크기 (직접 입력 + 프리셋, 안정 표출 위해 최대 40pt로 캡) — 옆 글꼴 박스와 외형 통일 -->
   <FontSizeInput

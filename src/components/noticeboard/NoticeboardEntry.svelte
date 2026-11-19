@@ -38,5 +38,8 @@
 </script>
 
 <div class="tk-root" style={appearanceStyle(appearance)}>
-  <NoticeboardApp />
+  <NoticeboardApp
+    themeId={appearance.theme || "sage"}
+    isDarkMode={Boolean(appearance.darkMode)}
+  />
 </div>
