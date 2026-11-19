@@ -33,6 +33,11 @@
   --ctx-danger-hover: rgba(220, 38, 38, 0.14);
   --ctx-danger-border: rgba(220, 38, 38, 0.28);
 
+  --ctx-sky: #0284c7;
+  --ctx-sky-soft: rgba(2, 132, 199, 0.085);
+  --ctx-sky-hover: rgba(2, 132, 199, 0.15);
+  --ctx-sky-border: rgba(2, 132, 199, 0.28);
+
   /* 마감일 5단계 상태 칩 토큰 (TodoList.svelte와 동일 의미색) */
   --ctx-dl-overdue: #9333ea;
   --ctx-dl-overdue-bg: rgba(147, 51, 234, 0.12);
@@ -95,6 +100,11 @@
   --ctx-danger-soft: rgba(248, 113, 113, 0.14);
   --ctx-danger-hover: rgba(248, 113, 113, 0.23);
   --ctx-danger-border: rgba(252, 165, 165, 0.38);
+
+  --ctx-sky: #7dd3fc;
+  --ctx-sky-soft: rgba(14, 165, 233, 0.15);
+  --ctx-sky-hover: rgba(14, 165, 233, 0.24);
+  --ctx-sky-border: rgba(125, 211, 252, 0.38);
 
   --ctx-dl-overdue: #c084fc;
   --ctx-dl-overdue-bg: rgba(147, 51, 234, 0.22);
@@ -162,6 +172,20 @@
   left: auto;
   right: 0;
   transform: translateX(0) translateY(2px);
+}
+.ctx-tip.tip-bottom::after {
+  bottom: auto;
+  top: calc(100% + 5px);
+  transform: translateX(-50%) translateY(-2px);
+}
+.ctx-tip.tip-bottom.tip-left::after {
+  left: 0;
+  transform: translateX(0) translateY(-2px);
+}
+.ctx-tip.tip-bottom.tip-right::after {
+  left: auto;
+  right: 0;
+  transform: translateX(0) translateY(-2px);
 }
 .ctx-tip:hover:not(:disabled)::after {
   opacity: 1;

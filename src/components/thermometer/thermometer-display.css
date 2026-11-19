@@ -60,81 +60,84 @@
 .td-empty small { display: block; margin: 8px 0; }
 .td-empty button { border: 0; border-radius: 8px; padding: 8px; margin: 3px; background: var(--tk-soft); color: var(--tk-ink); cursor: pointer; }
 .td-dismiss { position: fixed; inset: 0; z-index: 20; border: 0; background: #0002; }
-/* 설정 패널 — [보여 줄 온도계: 얼굴 딱지 + 칩] · [창: 스위치 줄] · [맨 아래 동작 버튼].
-   관리 창과 같은 말씨(점무늬 바탕, 1.5px 테두리, 아래쪽 받침 그림자, 알약 모양)로 맞춥니다.
+/* 설정 패널 — Pocket Compact Tier L (256px) 공통 규약 정렬.
+   고유 개성(온도계 얼굴 딱지·마스코트)은 보존하되, 동심원 곡률(13→8→6px)·파스텔 리본 헤더·슬림 스위치로 통일합니다.
    색은 툴킷 테마 변수만 씁니다. light-dark()는 배포 빌드에서 값이 사라집니다(CLAUDE.md 시계 창 절). */
 .td-menu {
-  position: fixed; z-index: 21; display: grid; gap: 14px; width: min(320px, calc(100vw - 16px)); max-height: calc(100dvh - 16px); overflow-y: auto; scrollbar-width: thin; padding: 12px;
-  border: 1.5px solid color-mix(in srgb, var(--tk-accent) 22%, var(--tk-line)); border-radius: 22px; color: var(--tk-ink);
-  background: radial-gradient(color-mix(in srgb, var(--tk-line) 36%, transparent) 1.1px, transparent 1.6px) 0 0 / 16px 16px, var(--tk-panel);
-  box-shadow: 0 3px 0 color-mix(in srgb, var(--tk-accent) 16%, var(--tk-line)), 0 16px 36px #0003;
+  position: fixed; z-index: 21; display: grid; gap: 6px; width: min(256px, calc(100vw - 14px)); max-height: calc(100dvh - 14px); overflow-y: auto; scrollbar-width: thin; padding: 7px;
+  border: 1px solid color-mix(in srgb, var(--tk-accent) 18%, var(--tk-line)); border-radius: 13px; color: var(--tk-ink);
+  background: var(--tk-panel);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, #ffffff 35%, transparent), 0 12px 28px -6px #0003;
 }
-.td-menu > header { display: flex; align-items: center; gap: 8px; padding-left: 2px; }
-.td-menu > header strong { flex: 1; font-size: 15px; font-weight: 800; }
-.td-menu > header button { border-radius: 50%; background: var(--tk-panel); }
-.td-menu > header button:hover { background: var(--tk-soft); }
-.td-mascot { flex: none; }
-.td-set { display: grid; gap: 7px; }
-/* 묶음 이름은 작은 이름표 딱지로 — 점무늬 바탕 위에서도 또렷하게 읽힙니다. */
-.td-set h3 { justify-self: start; margin: 0; padding: 2px 9px; border-radius: 999px; background: color-mix(in srgb, var(--tk-accent) 12%, var(--tk-panel)); color: var(--tk-accent); font-size: 11px; font-weight: 800; line-height: 1.6; }
-.td-class { display: flex; align-items: center; gap: 10px; padding: 6px 8px 6px 12px; border-radius: 14px; background: color-mix(in srgb, var(--tk-soft) 60%, var(--tk-panel)); font-size: 12px; font-weight: 700; color: var(--tk-muted); }
-.td-class select { flex: 1; min-width: 0; height: 30px; padding: 0 8px; border: 1px solid var(--tk-line); border-radius: 10px; background: var(--tk-panel); color: var(--tk-ink); }
+.td-menu > header { display: flex; align-items: center; gap: 6px; height: 26px; padding: 0 3px 0 6px; border-radius: 8px; background: color-mix(in srgb, var(--tk-accent) 11%, transparent); }
+.td-menu > header strong { flex: 1; font-size: 11px; font-weight: 800; letter-spacing: -0.015em; }
+.td-menu > header button { width: 20px; height: 20px; padding: 0; border: 0; border-radius: 6px; background: transparent; color: inherit; display: grid; place-items: center; cursor: pointer; opacity: 0.72; }
+.td-menu > header button svg { width: 13px; height: 13px; }
+.td-menu > header button:hover { opacity: 1; background: var(--tk-soft); }
+.tk-root .td-menu :is(button, select, input):focus-visible { outline: 1.5px solid var(--tk-accent); outline-offset: -1px; }
+.td-mascot { flex: none; width: 19px; height: 19px; }
+.td-set { display: grid; gap: 5px; padding: 5px; border-radius: 8px; background: color-mix(in srgb, var(--tk-soft) 45%, var(--tk-panel)); border: 1px solid var(--tk-line); }
+/* 묶음 이름 — 컴팩트 파스텔 뱃지 */
+.td-set h3 { justify-self: start; margin: 0; padding: 1px 6px; border-radius: 999px; background: color-mix(in srgb, var(--tk-accent) 12%, transparent); color: var(--tk-accent); font-size: 9.5px; font-weight: 800; line-height: 1.5; }
+.td-class { display: flex; align-items: center; gap: 6px; padding: 4px 6px; border-radius: 6px; background: color-mix(in srgb, var(--tk-soft) 70%, var(--tk-panel)); font-size: 10px; font-weight: 700; color: var(--tk-muted); }
+.td-class select { flex: 1; min-width: 0; height: 24px; padding: 0 6px; border: 1px solid var(--tk-line); border-radius: 5px; background: var(--tk-panel); color: var(--tk-ink); font-size: 10px; }
 /* 온도계 딱지 — 보이는 중이면 온도계 색으로 물들고 얼굴이 눈을 뜹니다. 숨기면 점선 테두리에 잠든 얼굴. */
-.td-tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 8px; }
+.td-tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(104px, 1fr)); gap: 4px; }
 .td-tiles:empty { display: none; }
 .td-tile {
-  position: relative; display: flex; align-items: center; gap: 8px; min-width: 0; min-height: 62px; padding: 8px 26px 8px 10px; text-align: left; color: var(--tk-ink);
-  border: 1.5px solid color-mix(in srgb, var(--td-accent) 40%, var(--tk-line)); border-radius: 16px; background: color-mix(in srgb, var(--td-accent) 10%, var(--tk-panel));
-  box-shadow: 0 2px 0 color-mix(in srgb, var(--td-accent) 26%, var(--tk-line)); transition: background-color 160ms, border-color 160ms, box-shadow 160ms;
+  position: relative; display: flex; align-items: center; gap: 6px; min-width: 0; min-height: 46px; padding: 5px 20px 5px 7px; text-align: left; color: var(--tk-ink);
+  border: 1px solid color-mix(in srgb, var(--td-accent) 36%, var(--tk-line)); border-radius: 8px; background: color-mix(in srgb, var(--td-accent) 10%, var(--tk-panel));
+  transition: background-color 140ms, border-color 140ms; cursor: pointer;
 }
 .td-tile:hover { background: color-mix(in srgb, var(--td-accent) 16%, var(--tk-panel)); }
-.td-tile-name { min-width: 0; overflow: hidden; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow-wrap: anywhere; font-size: 13px; font-weight: 800; line-height: 1.3; }
-.td-glyph { flex: none; transition: filter 200ms, opacity 200ms; }
-.td-tile[aria-checked='false'] { border-style: dashed; border-color: color-mix(in srgb, var(--tk-muted) 45%, transparent); background: var(--tk-panel); box-shadow: none; }
+.td-tile-name { min-width: 0; overflow: hidden; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow-wrap: anywhere; font-size: 10.5px; font-weight: 800; line-height: 1.25; }
+.td-glyph { flex: none; width: 22px; height: 32px; transition: filter 200ms, opacity 200ms; }
+.td-tile[aria-checked='false'] { border-style: dashed; border-color: color-mix(in srgb, var(--tk-muted) 40%, transparent); background: var(--tk-panel); }
 .td-tile[aria-checked='false']:hover { background: color-mix(in srgb, var(--tk-soft) 60%, var(--tk-panel)); }
 .td-tile[aria-checked='false'] .td-tile-name { color: var(--tk-muted); font-weight: 700; }
 .td-tile[aria-checked='false'] .td-glyph { filter: grayscale(1); opacity: .5; }
-/* 체크 동그라미 — 딱지와 칩이 함께 씁니다("고르는 것"은 체크, "켜는 것"은 스위치). 꺼져도 자리는 남겨 너비가 변하지 않습니다. */
-.td-check { display: grid; place-items: center; flex: none; width: 16px; height: 16px; border: 1.5px solid color-mix(in srgb, var(--tk-muted) 55%, transparent); border-radius: 50%; color: var(--tk-panel); }
-.td-check svg { opacity: 0; }
-[aria-checked='true'] > .td-check { border-color: var(--td-accent, var(--tk-accent)); background: var(--td-accent, var(--tk-accent)); animation: td-pop 240ms cubic-bezier(.3, 1.5, .5, 1); }
+/* 체크 동그라미 — 딱지와 칩이 함께 씁니다("고르는 것"은 체크, "켜는 것"은 스위치). */
+.td-check { display: grid; place-items: center; flex: none; width: 13px; height: 13px; border: 1.5px solid color-mix(in srgb, var(--tk-muted) 50%, transparent); border-radius: 50%; color: var(--tk-panel); }
+.td-check svg { opacity: 0; width: 9px; height: 9px; }
+[aria-checked='true'] > .td-check { border-color: var(--td-accent, var(--tk-accent)); background: var(--td-accent, var(--tk-accent)); animation: td-pop 200ms cubic-bezier(.3, 1.5, .5, 1); }
 [aria-checked='true'] > .td-check svg { opacity: 1; }
-.td-tile .td-check { position: absolute; top: 7px; right: 7px; }
+.td-tile .td-check { position: absolute; top: 5px; right: 5px; }
 @keyframes td-pop { from { transform: scale(.5); } to { transform: scale(1); } }
-.td-chips { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding-left: 4px; }
-.td-chips > span { margin-right: auto; font-size: 12px; font-weight: 700; color: var(--tk-muted); }
-.td-chip { display: inline-flex; align-items: center; gap: 5px; height: 30px; padding: 0 11px 0 7px; border: 1.5px solid var(--tk-line); border-radius: 999px; background: var(--tk-panel); color: var(--tk-muted); font-size: 12px; font-weight: 800; transition: background-color 160ms, border-color 160ms, color 160ms; }
-.td-chip:hover { border-color: color-mix(in srgb, var(--tk-accent) 45%, var(--tk-line)); color: var(--tk-ink); }
-.td-chip[aria-checked='true'] { border-color: color-mix(in srgb, var(--tk-accent) 45%, var(--tk-line)); background: color-mix(in srgb, var(--tk-accent) 12%, var(--tk-panel)); color: var(--tk-accent); }
-.td-set-empty { margin: 0; padding: 14px 12px; border: 1.5px dashed color-mix(in srgb, var(--tk-muted) 45%, transparent); border-radius: 16px; background: var(--tk-panel); text-align: center; font-size: 12px; color: var(--tk-muted); }
-/* 스위치 줄 — 줄마다 따로 떨어진 둥근 조각. 왼쪽 색 방울이 글자보다 먼저 "무슨 설정인지"를 알려 줍니다. */
-.td-row { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 46px; padding: 7px 10px 7px 8px; border: 0; border-radius: 16px; background: color-mix(in srgb, var(--tk-soft) 60%, var(--tk-panel)); color: var(--tk-ink); font-size: 13px; font-weight: 700; line-height: 1.35; text-align: left; transition: background-color 160ms; }
+.td-chips { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; padding-left: 2px; }
+.td-chips > span { margin-right: auto; font-size: 10px; font-weight: 700; color: var(--tk-muted); }
+.td-chip { display: inline-flex; align-items: center; gap: 4px; height: 23px; padding: 0 8px 0 5px; border: 1px solid var(--tk-line); border-radius: 6px; background: var(--tk-panel); color: var(--tk-muted); font-size: 10px; font-weight: 700; cursor: pointer; transition: background-color 140ms, border-color 140ms, color 140ms; }
+.td-chip:hover { border-color: color-mix(in srgb, var(--tk-accent) 42%, var(--tk-line)); color: var(--tk-ink); }
+.td-chip[aria-checked='true'] { border-color: color-mix(in srgb, var(--tk-accent) 38%, var(--tk-line)); background: color-mix(in srgb, var(--tk-accent) 11%, var(--tk-panel)); color: var(--tk-accent); }
+.td-set-empty { margin: 0; padding: 10px 8px; border: 1px dashed color-mix(in srgb, var(--tk-muted) 40%, transparent); border-radius: 8px; background: var(--tk-panel); text-align: center; font-size: 10.5px; color: var(--tk-muted); }
+/* 스위치 줄 — 슬림 포켓 행 */
+.td-row { display: flex; align-items: center; gap: 7px; width: 100%; min-height: 32px; padding: 4px 6px; border: 0; border-radius: 6px; background: transparent; color: var(--tk-ink); font-size: 10.5px; font-weight: 700; line-height: 1.3; text-align: left; cursor: pointer; transition: background-color 130ms; }
 .td-row:hover { background: var(--tk-soft); }
 .td-row-text { flex: 1; min-width: 0; overflow-wrap: anywhere; }
-.td-row-text small { display: block; margin-top: 1px; font-size: 11px; font-weight: 500; line-height: 1.45; color: var(--tk-muted); }
-.td-bubble { display: grid; place-items: center; flex: none; width: 30px; height: 30px; border-radius: 11px; color: var(--tk-ink); }
-.td-bubble[data-tone='gold'] { background: color-mix(in srgb, var(--tk-gold) 48%, var(--tk-panel)); }
-.td-bubble[data-tone='peach'] { background: color-mix(in srgb, var(--tk-peach) 62%, var(--tk-panel)); }
-/* 스위치 — 관리 창의 "미니 온도계" 스위치(.th-mini-track)처럼 통통 튀게 움직입니다. 손잡이는 패널 색이라 어두운 화면에서도 켜짐 바탕과 구분됩니다. */
-.td-switch { position: relative; flex: none; width: 34px; height: 20px; border-radius: 999px; background: color-mix(in srgb, var(--tk-muted) 32%, var(--tk-panel)); transition: background-color 180ms; }
-.td-switch i { position: absolute; top: 3px; left: 3px; width: 14px; height: 14px; border-radius: 50%; background: var(--tk-panel); box-shadow: 0 1px 2px rgb(0 0 0 / .28); transition: transform 200ms cubic-bezier(.3, 1.4, .5, 1); }
+.td-row-text small { display: block; margin-top: 1px; font-size: 9px; font-weight: 500; line-height: 1.25; color: var(--tk-muted); }
+.td-bubble { display: grid; place-items: center; flex: none; width: 22px; height: 22px; border-radius: 6px; color: var(--tk-ink); }
+.td-bubble svg { width: 12px; height: 12px; }
+.td-bubble[data-tone='gold'] { background: color-mix(in srgb, var(--tk-gold) 44%, var(--tk-panel)); }
+.td-bubble[data-tone='peach'] { background: color-mix(in srgb, var(--tk-peach) 56%, var(--tk-panel)); }
+/* 컴팩트 스위치 노브 (26×15px) */
+.td-switch { position: relative; flex: none; width: 26px; height: 15px; border-radius: 999px; background: color-mix(in srgb, var(--tk-muted) 34%, var(--tk-panel)); transition: background-color 160ms; }
+.td-switch i { position: absolute; top: 2px; left: 2px; width: 11px; height: 11px; border-radius: 50%; background: var(--tk-panel); box-shadow: 0 1px 2px rgb(0 0 0 / .24); transition: transform 180ms cubic-bezier(.3, 1.4, .5, 1); }
 [aria-checked='true'] > .td-switch { background: var(--tk-accent); }
-[aria-checked='true'] > .td-switch i { transform: translateX(14px); }
-/* 한 번 하는 동작(가운데로 · 관리 창 열기)은 설정과 섞지 않고 맨 아래 알약 버튼으로 둡니다. */
-.td-actions { display: flex; gap: 8px; }
-.td-actions button { display: inline-flex; flex: 1; align-items: center; justify-content: center; gap: 5px; min-width: 0; height: 36px; padding: 0 10px; border: 1.5px solid var(--tk-line); border-radius: 999px; background: var(--tk-panel); color: var(--tk-ink); font-size: 12.5px; font-weight: 800; white-space: nowrap; box-shadow: 0 2px 0 var(--tk-line); }
+[aria-checked='true'] > .td-switch i { transform: translateX(11px); }
+/* 하단 2칸 액션 바 (27px) */
+.td-actions { display: grid; grid-template-columns: 1fr 1.15fr; gap: 4px; padding-top: 4px; border-top: 1px solid var(--tk-line); }
+.td-actions button { display: inline-flex; align-items: center; justify-content: center; gap: 4px; min-width: 0; height: 27px; padding: 0 7px; border: 1px solid var(--tk-line); border-radius: 7px; background: var(--tk-panel); color: var(--tk-ink); font-size: 10px; font-weight: 700; white-space: nowrap; cursor: pointer; }
+.td-actions button:only-child { grid-column: 1 / -1; }
 .td-actions button:hover { background: var(--tk-soft); }
-.td-actions .td-action-main { border-color: color-mix(in srgb, var(--tk-accent) 40%, var(--tk-line)); background: color-mix(in srgb, var(--tk-accent) 12%, var(--tk-panel)); color: var(--tk-accent); box-shadow: 0 2px 0 color-mix(in srgb, var(--tk-accent) 26%, var(--tk-line)); }
-.td-actions .td-action-main:hover { background: color-mix(in srgb, var(--tk-accent) 20%, var(--tk-panel)); }
-/* 패널 너비는 min(320px, 창 너비 − 16px)입니다. 창이 그보다 좁으면 "함께 보기" 글자를 빼고 칩 둘이 한 줄을 나눠 씁니다(안 그러면 칩 하나만 아랫줄로 떨어짐). */
-@media (width < 336px) {
-  /* 딱지는 두 칸을 지키고(한 줄씩 쌓으면 패널이 길어짐) 얼굴을 이름 위로 올립니다. */
-  .td-tiles { grid-template-columns: repeat(auto-fit, minmax(100px, 1fr)); }
-  .td-tile { flex-direction: column; justify-content: center; gap: 4px; padding: 9px 8px 8px; text-align: center; }
+.td-actions .td-action-main { border-color: color-mix(in srgb, var(--tk-accent) 34%, var(--tk-line)); background: color-mix(in srgb, var(--tk-accent) 11%, var(--tk-panel)); color: var(--tk-accent); }
+.td-actions .td-action-main:hover { background: color-mix(in srgb, var(--tk-accent) 19%, var(--tk-panel)); }
+/* 좁은 미니 창에서도 두 칸 타일과 하단 버튼이 깨지지 않도록 반응형 보정 */
+@media (width < 270px) {
+  .td-tiles { grid-template-columns: repeat(auto-fit, minmax(92px, 1fr)); }
+  .td-tile { flex-direction: column; justify-content: center; gap: 3px; padding: 6px; text-align: center; }
   .td-chips { padding-left: 0; }
   .td-chips > span { display: none; }
-  .td-chip { flex: 1; justify-content: center; padding: 0 6px; }
-  .td-actions button { padding: 0 6px; font-size: 12px; }
+  .td-chip { flex: 1; justify-content: center; padding: 0 5px; }
+  .td-actions button { padding: 0 5px; font-size: 9.5px; }
 }
 .td-error { position: absolute; bottom: 14px; left: 14px; right: 14px; display: flex; align-items: center; padding: 10px; background: var(--tk-panel); border: 1px solid #c53740; border-radius: 10px; font-size: 12px; }
 .td-resize { position: absolute; z-index: 10; width: 12px; height: 12px; }

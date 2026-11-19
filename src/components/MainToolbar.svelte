@@ -18,6 +18,7 @@
   import HeaderActions from './HeaderActions.svelte';
   import DdayBanner from './dday/DdayBanner.svelte';
   import { computeDdayCounter } from '../lib/dday/ddayModel.js';
+  import { openArchiveWindow, toggleRemindersShared } from '../lib/headerWindows.js';
   import { Flag } from 'lucide-svelte';
   import '../lib/header.css';
   import { isTauri } from '@tauri-apps/api/core';
@@ -29,11 +30,7 @@
     try { localStorage.setItem('tidy:header:format-open', String(formatOpen)); } catch {}
   }
   function toggleReminders() {
-    const payload = appState.takeSnapshot();
-    payload.globalFont = appState.fontFamily;
-    payload.showReminders = !appState.showReminders;
-    payload.targetWindow = appState.windowLabel;
-    emit('req-apply-settings', payload);
+    toggleRemindersShared();
   }
   onMount(() => {
     try { formatOpen = localStorage.getItem('tidy:header:format-open') !== 'false'; } catch {}
@@ -61,24 +58,7 @@
   import { PALETTE, SYM_PAGES } from "../lib/editorConstants.js";
 
   async function handleOpenArchive() {
-    const existingArchive = await WebviewWindow.getByLabel('archive');
-    if (existingArchive) {
-      await existingArchive.show();
-      await existingArchive.setFocus();
-    } else {
-      const win = new WebviewWindow('archive', {
-        url: "index.html",
-        title: "Tidy Task 아카이브",
-        width: 450,
-        height: 550,
-        minWidth: 350,
-        minHeight: 400,
-        decorations: false,
-        transparent: true,
-        resizable: true,
-        center: true
-      });
-    }
+    await openArchiveWindow();
   }
 
 // ── Palette Data (구글 문서 표준 60색) ──────────────────────────────────────
@@ -774,9 +754,11 @@
       <button
         type="button"
         class="dday-header-pill"
+        data-dday-surface="header-pill"
+        data-dday-id={topDday.id}
         onclick={() => appState.openDdayControl({ focusDdayId: topDday.id })}
         onmousedown={(e) => e.preventDefault()}
-        title={`D-Day 컨트롤 (${appState.activeDdays.length}건)`}
+        title={`D-Day 컨트롤 (${appState.activeDdays.length}건 · 우클릭으로 빠른 설정)`}
       >
         <Flag size={10} strokeWidth={2.4} />
         <span class="tnum">{topCounter.label}</span>

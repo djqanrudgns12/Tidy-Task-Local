@@ -101,7 +101,15 @@
 </script>
 
 {#if visible}
-  <div class="b3-wrap" class:compact data-scheme={resolvedDark ? 'dark' : 'light'}>
+  <!-- svelte-ignore a11y_no_static_element_interactions -->
+  <div
+    class="b3-wrap"
+    class:compact
+    data-scheme={resolvedDark ? 'dark' : 'light'}
+    data-dday-surface={compact ? undefined : 'banner'}
+    data-dday-fallback-id={compact ? undefined : (singleItem?.id || bentoPair[0]?.id || resolvedItems[0]?.id || '')}
+    oncontextmenu={(e) => { if (compact) e.preventDefault(); }}
+  >
     {#if effectiveMode === 'single' && singleItem}
       {@const toneColor = resolveToneColor(singleItem.tone, resolvedAccent)}
       {@const counter = computeDdayCounter(singleItem, resolvedToday)}
@@ -109,6 +117,8 @@
       <div
         class="b3-card"
         data-scheme={resolvedDark ? 'dark' : 'light'}
+        data-dday-id={compact ? undefined : singleItem.id}
+        data-dday-surface={compact ? undefined : 'banner'}
         style="--dd-tone: {toneColor}; --dd-accent: {resolvedAccent};"
       >
         <div class="b3-main-row">
@@ -160,6 +170,8 @@
               type="button"
               class="b3-mini-card"
               data-scheme={resolvedDark ? 'dark' : 'light'}
+              data-dday-id={compact ? undefined : item.id}
+              data-dday-surface={compact ? undefined : 'banner'}
               style="--dd-tone: {toneColor};"
               onclick={() => openItem(item.id)}
               title={`${item.title} (${formatDotDate(counter.effectiveDate)})`}

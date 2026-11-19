@@ -32,11 +32,21 @@
   import UpdateGuide from "./components/UpdateGuide.svelte";
   import UpdateInstallOverlay from "./components/UpdateInstallOverlay.svelte";
 
-  import { openMeal } from './lib/meal/mealWindows.js';
+  import { toggleMeal } from './lib/meal/mealWindows.js';
+  import { openTool } from './lib/toolkit/windows.js';
   import { convertFileSrc, invoke } from "@tauri-apps/api/core";
   import { getCurrentWindow } from "@tauri-apps/api/window";
   import { ensureLaunchAtStartup } from "./lib/autostart.js";
-  import { handleSettings } from "./lib/headerWindows.js";
+  import {
+    handleSettings,
+    openArchiveWindow,
+    toggleRemindersShared,
+  } from "./lib/headerWindows.js";
+  import {
+    buildDdayBannerMeta,
+    nextBannerToggleMode,
+    rememberVisibleBannerMode,
+  } from "./lib/windows/contextMenuLayout.js";
   import { applySharedSettings } from "./lib/settings/settingsForm.js";
   import { listen, emit, emitTo } from "@tauri-apps/api/event";
   import { WebviewWindow } from "@tauri-apps/api/webviewWindow";
@@ -88,9 +98,13 @@
   } from './lib/windows/editorContext.js';
   let contextEditor = null;
   let contextTodoId = null;
+  let contextDdayId = null;
+  let contextType = 'bar';
   let contextToken = '';
   let contextSessionDirty = false;
   let contextHistoryTimer = null;
+  /** @type {'single' | 'bento'} */
+  let lastVisibleBannerMode = 'single';
   let unlistenCtxAction;
   let unlistenCtxLiveAction;
 
@@ -109,6 +123,36 @@
       linkedDdayId: linked?.id || null,
       linkedCounter: linked ? computeDdayCounter(linked, appState.todayKey).label : '',
     };
+  }
+
+  /** @param {string | null} ddayId */
+  function buildDdayBannerMetaById(ddayId) {
+    const item = ddayId ? appState.activeDdays.find((d) => d.id === ddayId) : null;
+    if (!item) return null;
+    return buildDdayBannerMeta(item, {
+      todayKey: appState.todayKey,
+      accent: appState.getThemeAccentColor(),
+      bannerMode: appState.ddayBannerMode,
+      bannerCount: appState.bannerDdays.length,
+    });
+  }
+
+  /** @param {MouseEvent} e */
+  function captureDdayBannerMeta(e) {
+    const isTiny = getCurrentWindow().label.startsWith('tinynote-');
+    if (isTiny || !(e.target instanceof Element)) {
+      contextDdayId = null;
+      return null;
+    }
+    const direct = e.target.closest('[data-dday-id][data-dday-surface]');
+    const surface = !direct ? e.target.closest('[data-dday-surface="banner"]') : null;
+    const rawId =
+      direct?.getAttribute('data-dday-id')
+      || surface?.getAttribute('data-dday-fallback-id')
+      || null;
+    const meta = buildDdayBannerMetaById(rawId);
+    contextDdayId = meta ? meta.id : null;
+    return meta;
   }
 
   /** @param {MouseEvent} e */
@@ -136,20 +180,35 @@
       appState.pushToHistory();
     }
 
-    contextEditor = captureEditorContext(e.target, appState.allFonts, {
-      fontFamily: appState.fontFamily,
-      fontSize: appState.fontSize,
-    });
     const isTiny = getCurrentWindow().label.startsWith('tinynote-');
-    const todoMeta = captureTodoMeta(e);
-    const type = isTiny ? 'tiny' : todoMeta ? 'todo' : contextEditor ? 'text' : 'bar';
+    const ddayBannerMeta = captureDdayBannerMeta(e);
+    if (ddayBannerMeta) {
+      contextEditor = null;
+      contextTodoId = null;
+    } else {
+      contextEditor = captureEditorContext(e.target, appState.allFonts, {
+        fontFamily: appState.fontFamily,
+        fontSize: appState.fontSize,
+      });
+    }
+    const todoMeta = ddayBannerMeta ? null : captureTodoMeta(e);
+    const type = isTiny ? 'tiny' : ddayBannerMeta ? 'dday-banner' : todoMeta ? 'todo' : contextEditor ? 'text' : 'bar';
+    const isRichTextEditor = Boolean(
+      contextEditor
+      && !(contextEditor.editor instanceof HTMLInputElement || contextEditor.editor instanceof HTMLTextAreaElement)
+    );
+    lastVisibleBannerMode = rememberVisibleBannerMode(appState.ddayBannerMode, lastVisibleBannerMode);
+    contextType = type;
     contextToken = crypto.randomUUID();
     contextSessionDirty = false;
 
     // 메뉴를 띄울 화면 좌표를 "물리 픽셀"로 계산합니다.
     // 왜: 배율이 다른 모니터에서는 논리 좌표의 기준이 창마다 달라, 메뉴가 엉뚱한 곳(화면 밖)에 떴습니다.
-    const scaleFactor = await getCurrentWindow().scaleFactor();
-    const pos = await getCurrentWindow().innerPosition();
+    const [scaleFactor, pos, mealWin] = await Promise.all([
+      getCurrentWindow().scaleFactor(),
+      getCurrentWindow().innerPosition(),
+      type === 'bar' ? WebviewWindow.getByLabel('meal').catch(() => null) : Promise.resolve(null),
+    ]);
     const anchor = !e.clientX && !e.clientY && e.target instanceof Element ? e.target.getBoundingClientRect() : null;
     const screenX = Math.round(pos.x + (anchor ? anchor.left + 8 : e.clientX) * scaleFactor);
     const screenY = Math.round(pos.y + (anchor ? anchor.top + 24 : e.clientY) * scaleFactor);
@@ -168,18 +227,25 @@
           uiFontSize: appState.uiFontSize,
           showArchived: appState.showArchived,
           showNotes: appState.showNotes,
+          showReminders: appState.showReminders,
           isEditMode: appState.isEditMode,
           isPinned: appState.isPinned,
           isRolledUp: appState.isRolledUp,
           isFullscreen: appState.isFullscreen,
           hasEditor: !!contextEditor,
+          isRichTextEditor,
           hasSelection: !!contextEditor?.hasSelection,
           selectionFormat: contextEditor?.selectionFormat || null,
           fonts: appState.allFonts.map((f) => ({ name: f.name, family: f.family })),
           maxFontPt: isTiny ? Infinity : STABLE_MAX_PT,
           canUndo: appState.canUndo,
           canRedo: appState.canRedo,
+          activeDdayCount: appState.activeDdays.length,
+          bannerDdayCount: appState.bannerDdays.length,
+          ddayBannerMode: appState.ddayBannerMode,
+          mealOpen: Boolean(mealWin),
           todoMeta,
+          ddayBannerMeta,
         },
         requester: getCurrentWindow().label
       });
@@ -1006,10 +1072,30 @@
         else if (action === 'toggle-edit') appState.toggleEditMode();
         else if (action === 'spawn-window') appState.spawnNewWindow();
         else if (action === 'spawn-tiny') appState.spawnTinyNote();
-        else if (action === 'open-meal') await openMeal();
+        else if (action === 'open-meal') await toggleMeal();
+        else if (action === 'open-archive') await openArchiveWindow();
+        else if (action === 'open-dday-control') void appState.openDdayControl({ initialTab: 'list' });
+        else if (action === 'open-dday-widget') await openTool('dday-widget');
         else if (action === 'open-toolkit') await invoke('toolkit_open', { role: 'toolkit-summon' });
         else if (action === 'toggle-archived') { appState.showArchived = !appState.showArchived; appState.save(); }
         else if (action === 'toggle-notes') { appState.showNotes = !appState.showNotes; appState.save(); }
+        else if (action === 'dday-open-control') {
+          void appState.openDdayControl({ focusDdayId: contextDdayId });
+        }
+        else if (action === 'dday-edit' && contextDdayId) {
+          void appState.openDdayControl({ editDdayId: contextDdayId });
+        }
+        else if (action === 'dday-create') {
+          void appState.openDdayControl({ openCreate: true });
+        }
+        else if (action === 'dday-complete' && contextDdayId) {
+          appState.pushToHistory();
+          await appState.applyDdayCommand('complete', { ddayId: contextDdayId });
+        }
+        else if (action === 'dday-delete' && contextDdayId) {
+          appState.pushToHistory();
+          await appState.applyDdayCommand('delete', { ddayId: contextDdayId, deleteLinkedTodo: false });
+        }
         else if (action === 'todo-pin-dday' && contextTodoId) {
           const t = appState.todos.find((item) => item.id === contextTodoId);
           if (t) {
@@ -1148,6 +1234,96 @@
               canRedo: appState.canRedo,
             },
           }).catch(() => {});
+        } else if (payload.kind === 'toggle') {
+          const act = payload.action;
+          if (act === 'dday-channel' && contextDdayId) {
+            const ch = payload.value?.channel;
+            const target = appState.activeDdays.find((d) => d.id === contextDdayId);
+            if (!target || !['showInTodo', 'showInBanner', 'showInWidget'].includes(ch)) return;
+            // showInTodo 해제 시 연결된 할 일이 제거되므로, 실행 취소(↩)로 100% 원복되도록 직전 스냅샷을 남깁니다.
+            appState.pushToHistory();
+            await appState.applyDdayCommand('update', {
+              ddayId: contextDdayId,
+              patch: { [ch]: !target[ch] },
+            });
+            void emitTo('ctx-menu', 'ctx-state-synced', {
+              token: contextToken,
+              patch: {
+                ddayBannerMeta: buildDdayBannerMetaById(contextDdayId),
+                activeDdayCount: appState.activeDdays.length,
+                bannerDdayCount: appState.bannerDdays.length,
+                canUndo: appState.canUndo,
+                canRedo: appState.canRedo,
+              },
+            }).catch(() => {});
+          } else if (act === 'dday-banner-mode') {
+            const nextMode = payload.value;
+            if (!['single', 'bento', 'hidden'].includes(nextMode)) return;
+            lastVisibleBannerMode = rememberVisibleBannerMode(nextMode, lastVisibleBannerMode);
+            await appState.setDdayBannerMode(nextMode);
+            void emitTo('ctx-menu', 'ctx-state-synced', {
+              token: contextToken,
+              patch: {
+                ddayBannerMode: appState.ddayBannerMode,
+                ddayBannerMeta: contextDdayId ? buildDdayBannerMetaById(contextDdayId) : null,
+              },
+            }).catch(() => {});
+          } else if (act === 'toggle-reminders') {
+            const nextVal = toggleRemindersShared(payload.value);
+            void emitTo('ctx-menu', 'ctx-state-synced', {
+              token: contextToken,
+              patch: { showReminders: nextVal },
+            }).catch(() => {});
+          } else if (act === 'toggle-archived') {
+            appState.showArchived = !appState.showArchived;
+            appState.save();
+            void emitTo('ctx-menu', 'ctx-state-synced', {
+              token: contextToken,
+              patch: { showArchived: appState.showArchived },
+            }).catch(() => {});
+          } else if (act === 'toggle-notes') {
+            appState.showNotes = !appState.showNotes;
+            appState.save();
+            void emitTo('ctx-menu', 'ctx-state-synced', {
+              token: contextToken,
+              patch: { showNotes: appState.showNotes },
+            }).catch(() => {});
+          } else if (act === 'toggle-banner') {
+            lastVisibleBannerMode = rememberVisibleBannerMode(appState.ddayBannerMode, lastVisibleBannerMode);
+            const nextMode = nextBannerToggleMode(appState.ddayBannerMode, lastVisibleBannerMode);
+            await appState.setDdayBannerMode(nextMode);
+            void emitTo('ctx-menu', 'ctx-state-synced', {
+              token: contextToken,
+              patch: { ddayBannerMode: appState.ddayBannerMode },
+            }).catch(() => {});
+          } else if (act === 'toggle-edit') {
+            appState.toggleEditMode();
+            void emitTo('ctx-menu', 'ctx-state-synced', {
+              token: contextToken,
+              patch: { isEditMode: appState.isEditMode },
+            }).catch(() => {});
+          } else if (act === 'tiny-pin') {
+            appState.isPinned = !appState.isPinned;
+            await currentWindow.setAlwaysOnTop(appState.isPinned).catch(() => {});
+            appState.save();
+            void emitTo('ctx-menu', 'ctx-state-synced', {
+              token: contextToken,
+              reassertTop: appState.isPinned,
+              patch: { isPinned: appState.isPinned },
+            }).catch(() => {});
+          } else if (act === 'tiny-theme') {
+            appState.pushToHistory();
+            appState.cycleTinyNoteTheme();
+            void emitTo('ctx-menu', 'ctx-state-synced', {
+              token: contextToken,
+              patch: {
+                themeColor: appState.themeColor,
+                isDarkMode: appState.isDarkMode,
+                canUndo: appState.canUndo,
+                canRedo: appState.canRedo,
+              },
+            }).catch(() => {});
+          }
         } else if (payload.kind === 'history') {
           if (contextHistoryTimer) {
             clearTimeout(contextHistoryTimer);
@@ -1157,9 +1333,10 @@
           if (payload.action === 'undo') await appState.undo();
           else if (payload.action === 'redo') await appState.redo();
 
-          // Undo로 해당 할 일이 사라졌으면 메뉴를 안전하게 닫습니다.
-          const refreshedMeta = contextTodoId ? buildTodoMetaById(contextTodoId) : null;
-          if (contextTodoId && !refreshedMeta) {
+          // Undo로 해당 할 일이나 D-Day 항목이 사라졌으면 메뉴를 안전하게 닫습니다.
+          const refreshedTodo = contextTodoId ? buildTodoMetaById(contextTodoId) : null;
+          const refreshedDday = contextDdayId ? buildDdayBannerMetaById(contextDdayId) : null;
+          if ((contextType === 'todo' && contextTodoId && !refreshedTodo) || (contextType === 'dday-banner' && contextDdayId && !refreshedDday)) {
             contextEditor = null;
             void emitTo('ctx-menu', 'ctx-state-synced', { token: contextToken, close: true }).catch(() => {});
             return;
@@ -1175,7 +1352,14 @@
             patch: {
               canUndo: appState.canUndo,
               canRedo: appState.canRedo,
-              todoMeta: refreshedMeta,
+              themeColor: appState.themeColor,
+              isDarkMode: appState.isDarkMode,
+              todoMeta: refreshedTodo,
+              ddayBannerMeta: refreshedDday,
+              activeDdayCount: appState.activeDdays.length,
+              bannerDdayCount: appState.bannerDdays.length,
+              showArchived: appState.showArchived,
+              showNotes: appState.showNotes,
               hasSelection: false,
               selectionFormat: null,
             },

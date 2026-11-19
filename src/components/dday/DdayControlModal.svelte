@@ -4,26 +4,25 @@
   import { emit, listen } from '@tauri-apps/api/event';
   import { getCurrentWindow } from '@tauri-apps/api/window';
   import {
-    Archive,
     Check,
     Flag,
     LayoutGrid,
-    ListTodo,
     PanelTop,
-    Pencil,
     Plus,
-    Trash2,
     X,
   } from 'lucide-svelte';
   import { dragRegion } from '../../lib/dragRegion.js';
-  import { getThemeAccent } from '../../lib/themes.js';
+  import { getThemeAccent, getTidyTheme } from '../../lib/themes.js';
   import { openTool } from '../../lib/toolkit/windows.js';
   import {
+    computeDdayCounter,
     normalizeDdaySettings,
     normalizeDdayWidgetPrefs,
     stripHtmlToTitle,
     todayDateKey,
   } from '../../lib/dday/ddayModel.js';
+  import { formatDeadlineChip } from '../../lib/editor/richTextFormat.js';
+  import { resolveMenuWidth } from '../../lib/windows/contextMenuLayout.js';
   import {
     DDAY_EVENTS,
     collectAllNoteWindowsDdays,
@@ -32,6 +31,10 @@
     dispatchDdayCommand,
     subscribeDdayStore,
   } from '../../lib/dday/ddaySync.js';
+  import ContextRibbonHeader from '../context-menu/ContextRibbonHeader.svelte';
+  import ContextSegmentRow from '../context-menu/ContextSegmentRow.svelte';
+  import ContextTileGrid from '../context-menu/ContextTileGrid.svelte';
+  import '../context-menu/ctxTokens.css';
   import DdayBanner from './DdayBanner.svelte';
   import DdayRowCard from './DdayRowCard.svelte';
   import DdayEditSheet from './DdayEditSheet.svelte';
@@ -119,8 +122,120 @@
   // 컨텍스트 메뉴가 열려 있는 동안 최신 항목 상태로 유지
   const activeContextItem = $derived.by(() => {
     if (!contextMenu) return null;
-    return activeItems.find((d) => d.id === contextMenu?.item.id) || contextMenu.item;
+    return activeItems.find((d) => d.id === contextMenu?.item.id) || null;
   });
+  const ctxSurface = $derived(dark ? '#242730' : (getTidyTheme(themeColor)?.tidy?.bg || '#ffffff'));
+  const ctxWidth = $derived(resolveMenuWidth('ctrl-ctx', uiFontSize));
+
+  // 삭제·아카이브된 항목으로 편집 진입 시 빈 편집 상태에 머물지 않도록 목록으로 복귀합니다.
+  $effect(() => {
+    if (subView === 'edit' && editingDdayId && windows.length > 0 && !editingItem) {
+      subView = 'main';
+      editingDdayId = null;
+    }
+  });
+  const activeContextCounter = $derived(
+    activeContextItem ? computeDdayCounter(activeContextItem, todayKey) : null,
+  );
+  const activeContextShortDate = $derived(
+    activeContextCounter ? formatDeadlineChip(activeContextCounter.effectiveDate) : '',
+  );
+  const activeContextChannelOptions = $derived.by(() => {
+    if (!activeContextItem) return [];
+    const item = activeContextItem;
+    return [
+      {
+        id: 'showInTodo',
+        label: '할 일',
+        active: Boolean(item.showInTodo),
+        title: item.showInTodo ? '할 일 목록에서 숨기기' : '할 일 목록에 표시',
+        onclick: () => { void handleToggleChannel(item.id, 'showInTodo', !item.showInTodo); },
+      },
+      {
+        id: 'showInBanner',
+        label: '배너',
+        active: Boolean(item.showInBanner),
+        title: item.showInBanner ? '메모 상단 배너에서 숨기기' : '메모 상단 배너에 표시',
+        onclick: () => { void handleToggleChannel(item.id, 'showInBanner', !item.showInBanner); },
+      },
+      {
+        id: 'showInWidget',
+        label: '위젯',
+        active: Boolean(item.showInWidget),
+        title: item.showInWidget ? '툴킷 D-Day 위젯에서 숨기기' : '툴킷 D-Day 위젯에 표시',
+        onclick: () => { void handleToggleChannel(item.id, 'showInWidget', !item.showInWidget); },
+      },
+    ];
+  });
+  const activeContextTiles = $derived.by(() => {
+    if (!activeContextItem) return [];
+    const item = activeContextItem;
+    const isLinked = item.linkedTodoId !== null;
+    return [
+      {
+        id: 'edit',
+        icon: /** @type {const} */ ('pencil'),
+        label: '편집',
+        tone: /** @type {const} */ ('sky'),
+        title: '상세 편집',
+        onclick: () => {
+          editingDdayId = item.id;
+          subView = 'edit';
+          contextMenu = null;
+        },
+      },
+      {
+        id: 'complete',
+        icon: /** @type {const} */ ('checkCircle'),
+        label: '완료',
+        tone: /** @type {const} */ ('ok'),
+        title: '완료 처리 (아카이브)',
+        onclick: () => {
+          void handleComplete(item.id);
+          contextMenu = null;
+        },
+      },
+      {
+        id: 'delete',
+        icon: isLinked ? /** @type {const} */ ('pinOff') : /** @type {const} */ ('trash'),
+        label: isLinked ? '고정 해제' : '삭제',
+        tone: /** @type {const} */ ('danger'),
+        title: isLinked ? 'D-Day 고정만 해제 (할 일 유지)' : 'D-Day 영구 삭제',
+        onclick: () => {
+          const id = item.id;
+          const hadTodo = item.linkedTodoId !== null;
+          contextMenu = null;
+          void sendCommand('delete', { ddayId: id, deleteLinkedTodo: false }).then(() => {
+            showNotice(hadTodo ? '할 일은 남기고 D-Day만 해제했어요' : 'D-Day를 삭제했어요');
+          });
+        },
+      },
+    ];
+  });
+
+  // 컨텍스트 메뉴 안에서도 방향키·Tab·Home·End 탐색을 지원합니다.
+  /** @param {KeyboardEvent} e */
+  function handleContextKeydown(e) {
+    if (!ctxEl) return;
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      e.stopPropagation();
+      contextMenu = null;
+      return;
+    }
+    const buttons = /** @type {HTMLButtonElement[]} */ ([...ctxEl.querySelectorAll('button:not(:disabled)')]);
+    if (!buttons.length) return;
+    const idx = buttons.indexOf(/** @type {HTMLButtonElement} */ (document.activeElement));
+    let next;
+    if (e.key === 'ArrowDown' || (e.key === 'Tab' && !e.shiftKey)) next = (idx + 1) % buttons.length;
+    else if (e.key === 'ArrowUp' || (e.key === 'Tab' && e.shiftKey)) next = (idx - 1 + buttons.length) % buttons.length;
+    else if (e.key === 'Home') next = 0;
+    else if (e.key === 'End') next = buttons.length - 1;
+    if (next !== undefined) {
+      e.preventDefault();
+      buttons[next].focus();
+    }
+  }
 
   /** @param {string} label @param {import('../../lib/dday/ddaySync.js').DdayWindowSnapshot | undefined} nextSnap */
   function mergeSnapshot(label, nextSnap) {
@@ -141,12 +256,17 @@
     return res;
   }
 
-  /** @param {{ targetLabel?: string, focusDdayId?: string | null, initialTab?: 'list'|'settings'|'archive', openCreate?: boolean }} payload */
+  /** @param {{ targetLabel?: string, focusDdayId?: string | null, editDdayId?: string | null, initialTab?: 'list'|'settings'|'archive', openCreate?: boolean }} payload */
   function applyTargetPayload(payload) {
     if (!payload) return;
     if (payload.targetLabel) targetLabel = payload.targetLabel;
     if (payload.focusDdayId !== undefined) focusDdayId = payload.focusDdayId;
-    if (payload.openCreate) {
+    if (payload.editDdayId) {
+      activeTab = 'list';
+      focusDdayId = payload.editDdayId;
+      editingDdayId = payload.editDdayId;
+      subView = 'edit';
+    } else if (payload.openCreate) {
       activeTab = 'list';
       editingDdayId = null;
       subView = 'create';
@@ -158,6 +278,7 @@
       subView = 'main';
     } else {
       activeTab = 'list';
+      editingDdayId = null;
       subView = 'main';
     }
     contextMenu = null;
@@ -618,107 +739,34 @@
       ></div>
       <div
         bind:this={ctxEl}
-        class="ctrl-ctx"
+        class="ctrl-ctx ctx-pocket"
+        class:dark={dark}
+        data-scheme={dark ? 'dark' : 'light'}
         role="menu"
+        tabindex="-1"
         aria-label={`${activeContextItem.title} 빠른 메뉴`}
-        style="left: {contextMenu.x}px; top: {contextMenu.y}px;"
+        onkeydown={handleContextKeydown}
+        oncontextmenu={(e) => e.preventDefault()}
+        style="left: {contextMenu.x}px; top: {contextMenu.y}px; --surface: {ctxSurface}; --accent: {accent}; --ctx-width: {ctxWidth}px; font-size: {Math.max(9, uiFontSize)}pt;"
       >
-        <button
-          type="button"
-          role="menuitemcheckbox"
-          aria-checked={activeContextItem.showInTodo}
-          class="ctrl-ctx-item"
-          onclick={() => {
-            void handleToggleChannel(activeContextItem.id, 'showInTodo', !activeContextItem.showInTodo);
-            contextMenu = null;
-          }}
-        >
-          <ListTodo size={13} />
-          <span>할 일 목록에 표시</span>
-          <span class="ctrl-ctx-check" class:on={activeContextItem.showInTodo}>
-            {#if activeContextItem.showInTodo}<Check size={11} strokeWidth={2.8} />{/if}
-          </span>
-        </button>
+        <ContextRibbonHeader
+          leftChip={activeContextCounter?.label || 'D-Day'}
+          leftSolid={true}
+          title={activeContextItem.title}
+          emptyTitle="D-Day"
+          rightMeta={activeContextShortDate}
+        />
 
-        <button
-          type="button"
-          role="menuitemcheckbox"
-          aria-checked={activeContextItem.showInBanner}
-          class="ctrl-ctx-item"
-          onclick={() => {
-            void handleToggleChannel(activeContextItem.id, 'showInBanner', !activeContextItem.showInBanner);
-            contextMenu = null;
-          }}
-        >
-          <PanelTop size={13} />
-          <span>메모 상단 배너에 표시</span>
-          <span class="ctrl-ctx-check" class:on={activeContextItem.showInBanner}>
-            {#if activeContextItem.showInBanner}<Check size={11} strokeWidth={2.8} />{/if}
-          </span>
-        </button>
+        <div class="ctrl-ctx-ch-card" role="group" aria-label="표시 위치 토글">
+          <ContextSegmentRow
+            label="표시"
+            mode="multi"
+            options={activeContextChannelOptions}
+            ariaLabel="표시 위치"
+          />
+        </div>
 
-        <button
-          type="button"
-          role="menuitemcheckbox"
-          aria-checked={activeContextItem.showInWidget}
-          class="ctrl-ctx-item"
-          onclick={() => {
-            void handleToggleChannel(activeContextItem.id, 'showInWidget', !activeContextItem.showInWidget);
-            contextMenu = null;
-          }}
-        >
-          <LayoutGrid size={13} />
-          <span>툴킷 D-Day 위젯에 표시</span>
-          <span class="ctrl-ctx-check" class:on={activeContextItem.showInWidget}>
-            {#if activeContextItem.showInWidget}<Check size={11} strokeWidth={2.8} />{/if}
-          </span>
-        </button>
-
-        <div class="ctrl-ctx-sep" role="separator"></div>
-
-        <button
-          type="button"
-          role="menuitem"
-          class="ctrl-ctx-item"
-          onclick={() => {
-            editingDdayId = activeContextItem.id;
-            subView = 'edit';
-            contextMenu = null;
-          }}
-        >
-          <Pencil size={13} />
-          <span>상세 편집</span>
-        </button>
-
-        <button
-          type="button"
-          role="menuitem"
-          class="ctrl-ctx-item"
-          onclick={() => {
-            void handleComplete(activeContextItem.id);
-            contextMenu = null;
-          }}
-        >
-          <Archive size={13} />
-          <span>완료 처리 (아카이브)</span>
-        </button>
-
-        <button
-          type="button"
-          role="menuitem"
-          class="ctrl-ctx-item danger"
-          onclick={() => {
-            const id = activeContextItem.id;
-            const hadTodo = activeContextItem.linkedTodoId !== null;
-            contextMenu = null;
-            void sendCommand('delete', { ddayId: id, deleteLinkedTodo: false }).then(() => {
-              showNotice(hadTodo ? '할 일은 남기고 D-Day만 해제했어요' : 'D-Day를 삭제했어요');
-            });
-          }}
-        >
-          <Trash2 size={13} />
-          <span>{activeContextItem.linkedTodoId ? 'D-Day 고정만 해제' : 'D-Day 영구 삭제'}</span>
-        </button>
+        <ContextTileGrid tiles={activeContextTiles} ariaLabel="D-Day 빠른 동작" />
       </div>
     {/if}
   </div>
@@ -1231,84 +1279,16 @@
   .ctrl-ctx {
     position: absolute;
     z-index: 50;
-    width: 214px;
-    padding: 5px;
-    border-radius: 13px;
-    background: #ffffff;
-    border: 1px solid rgba(15, 23, 42, 0.12);
-    box-shadow: 0 12px 28px rgba(15, 23, 42, 0.22);
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
+    box-shadow: 0 12px 28px rgba(15, 23, 42, 0.22), inset 0 1px 0 var(--ctx-inset);
   }
   .ctrl-shell[data-scheme='dark'] .ctrl-ctx {
-    background: #272c38;
-    border-color: rgba(255, 255, 255, 0.14);
-    box-shadow: 0 14px 32px rgba(0, 0, 0, 0.48);
+    box-shadow: 0 14px 32px rgba(0, 0, 0, 0.50), inset 0 1px 0 var(--ctx-inset);
   }
-  .ctrl-ctx-item {
-    width: 100%;
-    height: 30px;
-    padding: 0 9px;
-    border: 0;
-    border-radius: 8px;
-    background: transparent;
-    color: #1e2430;
-    font: inherit;
-    font-size: 11.5px;
-    font-weight: 600;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    text-align: left;
-    white-space: nowrap;
-    outline: none;
-    cursor: pointer;
-  }
-  .ctrl-ctx-item:hover {
-    background: rgba(15, 23, 42, 0.06);
-  }
-  .ctrl-ctx-item:focus-visible {
-    outline: 2px solid var(--dd-accent);
-    outline-offset: -2px;
-    background: rgba(15, 23, 42, 0.06);
-  }
-  .ctrl-ctx-item.danger {
-    color: #e11d48;
-  }
-  .ctrl-ctx-item.danger:hover {
-    background: rgba(225, 29, 72, 0.1);
-  }
-  .ctrl-shell[data-scheme='dark'] .ctrl-ctx-item {
-    color: #f1f5f9;
-  }
-  .ctrl-shell[data-scheme='dark'] .ctrl-ctx-item:hover {
-    background: rgba(255, 255, 255, 0.08);
-  }
-  .ctrl-shell[data-scheme='dark'] .ctrl-ctx-item.danger {
-    color: #fda4af;
-  }
-
-  .ctrl-ctx-check {
-    margin-left: auto;
-    width: 16px;
-    height: 16px;
-    border-radius: 50%;
-    display: grid;
-    place-items: center;
-    color: #94a3b8;
-  }
-  .ctrl-ctx-check.on {
-    background: color-mix(in srgb, var(--dd-accent) 16%, transparent);
-    color: var(--dd-accent);
-  }
-
-  .ctrl-ctx-sep {
-    height: 1px;
-    margin: 3px 6px;
-    background: rgba(15, 23, 42, 0.08);
-  }
-  .ctrl-shell[data-scheme='dark'] .ctrl-ctx-sep {
-    background: rgba(255, 255, 255, 0.1);
+  .ctrl-ctx-ch-card {
+    padding: 4px;
+    margin-bottom: 5px;
+    border-radius: var(--ctx-radius-card, 8px);
+    background: var(--ctx-field);
+    border: 1px solid var(--ctx-line);
   }
 </style>

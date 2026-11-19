@@ -11,14 +11,16 @@
   import { BUILTIN_FONTS } from '../lib/builtinFonts.js';
   import { STABLE_MAX_PT } from '../lib/fontSize.js';
   import { computeMenuBounds } from '../lib/editor/richTextFormat.js';
+  import { resolveMenuWidth } from '../lib/windows/contextMenuLayout.js';
   import { CONTEXT_DUOTONE_ICONS } from '../lib/contextMenuIcons.js';
   import ContextFormatBar from './context-menu/ContextFormatBar.svelte';
+  import DdayBannerContextView from './context-menu/DdayBannerContextView.svelte';
+  import BarQuickContextView from './context-menu/BarQuickContextView.svelte';
+  import TextMemoContextView from './context-menu/TextMemoContextView.svelte';
+  import TinyNoteContextView from './context-menu/TinyNoteContextView.svelte';
   import './context-menu/ctxTokens.css';
   import {
-    Undo2, Redo2, Pencil, Check, Download, Upload, Settings2, CircleHelp,
-    PanelsTopLeft, Utensils, CopyPlus, StickyNote, Archive, NotebookPen,
-    Omega, Scissors, Copy, ClipboardPaste, TextSelect, Pin, Palette,
-    ChevronUp, ChevronDown, PinOff,
+    Undo2, Redo2, Omega, Scissors, Copy, ClipboardPaste, PinOff,
   } from 'lucide-svelte';
 
   let {
@@ -33,14 +35,31 @@
 
   let type = $state('bar');
   let config = $state({
-    themeColor: 'amber', isDarkMode: false, showArchived: true, showNotes: true,
-    isEditMode: false, isPinned: false, isRolledUp: false, isFullscreen: false,
-    hasEditor: false, hasSelection: false,
-    canUndo: true, canRedo: false,
+    themeColor: 'amber',
+    isDarkMode: false,
+    uiFontFamily: '메이플스토리 L',
+    uiFontSize: 10,
+    showArchived: true,
+    showNotes: true,
+    showReminders: true,
+    isEditMode: false,
+    isPinned: false,
+    isRolledUp: false,
+    isFullscreen: false,
+    hasEditor: false,
+    isRichTextEditor: true,
+    hasSelection: false,
+    canUndo: true,
+    canRedo: false,
     maxFontPt: STABLE_MAX_PT,
     fonts: BUILTIN_FONTS,
     selectionFormat: null,
     todoMeta: null,
+    ddayBannerMeta: null,
+    activeDdayCount: 0,
+    bannerDdayCount: 0,
+    ddayBannerMode: 'single',
+    mealOpen: false,
   });
   let visible = $state(false);
   let menuRef = $state(null);
@@ -49,7 +68,7 @@
   let sessionToken = $state('');
   let maxHeight = $state(760);
 
-  // 동적 리사이즈(인라인 드로어 개폐) 시 원래 앵커 좌표와 모니터 작업영역으로 경계를 유지합니다.
+  // 동적 리사이즈(인라인 드로어 개폐·힌트 표시) 시 원래 앵커 좌표와 모니터 작업영역으로 경계를 유지합니다.
   let anchorX = 0;
   let anchorY = 0;
   let activeMonitor = null;
@@ -58,14 +77,14 @@
   let lastSizedH = 0;
   let resizeFrame = 0;
 
-  const todoMenuWidth = $derived((config.uiFontSize || 10) >= 12 ? 236 : 220);
-
-  const launchers = [
-    { action: 'open-toolkit', label: 'Tidy 툴킷 열기', icon: PanelsTopLeft },
-    { action: 'open-meal', label: '급식창 열기', icon: Utensils },
-    { action: 'spawn-window', label: '새 Tidy Task 노트', icon: CopyPlus },
-    { action: 'spawn-tiny', label: '새 Tiny Note', icon: StickyNote },
-  ];
+  const menuWidth = $derived(resolveMenuWidth(type, config.uiFontSize || 10));
+  const menuAriaLabel = $derived(
+    type === 'todo' ? '할 일 메뉴'
+      : type === 'dday-banner' ? 'D-Day 메뉴'
+      : type === 'tiny' ? 'Tiny Note 메뉴'
+      : type === 'text' ? '메모 편집 메뉴'
+      : 'Tidy Task 빠른 메뉴'
+  );
 
   async function syncStandaloneBounds(force = false) {
     if (!isStandalone || !visible || !menuRef) return;
@@ -110,7 +129,8 @@
     if (preview) {
       const params = new URLSearchParams(location.search);
       const isDragPreview = params.has('drag') || previewConfig.hasSelection;
-      const isLinkedPreview = params.has('dday');
+      const isLinkedPreview = params.has('dday') || params.get('linked') !== '0';
+      const bannerCnt = Number(params.get('count')) || 3;
       const sampleTodo = previewType === 'todo'
         ? {
             id: 'demo-t1',
@@ -119,8 +139,25 @@
             deadlineLabel: '11.17 (화)',
             deadlineChip: '11.17',
             deadlineTone: 'soon',
-            linkedDdayId: isLinkedPreview ? 'demo-d1' : null,
-            linkedCounter: isLinkedPreview ? 'D-2' : '',
+            linkedDdayId: params.has('dday') ? 'demo-d1' : null,
+            linkedCounter: params.has('dday') ? 'D-2' : '',
+          }
+        : null;
+      const sampleDday = previewType === 'dday-banner'
+        ? {
+            id: 'demo-d1',
+            title: 'AI 동아리 운영일지·강사비 기안',
+            counterLabel: 'D-6',
+            counterState: 'upcoming',
+            shortDate: '11.25',
+            fullDateLabel: '11.25 (수)',
+            toneColor: '#4f46e5',
+            linkedTodoId: isLinkedPreview ? 'demo-t1' : null,
+            showInTodo: true,
+            showInBanner: true,
+            showInWidget: true,
+            bannerMode: params.get('mode') || 'single',
+            bannerCount: bannerCnt,
           }
         : null;
       type = previewType;
@@ -130,10 +167,17 @@
         uiFontFamily: '메이플스토리 L',
         uiFontSize: Number(params.get('uifont')) || 10,
         hasEditor: true,
+        isRichTextEditor: !params.has('plain'),
         hasSelection: Boolean(isDragPreview),
         canUndo: true,
         canRedo: true,
+        maxFontPt: previewType === 'tiny' ? Infinity : STABLE_MAX_PT,
         fonts: BUILTIN_FONTS,
+        activeDdayCount: bannerCnt,
+        bannerDdayCount: bannerCnt,
+        ddayBannerMode: params.get('mode') || 'single',
+        showReminders: true,
+        isPinned: previewType === 'tiny',
         selectionFormat: isDragPreview
           ? {
               fontFamily: '메이플스토리 L',
@@ -148,6 +192,7 @@
             }
           : null,
         todoMeta: sampleTodo,
+        ddayBannerMeta: sampleDday,
         ...previewConfig,
         isDarkMode: previewDark,
       };
@@ -173,9 +218,15 @@
         config = {
           ...config,
           fonts: BUILTIN_FONTS,
-          maxFontPt: STABLE_MAX_PT,
+          isRichTextEditor: true,
           selectionFormat: null,
+          todoMeta: null,
+          ddayBannerMeta: null,
           ...state,
+          // JSON 직렬화로 Infinity가 null이 되어도 Tiny Note 상한 무제한 정책을 보존합니다.
+          maxFontPt: typeof state?.maxFontPt === 'number' && Number.isFinite(state.maxFontPt)
+            ? state.maxFontPt
+            : (payload.type === 'tiny' ? Infinity : STABLE_MAX_PT),
         };
         requesterLabel = requester;
         sessionToken = token || '';
@@ -216,7 +267,7 @@
       register(offPing);
     });
 
-    // 데이터 창에서 실시간 서식·히스토리 변경 결과를 돌려받아 메뉴 상태를 동기화합니다.
+    // 데이터 창에서 실시간 서식·토글·히스토리 변경 결과를 돌려받아 메뉴 상태를 동기화합니다.
     getCurrentWindow().listen('ctx-state-synced', ({ payload }) => {
       if (!payload || !visible) return;
       if (sessionToken && payload.token && payload.token !== sessionToken) return;
@@ -226,6 +277,9 @@
       }
       if (payload.patch && typeof payload.patch === 'object') {
         config = { ...config, ...payload.patch };
+      }
+      if (payload.reassertTop && isStandalone) {
+        void getCurrentWindow().setAlwaysOnTop(true).catch(() => {});
       }
     }).then(register);
 
@@ -254,11 +308,9 @@
     }
   }
 
-  /** 메뉴를 닫지 않고 서식·기록을 실시간 반영하는 양방향 IPC 액션 */
-  async function triggerLiveAction(detail) {
-    const payload = { token: sessionToken, ...detail };
-    onliveaction?.(payload);
-    if (preview && detail.kind === 'format') {
+  /** 개발 프리뷰 모드에서 토글·서식 동작을 즉시 눈으로 확인할 수 있도록 로컬 상태를 시뮬레이션합니다. */
+  function applyPreviewLiveAction(detail) {
+    if (detail.kind === 'format') {
       const cur = config.selectionFormat || {
         fontFamily: '메이플스토리 L', fontSize: 10, isBold: false, isItalic: false,
         isUnderline: false, textColor: '', bgColor: '', isMixedFont: false, isMixedSize: false,
@@ -272,7 +324,40 @@
       else if (detail.op === 'color') next.textColor = detail.value || '';
       else if (detail.op === 'bg') next.bgColor = detail.value || '';
       config = { ...config, selectionFormat: next };
+    } else if (detail.kind === 'toggle') {
+      if (detail.action === 'dday-channel' && config.ddayBannerMeta) {
+        const ch = detail.value?.channel;
+        if (ch) {
+          config = {
+            ...config,
+            ddayBannerMeta: { ...config.ddayBannerMeta, [ch]: !config.ddayBannerMeta[ch] },
+          };
+        }
+      } else if (detail.action === 'dday-banner-mode' && config.ddayBannerMeta) {
+        config = {
+          ...config,
+          ddayBannerMeta: { ...config.ddayBannerMeta, bannerMode: detail.value },
+        };
+      } else if (detail.action === 'toggle-archived') config = { ...config, showArchived: !config.showArchived };
+      else if (detail.action === 'toggle-notes') config = { ...config, showNotes: !config.showNotes };
+      else if (detail.action === 'toggle-banner') {
+        config = { ...config, ddayBannerMode: config.ddayBannerMode === 'hidden' ? 'single' : 'hidden' };
+      } else if (detail.action === 'toggle-reminders') config = { ...config, showReminders: !config.showReminders };
+      else if (detail.action === 'toggle-edit') config = { ...config, isEditMode: !config.isEditMode };
+      else if (detail.action === 'tiny-pin') config = { ...config, isPinned: !config.isPinned };
+      else if (detail.action === 'tiny-theme') {
+        const order = ['amber', 'blue', 'green', 'rose', 'purple', 'periwinkle'];
+        const idx = order.indexOf(config.themeColor);
+        config = { ...config, themeColor: order[(idx + 1) % order.length] };
+      }
     }
+  }
+
+  /** 메뉴를 닫지 않고 서식·토글·기록을 실시간 반영하는 양방향 IPC 액션 */
+  async function triggerLiveAction(detail) {
+    const payload = { token: sessionToken, ...detail };
+    onliveaction?.(payload);
+    if (preview) applyPreviewLiveAction(detail);
     if (isStandalone) {
       const target = requesterLabel;
       if (target) await emitTo(target, 'ctx-live-action', payload);
@@ -304,13 +389,6 @@
   }
 </script>
 
-{#snippet item(action, label, Icon, checked = undefined, disabled = false)}
-  <button class="item" {disabled} role={checked === undefined ? 'menuitem' : 'menuitemcheckbox'} aria-checked={checked} onclick={() => triggerAction(action)}>
-    <Icon size={17} strokeWidth={1.7} /><span>{label}</span>
-    {#if checked !== undefined}<span class="state" class:active={checked}>{#if checked}<Check size={13} />{:else}<span class="off-dot"></span>{/if}</span>{/if}
-  </button>
-{/snippet}
-
 {#snippet duotoneIcon(kind, pinned = false)}
   {@const spec = CONTEXT_DUOTONE_ICONS[kind]}
   <svg
@@ -326,22 +404,24 @@
 {/snippet}
 
 {#if visible}
-  {#if type === 'todo'}
-    {@const meta = config.todoMeta || {}}
-    {@const isLinked = Boolean(meta.linkedDdayId)}
-    {@const tone = meta.deadlineTone || 'none'}
-    <div
-      bind:this={menuRef}
-      class="ctx-pocket todo-pocket"
-      class:dark={config.isDarkMode}
-      data-scheme={config.isDarkMode ? 'dark' : 'light'}
-      role="menu"
-      tabindex="-1"
-      aria-label="할 일 메뉴"
-      onkeydown={keydown}
-      oncontextmenu={e => e.preventDefault()}
-      style="--surface:{config.isDarkMode ? '#242730' : getTidyTheme(config.themeColor).tidy.bg}; --accent:{getThemeAccent(config.themeColor, config.isDarkMode)}; --ctx-width:{todoMenuWidth}px; --limit:{maxHeight}px; font-family:'{config.uiFontFamily || '메이플스토리 L'}','Maplestory',system-ui,sans-serif; font-size:{Math.max(9, config.uiFontSize || 10)}pt;"
-    >
+  <div
+    bind:this={menuRef}
+    class="ctx-pocket"
+    class:todo-pocket={type === 'todo'}
+    class:dark={config.isDarkMode}
+    data-scheme={config.isDarkMode ? 'dark' : 'light'}
+    data-ctx-type={type}
+    role="menu"
+    tabindex="-1"
+    aria-label={menuAriaLabel}
+    onkeydown={keydown}
+    oncontextmenu={e => e.preventDefault()}
+    style="--surface:{config.isDarkMode ? '#242730' : (getTidyTheme(config.themeColor)?.tidy?.bg || '#ffffff')}; --accent:{getThemeAccent(config.themeColor, config.isDarkMode)}; --ctx-width:{menuWidth}px; --limit:{maxHeight}px; font-family:'{config.uiFontFamily || '메이플스토리 L'}','Maplestory',system-ui,sans-serif; font-size:{Math.max(9, config.uiFontSize || 10)}pt;"
+  >
+    {#if type === 'todo'}
+      {@const meta = config.todoMeta || {}}
+      {@const isLinked = Boolean(meta.linkedDdayId)}
+      {@const tone = meta.deadlineTone || 'none'}
       <!-- ① 파스텔 미니 리본 헤더: 마감일 5단계 칩(또는 도트) + 할 일 요약 + D-Day 카운터 -->
       <div class="pocket-ribbon" aria-hidden="true">
         {#if meta.hasDeadline && meta.deadlineChip}
@@ -505,55 +585,40 @@
           ><Redo2 size={12.5} strokeWidth={1.95} /></button>
         </div>
       </div>
-    </div>
-  {:else}
-  <div bind:this={menuRef} class="context-menu" class:dark={config.isDarkMode} role="menu" tabindex="-1" aria-label={type === 'tiny' ? 'Tiny Note 메뉴' : 'Tidy Task 메뉴'} onkeydown={keydown} oncontextmenu={e => e.preventDefault()}
-    style="--surface:{config.isDarkMode ? '#24262c' : getTidyTheme(config.themeColor).tidy.bg}; --accent:{getThemeAccent(config.themeColor, config.isDarkMode)}; --limit:{maxHeight}px; font-family:'{config.uiFontFamily || '메이플스토리 L'}','Maplestory',system-ui,sans-serif; font-size:{Math.max(10, config.uiFontSize || 10)}pt;">
-    <div class="brand" aria-hidden="true">{type === 'tiny' ? 'Tiny Note' : 'Tidy Task'}<span>빠른 메뉴</span></div>
-    <div class="launchers">
-      {#each launchers as entry}
-        <button role="menuitem" class="launcher" onclick={() => triggerAction(entry.action)}><entry.icon size={18} strokeWidth={1.7}/><span>{entry.label}</span></button>
-      {/each}
-    </div>
-    <div class="separator" role="separator"></div>
-    <div class="pair">
-      {@render item('undo', '실행 취소', Undo2)}
-      {@render item('redo', '다시 실행', Redo2)}
-    </div>
-    {#if type === 'text' || type === 'tiny'}
-      <div class="pair">
-        {@render item('cut', '잘라내기', Scissors, undefined, !config.hasSelection)}
-        {@render item('copy', '복사', Copy, undefined, !config.hasSelection)}
-        {@render item('paste', '붙여넣기', ClipboardPaste, undefined, !config.hasEditor)}
-        {@render item('select-all', '모두 선택', TextSelect, undefined, !config.hasEditor)}
-      </div>
-      <div class="separator" role="separator"></div>
-    {/if}
-    {#if type !== 'tiny'}{@render item('toggle-edit', '편집 모드', Pencil, config.isEditMode)}{/if}
-    {#if type === 'tiny'}
-      {@render item('tiny-pin', '항상 위에 표시', Pin, config.isPinned)}
-      <div class="pair">
-        {@render item('tiny-theme', '테마 바꾸기', Palette)}
-        {@render item('tiny-rollup', config.isRolledUp ? '펼치기' : '접기', config.isRolledUp ? ChevronDown : ChevronUp, undefined, config.isFullscreen)}
-      </div>
-      {@render item('tiny-archive', '보관함에 보관', Archive)}
+
+    {:else if type === 'dday-banner'}
+      <DdayBannerContextView
+        meta={config.ddayBannerMeta || {}}
+        canUndo={config.canUndo !== false}
+        canRedo={config.canRedo !== false}
+        onaction={triggerAction}
+        onliveaction={triggerLiveAction}
+      />
+
     {:else if type === 'text'}
-      {@render item('symbols', '특수문자', Omega)}
+      <TextMemoContextView
+        {config}
+        bind:formatBarRef
+        onaction={triggerAction}
+        onliveaction={triggerLiveAction}
+      />
+
+    {:else if type === 'tiny'}
+      <TinyNoteContextView
+        {config}
+        bind:formatBarRef
+        onaction={triggerAction}
+        onliveaction={triggerLiveAction}
+      />
+
     {:else}
-      <div class="separator" role="separator"></div>
-      {@render item('toggle-archived', '마감된 일 표시', Archive, config.showArchived)}
-      {@render item('toggle-notes', '중요한 일 메모 표시', NotebookPen, config.showNotes)}
-      <div class="separator" role="separator"></div>
-      {@render item('import', '메모장 가져오기', Download)}
-      {@render item('export', '메모장으로 내보내기', Upload)}
+      <BarQuickContextView
+        {config}
+        onaction={triggerAction}
+        onliveaction={triggerLiveAction}
+      />
     {/if}
-    <div class="separator" role="separator"></div>
-    <div class="pair footer">
-      {@render item('open-help', '기능 설명', CircleHelp)}
-      {@render item('open-settings', '설정', Settings2)}
-    </div>
   </div>
-  {/if}
 {/if}
 
 <style>
@@ -780,26 +845,4 @@
     outline: 2px solid var(--ctx-accent);
     outline-offset: -1px;
   }
-
-  /* ── 기존 일반/메모/Tiny Note 메뉴 스타일 유지 ── */
-  .context-menu { --ink:#343b47; --muted:#79808b; --line:rgba(50,60,70,.12); --hover:rgba(50,60,70,.065); box-sizing:border-box; width:max-content; min-width:304px;  max-height:var(--limit); overflow:auto; padding:10px; border:1px solid var(--line); border-radius:14px; background:var(--surface); color:var(--ink); user-select:none; }
-  .dark { --ink:#e6e8ef; --muted:#a4aab8; --line:rgba(255,255,255,.12); --hover:rgba(255,255,255,.08); color-scheme:dark; }
-  .brand { display:flex; align-items:center; justify-content:space-between; padding:3px 7px 11px; font:600 12px/1.4 system-ui,sans-serif; letter-spacing:.02em; }
-  .brand span { color:var(--muted); font-size:11px; font-weight:400; }
-  .launchers { display:grid; grid-template-columns:1fr 1fr; gap:5px; }
-  .context-menu button { color:inherit; font:inherit; cursor:pointer; border:0; background:transparent; }
-  .launcher { display:flex; align-items:center; gap:8px; padding:11px 9px; border:1px solid var(--line); border-radius:8px; text-align:left; font-size:.9em; white-space:nowrap; }
-  .launcher :global(svg) { color:var(--accent); flex-shrink:0; }
-  .item { display:flex; align-items:center; width:100%; gap:10px; padding:8px 9px; min-height:36px; border-radius:7px; text-align:left; line-height:1.4; white-space:nowrap; }
-  .item > :global(svg) { flex-shrink:0; color:var(--muted); }
-  .item > span:first-of-type { flex:1; }
-  .context-menu button:disabled { opacity:.38; cursor:default; }
-  .context-menu button:hover:not(:disabled) { background:var(--hover); }
-  .context-menu button:focus-visible { outline:2px solid var(--accent); outline-offset:-2px; background:var(--hover); }
-  .pair { display:grid; grid-template-columns:1fr 1fr; gap:5px; }
-  .state { width:24px; height:20px; display:flex; align-items:center; justify-content:center; border-radius:5px; background:var(--hover); color:var(--muted); }
-  .state.active { background:var(--accent); color:white; }
-  .off-dot { width:7px; height:1px; background:currentColor; }
-  .separator { height:1px; background:var(--line); margin:7px 4px; }
-  .footer { font-size:.94em; }
 </style>

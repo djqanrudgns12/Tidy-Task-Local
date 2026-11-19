@@ -2806,11 +2806,12 @@ async init() {
     await this.applyDdayCommand('set-banner-mode', { mode });
   }
 
-  /** @param {{ focusDdayId?: string | null, initialTab?: 'list'|'settings'|'archive', openCreate?: boolean }} [opts] */
+  /** @param {{ focusDdayId?: string | null, editDdayId?: string | null, initialTab?: 'list'|'settings'|'archive', openCreate?: boolean }} [opts] */
   async openDdayControl(opts = {}) {
     await openDdayControlWindow({
       requesterLabel: this.windowLabel,
-      focusDdayId: opts.focusDdayId ?? null,
+      focusDdayId: opts.focusDdayId ?? opts.editDdayId ?? null,
+      editDdayId: opts.editDdayId ?? null,
       initialTab: opts.initialTab || 'list',
       openCreate: opts.openCreate,
       appearance: {

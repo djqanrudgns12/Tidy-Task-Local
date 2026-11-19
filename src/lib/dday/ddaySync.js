@@ -482,14 +482,15 @@ export async function dispatchDdayCommand(targetLabel, action, payload, settings
 
 /**
  * D-Day 컨트롤 타워 창(`380px` 단독 모달)을 열거나 앞으로 가져옵니다.
- * @param {{ requesterLabel?: string, focusDdayId?: string | null, initialTab?: 'list'|'settings'|'archive', openCreate?: boolean, appearance?: { themeColor?: string, isDarkMode?: boolean, uiFontFamily?: string, uiFontSize?: number } }} [opts]
+ * @param {{ requesterLabel?: string, focusDdayId?: string | null, editDdayId?: string | null, initialTab?: 'list'|'settings'|'archive', openCreate?: boolean, appearance?: { themeColor?: string, isDarkMode?: boolean, uiFontFamily?: string, uiFontSize?: number } }} [opts]
  */
 export async function openDdayControlWindow(opts = {}) {
   if (!isTauri()) return;
   const requesterLabel = opts.requesterLabel || getCurrentWindow().label || 'main';
   const payload = {
     targetLabel: isDataWindowLabel(requesterLabel) && !isTinyNoteLabel(requesterLabel) ? requesterLabel : 'main',
-    focusDdayId: opts.focusDdayId ?? null,
+    focusDdayId: opts.focusDdayId ?? opts.editDdayId ?? null,
+    editDdayId: opts.editDdayId ?? null,
     initialTab: opts.initialTab || 'list',
     openCreate: Boolean(opts.openCreate),
     appearance: opts.appearance || null,

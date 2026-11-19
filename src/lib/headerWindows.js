@@ -1,6 +1,6 @@
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { WebviewWindow } from '@tauri-apps/api/webviewWindow';
-import { emitTo, listen } from '@tauri-apps/api/event';
+import { emit, emitTo, listen } from '@tauri-apps/api/event';
 import { appState } from './appState.svelte.js';
 import { settingsSnapshotFor, settingsWindowSize } from './settings/settingsForm.js';
 import { getMonitorGeometries } from './windows/windowRegistry.js';
@@ -55,5 +55,49 @@ import { getMonitorGeometries } from './windows/windowRegistry.js';
       });
     }
   }
+
+// 보관함(아카이브) 창을 열거나 앞으로 가져옵니다.
+// 상단 툴바·헤더 메뉴·우클릭 메뉴가 모두 이 함수 하나를 공유합니다.
+export async function openArchiveWindow() {
+  const existingArchive = await WebviewWindow.getByLabel('archive');
+  if (existingArchive) {
+    await existingArchive.show();
+    await existingArchive.unminimize();
+    await existingArchive.setFocus();
+    return;
+  }
+  const win = new WebviewWindow('archive', {
+    url: 'index.html',
+    title: 'Tidy Task 아카이브',
+    width: 450,
+    height: 550,
+    minWidth: 350,
+    minHeight: 400,
+    decorations: false,
+    transparent: true,
+    resizable: true,
+    center: true,
+  });
+  win.once('tauri://error', (e) => {
+    console.warn('[Archive] 창 생성 오류:', e);
+  });
+}
+
+// 마감 알림(리마인더) 표시 여부를 모든 데이터 창에 안전하게 방송해 동기화합니다.
+// 왜 req-apply-settings + targetWindow를 쓰는가:
+//   매니저 창과 다른 메모 창이 같은 showReminders 값을 유지하면서도
+//   이 창의 테마·글꼴이 다른 창에 덮어써지지 않게 하기 위해서입니다.
+/**
+ * @param {boolean} [desiredNext]
+ */
+export function toggleRemindersShared(desiredNext) {
+  const next = typeof desiredNext === 'boolean' ? desiredNext : !appState.showReminders;
+  const payload = appState.takeSnapshot();
+  payload.globalFont = appState.fontFamily;
+  payload.showReminders = next;
+  payload.targetWindow = appState.windowLabel;
+  void emit('req-apply-settings', payload).catch(() => {});
+  return next;
+}
 
 
