@@ -4,7 +4,9 @@
   import { onMount, onDestroy } from "svelte";
   import { slide, fade, scale } from "svelte/transition";
   import { Check, Eraser, Flag } from "lucide-svelte";
-  import { computeDdayCounter, formatDotDate } from "./lib/dday/ddayModel.js";
+  import { computeDdayCounter, formatDotDate, stripHtmlToTitle } from "./lib/dday/ddayModel.js";
+  import { STABLE_MAX_PT } from "./lib/fontSize.js";
+  import { formatDeadlineChip, resolveDeadlineTone } from "./lib/editor/richTextFormat.js";
   import { appState } from "./lib/appState.svelte.js";
   import { TINY_NOTE_MIN_WIDTH, TINY_NOTE_ROLLED_HEIGHT } from "./lib/tinyNoteWindow.js";
   import { getTidyTheme } from "./lib/themes.js";
@@ -36,7 +38,7 @@
   import { ensureLaunchAtStartup } from "./lib/autostart.js";
   import { handleSettings } from "./lib/headerWindows.js";
   import { applySharedSettings } from "./lib/settings/settingsForm.js";
-  import { listen, emit } from "@tauri-apps/api/event";
+  import { listen, emit, emitTo } from "@tauri-apps/api/event";
   import { WebviewWindow } from "@tauri-apps/api/webviewWindow";
   import { LazyStore } from "@tauri-apps/plugin-store";
   import { save as saveDialog, open as openDialog } from "@tauri-apps/plugin-dialog";
@@ -79,37 +81,70 @@
   let isFirstLoad = true;
   let showDeleteModal = $state(false);
 
-  import { captureEditorContext, runEditorContextAction } from './lib/windows/editorContext.js';
+  import {
+    applyEditorContextFormat,
+    captureEditorContext,
+    runEditorContextAction,
+  } from './lib/windows/editorContext.js';
   let contextEditor = null;
   let contextTodoId = null;
+  let contextToken = '';
+  let contextSessionDirty = false;
+  let contextHistoryTimer = null;
+  let unlistenCtxAction;
+  let unlistenCtxLiveAction;
+
+  /** @param {string | null} todoId */
+  function buildTodoMetaById(todoId) {
+    const todo = todoId ? appState.todos.find((t) => t.id === todoId) : null;
+    if (!todo) return null;
+    const linked = appState.findActiveDdayForTodo(todo.id);
+    return {
+      id: todo.id,
+      titlePreview: stripHtmlToTitle(todo.text, 24),
+      hasDeadline: Boolean(todo.deadline),
+      deadlineLabel: formatDotDate(todo.deadline) || '',
+      deadlineChip: formatDeadlineChip(todo.deadline),
+      deadlineTone: resolveDeadlineTone(todo.deadline),
+      linkedDdayId: linked?.id || null,
+      linkedCounter: linked ? computeDdayCounter(linked, appState.todayKey).label : '',
+    };
+  }
 
   /** @param {MouseEvent} e */
   function captureTodoMeta(e) {
     const isTiny = getCurrentWindow().label.startsWith('tinynote-');
     const row = !isTiny && e.target instanceof Element ? e.target.closest('.todo-row[data-todo-id]') : null;
     const rawId = row?.getAttribute('data-todo-id') || null;
-    const todo = rawId ? appState.todos.find((t) => t.id === rawId) : null;
-    contextTodoId = todo ? todo.id : null;
-    if (!todo) return null;
-    const linked = appState.findActiveDdayForTodo(todo.id);
-    return {
-      id: todo.id,
-      hasDeadline: Boolean(todo.deadline),
-      deadlineLabel: formatDotDate(todo.deadline) || '',
-      linkedDdayId: linked?.id || null,
-      linkedCounter: linked ? computeDdayCounter(linked, appState.todayKey).label : '',
-    };
+    const meta = buildTodoMetaById(rawId);
+    contextTodoId = meta ? meta.id : null;
+    return meta;
   }
   import { showNoteContextMenu } from './lib/windows/noteContextMenu.js';
 
   async function handleBarContextMenu(e) {
     if (!isDataWindow(getCurrentWindow().label)) return;
+    if (appState.isUpdateFrozen) return;
 
     e.preventDefault();
-    contextEditor = captureEditorContext(e.target);
+    // 우클릭 메뉴가 열릴 때 FloatingRTE와 겹치지 않도록 즉시 숨깁니다.
+    window.dispatchEvent(new CustomEvent('tidy-context-menu-open'));
+
+    if (contextHistoryTimer) {
+      clearTimeout(contextHistoryTimer);
+      contextHistoryTimer = null;
+      appState.pushToHistory();
+    }
+
+    contextEditor = captureEditorContext(e.target, appState.allFonts, {
+      fontFamily: appState.fontFamily,
+      fontSize: appState.fontSize,
+    });
     const isTiny = getCurrentWindow().label.startsWith('tinynote-');
     const todoMeta = captureTodoMeta(e);
     const type = isTiny ? 'tiny' : todoMeta ? 'todo' : contextEditor ? 'text' : 'bar';
+    contextToken = crypto.randomUUID();
+    contextSessionDirty = false;
 
     // 메뉴를 띄울 화면 좌표를 "물리 픽셀"로 계산합니다.
     // 왜: 배율이 다른 모니터에서는 논리 좌표의 기준이 창마다 달라, 메뉴가 엉뚱한 곳(화면 밖)에 떴습니다.
@@ -124,6 +159,7 @@
         x: screenX,
         y: screenY,
         type: type,
+        token: contextToken,
         // 우클릭 메뉴가 쓰는 설정값만 보냅니다. (예전에는 할 일 전체를 깊은 복사해 매번 전송했습니다)
         state: {
           themeColor: appState.themeColor,
@@ -138,6 +174,11 @@
           isFullscreen: appState.isFullscreen,
           hasEditor: !!contextEditor,
           hasSelection: !!contextEditor?.hasSelection,
+          selectionFormat: contextEditor?.selectionFormat || null,
+          fonts: appState.allFonts.map((f) => ({ name: f.name, family: f.family })),
+          maxFontPt: isTiny ? Infinity : STABLE_MAX_PT,
+          canUndo: appState.canUndo,
+          canRedo: appState.canRedo,
           todoMeta,
         },
         requester: getCurrentWindow().label
@@ -950,7 +991,7 @@
     // (appState.setupManagerListeners 참고 — main이 닫혀 있어도 동작하도록 옮겼습니다)
 
     if (currentWindow.label !== "ctx-menu") {
-      currentWindow.listen('ctx-action', async (ev) => {
+      unlistenCtxAction = await currentWindow.listen('ctx-action', async (ev) => {
         const action = ev.payload;
         if (action.startsWith('tiny-')) {
           window.dispatchEvent(new CustomEvent('tiny-context-action', { detail: action }));
@@ -1059,6 +1100,95 @@
           } catch (e) { console.warn('[Import] 가져오기 실패:', e); }
         }
       });
+
+      // 메뉴를 닫지 않고 연속 서식 변경·히스토리 복구를 처리하는 양방향 IPC 리스너
+      unlistenCtxLiveAction = await currentWindow.listen('ctx-live-action', async (ev) => {
+        const payload = ev.payload;
+        if (!payload || appState.isUpdateFrozen) return;
+        if (contextToken && payload.token && payload.token !== contextToken) return;
+
+        if (payload.kind === 'format') {
+          if (!contextEditor?.hasSelection) return;
+          // 최초 서식 변경 직전에 기준 스냅샷을 남겨 Undo로 원래 모양을 정확히 복원합니다.
+          if (!contextSessionDirty) {
+            appState.pushToHistory();
+            contextSessionDirty = true;
+          }
+          const isTiny = currentWindow.label.startsWith('tinynote-');
+          const result = applyEditorContextFormat(
+            contextEditor,
+            { op: payload.op, value: payload.value },
+            appState.allFonts,
+            {
+              maxPt: isTiny ? Infinity : STABLE_MAX_PT,
+              defaults: { fontFamily: appState.fontFamily, fontSize: appState.fontSize },
+            }
+          );
+          if (!result?.ok) return;
+
+          // 크기 연타(400ms 이내)는 1회 히스토리로 병합해 20칸 기록 스택 낭비를 막습니다.
+          if (contextHistoryTimer) {
+            clearTimeout(contextHistoryTimer);
+            contextHistoryTimer = null;
+          }
+          if (payload.op === 'size') {
+            contextHistoryTimer = setTimeout(() => {
+              contextHistoryTimer = null;
+              appState.pushToHistory();
+            }, 400);
+          } else {
+            appState.pushToHistory();
+          }
+
+          void emitTo('ctx-menu', 'ctx-state-synced', {
+            token: contextToken,
+            patch: {
+              selectionFormat: result.selectionFormat,
+              canUndo: true,
+              canRedo: appState.canRedo,
+            },
+          }).catch(() => {});
+        } else if (payload.kind === 'history') {
+          if (contextHistoryTimer) {
+            clearTimeout(contextHistoryTimer);
+            contextHistoryTimer = null;
+            appState.pushToHistory();
+          }
+          if (payload.action === 'undo') await appState.undo();
+          else if (payload.action === 'redo') await appState.redo();
+
+          // Undo로 해당 할 일이 사라졌으면 메뉴를 안전하게 닫습니다.
+          const refreshedMeta = contextTodoId ? buildTodoMetaById(contextTodoId) : null;
+          if (contextTodoId && !refreshedMeta) {
+            contextEditor = null;
+            void emitTo('ctx-menu', 'ctx-state-synced', { token: contextToken, close: true }).catch(() => {});
+            return;
+          }
+          // 스냅샷 복원으로 DOM 노드가 교체되므로 기존 선택 Range를 정리해 깨진 참조를 막습니다.
+          if (contextEditor) {
+            contextEditor.range = null;
+            contextEditor.hasSelection = false;
+            contextEditor.selectionFormat = null;
+          }
+          void emitTo('ctx-menu', 'ctx-state-synced', {
+            token: contextToken,
+            patch: {
+              canUndo: appState.canUndo,
+              canRedo: appState.canRedo,
+              todoMeta: refreshedMeta,
+              hasSelection: false,
+              selectionFormat: null,
+            },
+          }).catch(() => {});
+        }
+      });
+    }
+  });
+
+  // 업데이트 설치 직전 입력 잠금이 걸리면 떠 있던 우클릭 메뉴도 즉시 닫습니다.
+  $effect(() => {
+    if (appState.isUpdateFrozen && contextToken) {
+      void emitTo('ctx-menu', 'ctx-state-synced', { token: contextToken, close: true }).catch(() => {});
     }
   });
 
@@ -1069,6 +1199,9 @@
     if (unlistenClose) unlistenClose();
     if (unlistenMove) unlistenMove();
     if (unlistenFocus) unlistenFocus();
+    if (unlistenCtxAction) unlistenCtxAction();
+    if (unlistenCtxLiveAction) unlistenCtxLiveAction();
+    if (contextHistoryTimer) clearTimeout(contextHistoryTimer);
     window.removeEventListener("resize", handleBrowserResize);
     window.removeEventListener("tidy-dday-banner-layout", handleDdayBannerLayout);
     layoutDestroyed = true;

@@ -345,6 +345,12 @@
     }
   }
 
+  function handleContextMenuOpen() {
+    if (selTimeout) { clearTimeout(selTimeout); selTimeout = null; }
+    visible = false;
+    activePopup = null;
+  }
+
   onMount(() => {
     // 현재 창이 Tiny Note면 글자 크기 상한을 해제(무제한), 그 외에는 40pt로 캡
     try {
@@ -352,6 +358,7 @@
     } catch (e) {}
     document.addEventListener("selectionchange", onSelChange);
     document.addEventListener("mousedown", handleGlobalMousedown);
+    window.addEventListener("tidy-context-menu-open", handleContextMenuOpen);
   });
   
   onDestroy(() => {
@@ -360,6 +367,7 @@
     if (formatFreezeTimeout) clearTimeout(formatFreezeTimeout);
     document.removeEventListener("selectionchange", onSelChange);
     document.removeEventListener("mousedown", handleGlobalMousedown);
+    window.removeEventListener("tidy-context-menu-open", handleContextMenuOpen);
   });
 
   $effect(() => {

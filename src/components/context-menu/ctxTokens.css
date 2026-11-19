@@ -1,0 +1,174 @@
+/* Tidy Task 우클릭 컨텍스트 메뉴 공용 디자인 토큰 (Pocket Compact Design System)
+ * 규칙: 배포 빌드 lightningcss 이슈 방어를 위해 CSS light-dark() 함수를 쓰지 않고
+ *       .dark / [data-scheme="dark"] 클래스로 라이트·다크 토큰을 명시 분기합니다. */
+
+.ctx-pocket {
+  --ctx-surface: var(--surface, #fdfaf3);
+  --ctx-accent: var(--accent, #d97706);
+  --ctx-accent-ink: #ffffff;
+  --ctx-accent-soft: color-mix(in srgb, var(--ctx-accent) 9.5%, transparent);
+  --ctx-accent-hover: color-mix(in srgb, var(--ctx-accent) 15.5%, transparent);
+  --ctx-accent-border: color-mix(in srgb, var(--ctx-accent) 24%, transparent);
+
+  --ctx-ink: #2d3440;
+  --ctx-muted: #737c8b;
+  --ctx-line: rgba(30, 41, 59, 0.10);
+  --ctx-line-outer: rgba(30, 41, 59, 0.13);
+  --ctx-hover: rgba(30, 41, 59, 0.055);
+  --ctx-field: rgba(255, 255, 255, 0.76);
+  --ctx-inset: rgba(255, 255, 255, 0.65);
+
+  --ctx-warn: #ea580c;
+  --ctx-warn-soft: rgba(234, 88, 12, 0.085);
+  --ctx-warn-hover: rgba(234, 88, 12, 0.15);
+  --ctx-warn-border: rgba(234, 88, 12, 0.28);
+
+  --ctx-ok: #059669;
+  --ctx-ok-soft: rgba(5, 150, 105, 0.085);
+  --ctx-ok-hover: rgba(5, 150, 105, 0.15);
+  --ctx-ok-border: rgba(5, 150, 105, 0.28);
+
+  --ctx-danger: #dc2626;
+  --ctx-danger-soft: rgba(220, 38, 38, 0.075);
+  --ctx-danger-hover: rgba(220, 38, 38, 0.14);
+  --ctx-danger-border: rgba(220, 38, 38, 0.28);
+
+  /* 마감일 5단계 상태 칩 토큰 (TodoList.svelte와 동일 의미색) */
+  --ctx-dl-overdue: #9333ea;
+  --ctx-dl-overdue-bg: rgba(147, 51, 234, 0.12);
+  --ctx-dl-today: #ef4444;
+  --ctx-dl-today-bg: rgba(239, 68, 68, 0.12);
+  --ctx-dl-soon: #ea580c;
+  --ctx-dl-soon-bg: rgba(234, 88, 12, 0.12);
+  --ctx-dl-week: #059669;
+  --ctx-dl-week-bg: rgba(16, 185, 129, 0.12);
+  --ctx-dl-later: #3b82f6;
+  --ctx-dl-later-bg: rgba(59, 130, 246, 0.12);
+
+  /* 동심원 곡률 (Concentric Radius): 외곽 13px → 구역 8px → 컨트롤 6px → 칩 999px */
+  --ctx-radius-outer: 13px;
+  --ctx-radius-card: 8px;
+  --ctx-radius-ctrl: 6px;
+  --ctx-radius-pill: 999px;
+
+  box-sizing: border-box;
+  width: var(--ctx-width, 220px);
+  max-height: var(--limit, 760px);
+  overflow-x: hidden;
+  overflow-y: auto;
+  padding: 6px;
+  border-radius: var(--ctx-radius-outer);
+  border: 1px solid var(--ctx-line-outer);
+  box-shadow: inset 0 1px 0 var(--ctx-inset);
+  background: var(--ctx-surface);
+  color: var(--ctx-ink);
+  user-select: none;
+  animation: ctxPocketIn 110ms cubic-bezier(0.2, 0.9, 0.3, 1);
+}
+
+.ctx-pocket.dark,
+.ctx-pocket[data-scheme='dark'] {
+  --ctx-accent-ink: #181b22;
+  --ctx-accent-soft: color-mix(in srgb, var(--ctx-accent) 17%, transparent);
+  --ctx-accent-hover: color-mix(in srgb, var(--ctx-accent) 25%, transparent);
+  --ctx-accent-border: color-mix(in srgb, var(--ctx-accent) 34%, transparent);
+
+  --ctx-ink: #eceff6;
+  --ctx-muted: #9aa3b4;
+  --ctx-line: rgba(255, 255, 255, 0.10);
+  --ctx-line-outer: rgba(255, 255, 255, 0.14);
+  --ctx-hover: rgba(255, 255, 255, 0.08);
+  --ctx-field: rgba(255, 255, 255, 0.045);
+  --ctx-inset: rgba(255, 255, 255, 0.07);
+
+  --ctx-warn: #fb923c;
+  --ctx-warn-soft: rgba(234, 88, 12, 0.15);
+  --ctx-warn-hover: rgba(234, 88, 12, 0.24);
+  --ctx-warn-border: rgba(251, 146, 60, 0.38);
+
+  --ctx-ok: #6ee7b7;
+  --ctx-ok-soft: rgba(16, 185, 129, 0.15);
+  --ctx-ok-hover: rgba(16, 185, 129, 0.24);
+  --ctx-ok-border: rgba(110, 231, 183, 0.38);
+
+  --ctx-danger: #fca5a5;
+  --ctx-danger-soft: rgba(248, 113, 113, 0.14);
+  --ctx-danger-hover: rgba(248, 113, 113, 0.23);
+  --ctx-danger-border: rgba(252, 165, 165, 0.38);
+
+  --ctx-dl-overdue: #c084fc;
+  --ctx-dl-overdue-bg: rgba(147, 51, 234, 0.22);
+  --ctx-dl-today: #fca5a5;
+  --ctx-dl-today-bg: rgba(239, 68, 68, 0.22);
+  --ctx-dl-soon: #fb923c;
+  --ctx-dl-soon-bg: rgba(234, 88, 12, 0.22);
+  --ctx-dl-week: #6ee7b7;
+  --ctx-dl-week-bg: rgba(16, 185, 129, 0.22);
+  --ctx-dl-later: #93c5fd;
+  --ctx-dl-later-bg: rgba(59, 130, 246, 0.22);
+
+  color-scheme: dark;
+}
+
+@keyframes ctxPocketIn {
+  from {
+    opacity: 0;
+    transform: translateY(-2px) scale(0.975);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ctx-pocket,
+  .ctx-pocket * {
+    animation: none !important;
+    transition: none !important;
+  }
+}
+
+/* 창 경계 안에서 절대 잘리지 않는 안전 마이크로 툴팁 */
+.ctx-tip {
+  position: relative;
+}
+.ctx-tip::after {
+  content: attr(data-tip);
+  position: absolute;
+  bottom: calc(100% + 5px);
+  left: 50%;
+  transform: translateX(-50%) translateY(2px);
+  padding: 3.5px 6px;
+  border-radius: 5px;
+  background: #181c24;
+  color: #f8fafc;
+  font-family: system-ui, -apple-system, sans-serif;
+  font-size: 9.5px;
+  font-weight: 600;
+  line-height: 1.1;
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  z-index: 40;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.22);
+  transition: opacity 110ms ease 180ms, transform 110ms ease 180ms;
+}
+.ctx-tip.tip-left::after {
+  left: 0;
+  transform: translateX(0) translateY(2px);
+}
+.ctx-tip.tip-right::after {
+  left: auto;
+  right: 0;
+  transform: translateX(0) translateY(2px);
+}
+.ctx-tip:hover:not(:disabled)::after {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+.ctx-tip.tip-left:hover:not(:disabled)::after,
+.ctx-tip.tip-right:hover:not(:disabled)::after {
+  opacity: 1;
+  transform: translateX(0) translateY(0);
+}
