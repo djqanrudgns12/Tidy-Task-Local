@@ -3,7 +3,8 @@
   import { applyHeaderDesignChoice } from './lib/headerDesign.js';
   import { onMount, onDestroy } from "svelte";
   import { slide, fade, scale } from "svelte/transition";
-  import { Check, Eraser } from "lucide-svelte";
+  import { Check, Eraser, Flag } from "lucide-svelte";
+  import { computeDdayCounter, formatDotDate } from "./lib/dday/ddayModel.js";
   import { appState } from "./lib/appState.svelte.js";
   import { TINY_NOTE_MIN_WIDTH, TINY_NOTE_ROLLED_HEIGHT } from "./lib/tinyNoteWindow.js";
   import { getTidyTheme } from "./lib/themes.js";
@@ -80,6 +81,25 @@
 
   import { captureEditorContext, runEditorContextAction } from './lib/windows/editorContext.js';
   let contextEditor = null;
+  let contextTodoId = null;
+
+  /** @param {MouseEvent} e */
+  function captureTodoMeta(e) {
+    const isTiny = getCurrentWindow().label.startsWith('tinynote-');
+    const row = !isTiny && e.target instanceof Element ? e.target.closest('.todo-row[data-todo-id]') : null;
+    const rawId = row?.getAttribute('data-todo-id') || null;
+    const todo = rawId ? appState.todos.find((t) => t.id === rawId) : null;
+    contextTodoId = todo ? todo.id : null;
+    if (!todo) return null;
+    const linked = appState.findActiveDdayForTodo(todo.id);
+    return {
+      id: todo.id,
+      hasDeadline: Boolean(todo.deadline),
+      deadlineLabel: formatDotDate(todo.deadline) || '',
+      linkedDdayId: linked?.id || null,
+      linkedCounter: linked ? computeDdayCounter(linked, appState.todayKey).label : '',
+    };
+  }
   import { showNoteContextMenu } from './lib/windows/noteContextMenu.js';
 
   async function handleBarContextMenu(e) {
@@ -88,7 +108,8 @@
     e.preventDefault();
     contextEditor = captureEditorContext(e.target);
     const isTiny = getCurrentWindow().label.startsWith('tinynote-');
-    const type = isTiny ? 'tiny' : contextEditor ? 'text' : 'bar';
+    const todoMeta = captureTodoMeta(e);
+    const type = isTiny ? 'tiny' : todoMeta ? 'todo' : contextEditor ? 'text' : 'bar';
 
     // 메뉴를 띄울 화면 좌표를 "물리 픽셀"로 계산합니다.
     // 왜: 배율이 다른 모니터에서는 논리 좌표의 기준이 창마다 달라, 메뉴가 엉뚱한 곳(화면 밖)에 떴습니다.
@@ -117,6 +138,7 @@
           isFullscreen: appState.isFullscreen,
           hasEditor: !!contextEditor,
           hasSelection: !!contextEditor?.hasSelection,
+          todoMeta,
         },
         requester: getCurrentWindow().label
       });
@@ -277,6 +299,12 @@
   // ─── 1. 창 크기 저장 ───
   // 영역 높이 배분은 여기서 하지 않습니다(layout/memoLayoutController.js가 창 이벤트로 직접 처리).
   // 이 처리기는 창 크기를 기억하고, 사용자가 높이를 바꾸면 세로 스냅을 푸는 일만 합니다.
+  function handleDdayBannerLayout() {
+    if (!isLayoutManagedWindow()) return;
+    memoLayout.markProgrammatic();
+    memoLayout.recompute();
+  }
+
   function handleBrowserResize() {
     // 최소화하면 창 안쪽 크기가 0으로 보고됩니다. 이 값을 저장하면 다음 실행 때 창 크기가 0이 됩니다.
     if (window.innerWidth <= 0 || window.innerHeight <= 0) return;
@@ -600,6 +628,7 @@
 
       if (isLayoutManagedWindow()) {
         window.addEventListener("resize", handleBrowserResize);
+        window.addEventListener("tidy-dday-banner-layout", handleDdayBannerLayout);
         // 창 이동·크기 알림으로 "아래쪽 테두리 끌기"를 판별합니다. 위치·크기 복원을 마친 뒤에 연결해야
         // 복원 때의 크기 변화를 사용자의 끌기로 오해하지 않습니다(복원은 메모 높이를 바꾸면 안 됨).
         // 기다리지 않습니다: 아래의 닫기 처리기 등록이 이 연결 때문에 늦어지면 안 됩니다.
@@ -940,6 +969,29 @@
         else if (action === 'open-toolkit') await invoke('toolkit_open', { role: 'toolkit-summon' });
         else if (action === 'toggle-archived') { appState.showArchived = !appState.showArchived; appState.save(); }
         else if (action === 'toggle-notes') { appState.showNotes = !appState.showNotes; appState.save(); }
+        else if (action === 'todo-pin-dday' && contextTodoId) {
+          const t = appState.todos.find((item) => item.id === contextTodoId);
+          if (t) {
+            if (t.deadline) void appState.pinTodoAsDday(t.id);
+            else appState.pendingPinTodoId = t.id;
+          }
+        }
+        else if (action === 'todo-open-dday' && contextTodoId) {
+          const linked = appState.findActiveDdayForTodo(contextTodoId);
+          void appState.openDdayControl({ focusDdayId: linked?.id || null });
+        }
+        else if (action === 'todo-unpin-dday' && contextTodoId) {
+          void appState.unpinTodoDday(contextTodoId);
+        }
+        else if (action === 'todo-edit-deadline' && contextTodoId) {
+          document.querySelector(`[data-todo-id="${CSS.escape(contextTodoId)}"] [data-todo-deadline-btn]`)?.click();
+        }
+        else if (action === 'todo-complete' && contextTodoId) {
+          appState.toggleTodo(contextTodoId);
+        }
+        else if (action === 'todo-delete' && contextTodoId) {
+          appState.deleteTodo(contextTodoId);
+        }
         else if (action === 'cut') document.execCommand('cut');
         else if (action === 'copy') document.execCommand('copy');
         else if (action === 'paste') {
@@ -1018,6 +1070,7 @@
     if (unlistenMove) unlistenMove();
     if (unlistenFocus) unlistenFocus();
     window.removeEventListener("resize", handleBrowserResize);
+    window.removeEventListener("tidy-dday-banner-layout", handleDdayBannerLayout);
     layoutDestroyed = true;
     disconnectMemoLayout?.();
     memoLayout.destroy();
@@ -1400,7 +1453,7 @@
       </div>
     {/if}
 
-    {#if appState.showPasteLimitToast || appState.showCopySuccessToast || appState.showPasteSuccessToast || appState.showSaveToast}
+    {#if appState.showPasteLimitToast || appState.showCopySuccessToast || appState.showPasteSuccessToast || appState.showSaveToast || appState.showDdayKeptToast}
       <div
         transition:scale={{ duration: 300, start: 0.8, opacity: 0 }}
         class="absolute inset-x-0 top-1/2 -translate-y-1/2 flex items-center justify-center pointer-events-none px-4"
@@ -1498,6 +1551,38 @@
               style="color: {appState.isDarkMode ? '#86efac' : '#16a34a'};"
             >
               지금 내용을 저장했습니다!
+            </span>
+          </div>
+        {:else if appState.showDdayKeptToast}
+          <div
+            class="px-3.5 py-2.5 rounded-[18px] shadow-xl flex items-center gap-2 border max-w-full"
+            style="
+              background-color: {appState.isDarkMode
+              ? 'rgba(30, 41, 59, 0.96)'
+              : 'rgba(255, 251, 235, 0.97)'};
+              backdrop-filter: blur(6px);
+              border-color: {appState.isDarkMode
+              ? 'rgba(251, 191, 36, 0.35)'
+              : 'rgba(217, 119, 6, 0.35)'};
+              box-shadow: 0 10px 26px rgba(15, 23, 42, 0.18);
+            "
+          >
+            <span
+              class="w-5 h-5 rounded-md flex items-center justify-center shrink-0"
+              style="
+                background-color: {appState.isDarkMode
+                ? 'rgba(251, 191, 36, 0.2)'
+                : 'rgba(217, 119, 6, 0.14)'};
+                color: {appState.isDarkMode ? '#fbbf24' : '#b45309'};
+              "
+            >
+              <Flag size={12} strokeWidth={2.4} />
+            </span>
+            <span
+              class="text-[11px] font-extrabold tracking-tight leading-snug"
+              style="color: {appState.isDarkMode ? '#fef3c7' : '#92400e'};"
+            >
+              할 일만 지우고 D-Day는 컨트롤 타워에 남겼어요
             </span>
           </div>
         {/if}

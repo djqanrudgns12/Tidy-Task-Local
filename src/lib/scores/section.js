@@ -19,7 +19,7 @@ export const UNDO_LIMIT = 50;
 
 /**
  * @template T
- * @param {{store:'scoreboard'|'thermometer'|'vote', section:string, normalize:(raw:any)=>T,
+ * @param {{store:'scoreboard'|'thermometer'|'vote'|'dday', section:string, normalize:(raw:any)=>T,
  *   onChange?:(data:T)=>void, onError?:(message:string)=>void, onNotice?:(message:string)=>void,
  *   adapter?:{readStore:Function, writeSection:Function}}} options
  */

@@ -12,6 +12,7 @@
     roster: ['#e0f1f0', '#47817e'],
     scoreboard: ['#e7ecfb', '#4d63a8'],
     thermometer: ['#fde6e8', '#c24b57'],
+    dday: ['#ede9fe', '#6d28d9'],
     vote: ['#eef6dc', '#6b8a2a'],
     'scoreboard-personal': ['#e3effb', '#426f9e'],
     'scoreboard-group': ['#e4f6ee', '#4e9c81'],
@@ -117,6 +118,13 @@
       <rect x="7.5" y="9.5" width="20" height="23" rx="4.5" fill="#fffdf8" />
       <path d="M11.5 15.5h9m-9 5h7m-9 5h5" />
       <path d="m24.5 29 1-4.3 7.2-7.2a2.2 2.2 0 0 1 3.1 3.1L28.6 27.8Z" fill="#f6d47c" />
+    {:else if kind === 'dday'}
+      <path d="M14 7v4m12-4v4" />
+      <rect x="8" y="9" width="24" height="24" rx="5.5" fill="#fffdf8" />
+      <path d="M8 16h24" />
+      <circle cx="14" cy="11" r="1.4" fill={palette[1]} stroke="none" />
+      <circle cx="26" cy="11" r="1.4" fill={palette[1]} stroke="none" />
+      <path d="M14.5 23.5h5m5-3v6" stroke-width="2" />
     {:else if kind === 'external'}
       <path d="M11 14h7l3 3h10v13H9V16a2 2 0 0 1 2-2Z" fill="#fffdf8" />
       <path d="m20 22 10-11m-7 0h7v7" stroke-width="2.4" />

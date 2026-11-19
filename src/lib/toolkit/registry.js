@@ -21,6 +21,7 @@ export const TOOL_REGISTRY = Object.freeze([
   // 교실 운영 도구끼리 모이도록 주사위 다음에 둡니다. 점수판은 타이머처럼 드롭다운을 거칩니다.
   { id: 'scoreboard', label: '점수판', entries: SCOREBOARD_TOOLS },
   { id: 'thermometer', label: '학급 온도계', entries: [] },
+  { id: 'dday', label: 'D-Day 위젯', entries: [] },
   // 학급 운영 도구 끝(명단 바로 앞)에 둡니다. 드롭다운 없이 투표판 창을 바로 엽니다.
   { id: 'vote', label: '학급 투표', entries: [] },
   { id: 'seating', label: '자리 배치', entries: [] },

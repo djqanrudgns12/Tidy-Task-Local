@@ -5,7 +5,7 @@ import { moreTools } from './moreTools.js';
 
 test('hidden tools move between toolbar and archive without duplication', () => {
   let settings = defaults();
-  assert.equal(moreTools(settings.toolkit).length, 6);
+  assert.equal(moreTools(settings.toolkit).length, 7);
   for (const id of TOOL_IDS) {
     settings = applySettingsPatch(settings, 'toolkit', { visibleToolIds: TOOL_IDS.filter((tool) => tool !== id) });
     assert.deepEqual(moreTools(settings.toolkit).map((tool) => tool.id), [id]);

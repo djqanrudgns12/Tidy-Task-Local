@@ -1,6 +1,6 @@
 <script>
   import ToolkitToggle from './toolkit/ToolkitToggle.svelte';
-  import { Plus, ChevronDown, Menu, StickyNote, CopyPlus, Archive, MousePointer2, Settings, CircleHelp, Trash2, Check } from 'lucide-svelte';
+  import { Plus, ChevronDown, Menu, StickyNote, CopyPlus, Archive, MousePointer2, Settings, CircleHelp, Trash2, Check, Flag } from 'lucide-svelte';
   import { getCurrentWindow } from '@tauri-apps/api/window';
   import { handleSettings } from '../lib/headerWindows.js';
   import { emitTo } from '@tauri-apps/api/event';
@@ -41,6 +41,11 @@
     {#snippet trigger()}<Menu size={14}/><span>메뉴</span><ChevronDown size={10}/>{/snippet}
     {#snippet children(close)}
       
+      <button class="tidy-header-menuitem" onclick={() => { close(); run(() => appState.openDdayControl()); }}>
+        <Flag size={17}/>
+        <span>D-Day 컨트롤</span>
+        {#if appState.activeDdays.length > 0}<small class="header-dday-count">{appState.activeDdays.length}</small>{/if}
+      </button>
       <button class="tidy-header-menuitem" onclick={() => { close(); run(onArchive); }}><Archive size={17}/><span>보관함</span></button>
       <button class="tidy-header-menuitem" aria-pressed={appState.isEditMode} onclick={() => { appState.toggleEditMode(); close(); }}><MousePointer2 size={17}/><span>{appState.isEditMode ? '여러 항목 선택 종료' : '여러 항목 선택'}</span>{#if appState.isEditMode}<Check size={15}/>{/if}</button>
       <div class="tidy-header-divider"></div>
@@ -77,4 +82,5 @@
   .reset-confirm { background:#ad3434; color:white; }
   .reset-confirm:hover { background:#942828 !important; }
   .header-action-error { position:fixed; bottom:12px; left:12px; right:12px; background:var(--header-panel); padding:12px; border:1px solid var(--header-line); border-radius:10px; z-index:200001; }
+  .header-dday-count { margin-top:0 !important; padding:1px 6px; border-radius:99px; background:var(--header-tint); color:var(--header-accent) !important; font-size:10px !important; font-weight:700; font-variant-numeric:tabular-nums; }
 </style>

@@ -35,7 +35,19 @@ export function verifyAnalyticsBinary(binary, settings) {
 
 /** @param {Buffer} assets */
 export function verifyAnalyticsFrontend(assets) {
-  for (const event of ['dice_rolled', 'timer_started', 'timer_completed', 'vote_created', 'vote_counting_started', 'vote_completed']) {
+  for (const event of [
+    'dice_rolled',
+    'timer_started',
+    'timer_completed',
+    'vote_created',
+    'vote_counting_started',
+    'vote_completed',
+    'dday_created',
+    'dday_completed',
+    'dday_restored',
+    'dday_deleted',
+    'dday_skin_changed',
+  ]) {
     if (!assets.includes(Buffer.from(event))) {
       throw new Error(`프런트 배포 번들에 통계 호출(${event})이 없습니다. --skip-build 없이 다시 빌드하세요.`);
     }

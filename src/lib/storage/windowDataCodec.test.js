@@ -51,12 +51,15 @@ const MAIN = { label: 'main', globalMuteSound: true };
 
 test('필드 표는 5.0.0 저장 키 순서와 개수를 그대로 유지한다', () => {
   // 5.0.5에서 추가된 필드는 항상 "끝에만" 붙입니다 (기존 키 순서 보존).
-  assert.deepEqual(WINDOW_FIELDS.map((f) => f.name), [...Object.keys(FULL_V500), 'windowPhysX', 'windowPhysY', 'headerDesign', 'notesPaneHeight']);
+  assert.deepEqual(
+    WINDOW_FIELDS.map((f) => f.name),
+    [...Object.keys(FULL_V500), 'windowPhysX', 'windowPhysY', 'headerDesign', 'notesPaneHeight', 'ddayItems', 'ddayBannerMode'],
+  );
   assert.deepEqual(
     SNAPSHOT_FIELDS,
     ['todos', 'archivedTodos', 'notes', 'themeColor', 'opacity', 'fontFamily', 'uiFontFamily',
       'fontSize', 'uiFontSize', 'letterSpacing', 'isDarkMode', 'showArchived', 'showNotes',
-      'showReminders', 'reminderSuppressUntil', 'title'],
+      'showReminders', 'reminderSuppressUntil', 'title', 'ddayItems'],
   );
   // 스냅샷 필드는 모두 저장 필드이기도 해야 합니다 (규칙 2).
   const persisted = new Set(WINDOW_FIELDS.map((f) => f.name));
@@ -194,9 +197,10 @@ test('빈 창 판정: 태그·&nbsp;·폭 없는 공백만 있으면 비어 있�
 
   assert.equal(hasWindowContent(null), false);
   assert.equal(hasWindowContent({}), false);
-  assert.equal(hasWindowContent({ todos: [], archivedTodos: [], notes: '<br>' }), false);
+  assert.equal(hasWindowContent({ todos: [], archivedTodos: [], notes: '<br>', ddayItems: [] }), false);
   assert.equal(hasWindowContent({ todos: [{ id: 1 }] }), true);
   assert.equal(hasWindowContent({ archivedTodos: [{ id: 1 }] }), true);
+  assert.equal(hasWindowContent({ ddayItems: [{ id: 'd1' }] }), true);
   assert.equal(hasWindowContent({ notes: '<div>메모</div>' }), true);
 });
 
@@ -239,4 +243,37 @@ test('notesPaneHeight(5.6.4)는 없으면 undefined로 두어 옛 파일 내용�
   }
   // 되돌리기 대상이 아닙니다(창 배치는 Ctrl+Z로 되돌리지 않음).
   assert.equal(SNAPSHOT_FIELDS.includes('notesPaneHeight'), false);
+});
+
+test('ddayItems와 ddayBannerMode는 비어 있으면 저장 JSON에 섞이지 않고, 값이 있으면 Undo 스냅샷 포함 왕복 보존된다', () => {
+  const empty = decodeWindowData({ todos: [] }, MAIN);
+  assert.deepEqual(empty.ddayItems, []);
+  assert.equal(empty.ddayBannerMode, 'single');
+  const encodedEmpty = JSON.parse(JSON.stringify(encodeWindowData((n) => empty[n])));
+  assert.equal('ddayItems' in encodedEmpty, false);
+  assert.equal('ddayBannerMode' in encodedEmpty, false);
+
+  const sampleItem = {
+    id: 'd1',
+    title: '겨울방학',
+    date: '2026-12-24',
+    startDate: '2026-11-18',
+    countMode: 'countdown',
+    repeatYearly: false,
+    icon: 'snow',
+    tone: 'sky',
+    status: 'active',
+    completedAt: null,
+    linkedTodoId: null,
+    showInTodo: false,
+    showInBanner: true,
+    showInWidget: true,
+    order: 0,
+  };
+  const populated = decodeWindowData({ ddayItems: [sampleItem], ddayBannerMode: 'bento' }, MAIN);
+  assert.deepEqual(populated.ddayItems, [sampleItem]);
+  assert.equal(populated.ddayBannerMode, 'bento');
+  assert.equal(SNAPSHOT_FIELDS.includes('ddayItems'), true);
+  assert.deepEqual(pickSnapshot((n) => populated[n]).ddayItems, [sampleItem]);
+  assert.deepEqual(restoreSnapshotValue('ddayItems', undefined), []);
 });

@@ -13,6 +13,7 @@
 // ═══════════════════════════════════════════════════════════════════
 import { isTinyNoteDarkTheme, normalizeThemeId } from '../themes.js';
 import { isTinyNoteLabel } from '../windows/windowLabels.js';
+import { DDAY_BANNER_MODES, normalizeDdayList } from '../dday/ddayModel.js';
 
 const DEFAULT_FONT = '메이플스토리 L';
 
@@ -91,13 +92,16 @@ export const WINDOW_FIELDS = Object.freeze(/** @type {FieldSpec[]} */ ([
   // 그때는 layout/memoLayout.js의 resolveNotesPreference가 notesHeight를 "실제로 보이던 높이"로 옮겨 씁니다.
   // 값 검사도 그 함수가 합니다(여기서 고치면 옛 버전과 주고받을 때 값이 조용히 바뀝니다).
   { name: 'notesPaneHeight', restore: (v) => v, snapshot: false },
+  { name: 'ddayItems', restore: (v) => normalizeDdayList(v), snapshot: true },
+  { name: 'ddayBannerMode', restore: (v) => (DDAY_BANNER_MODES.includes(v) ? v : 'single'), snapshot: false },
 ]));
 
-// 되돌리기 스냅샷의 필드 순서 (5.0.0 takeSnapshot과 동일)
+// 되돌리기 스냅샷의 필드 순서 (5.0.0 takeSnapshot과 동일 + 확장 필드)
 export const SNAPSHOT_FIELDS = Object.freeze([
   'todos', 'archivedTodos', 'notes', 'themeColor', 'opacity',
   'fontFamily', 'uiFontFamily', 'fontSize', 'uiFontSize', 'letterSpacing',
   'isDarkMode', 'showArchived', 'showNotes', 'showReminders', 'reminderSuppressUntil', 'title',
+  'ddayItems',
 ]);
 
 /**
@@ -125,7 +129,15 @@ export function encodeWindowData(read) {
   for (const field of WINDOW_FIELDS) {
     const value = read(field.name);
     // Classic is the legacy default: keep older files byte-compatible unless opted in.
-    data[field.name] = field.name === 'headerDesign' ? (value === 'modern' ? 'modern' : undefined) : value;
+    if (field.name === 'headerDesign') {
+      data[field.name] = value === 'modern' ? 'modern' : undefined;
+    } else if (field.name === 'ddayItems') {
+      data[field.name] = Array.isArray(value) && value.length > 0 ? value : undefined;
+    } else if (field.name === 'ddayBannerMode') {
+      data[field.name] = value === 'bento' || value === 'hidden' ? value : undefined;
+    } else {
+      data[field.name] = value;
+    }
   }
   return data;
 }
@@ -147,6 +159,7 @@ export function restoreSnapshotValue(name, value) {
   if (name === 'letterSpacing') return value ?? 0;
   if (name === 'showReminders') return value ?? true;
   if (name === 'reminderSuppressUntil') return value || 0;
+  if (name === 'ddayItems') return normalizeDdayList(value);
   return value;
 }
 
@@ -170,5 +183,6 @@ export function hasWindowContent(winData) {
   if (!winData) return false;
   return (Array.isArray(winData.todos) && winData.todos.length > 0)
     || (Array.isArray(winData.archivedTodos) && winData.archivedTodos.length > 0)
+    || (Array.isArray(winData.ddayItems) && winData.ddayItems.length > 0)
     || htmlHasText(winData.notes);
 }

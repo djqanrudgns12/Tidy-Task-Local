@@ -44,7 +44,19 @@ test('skip-build requires the exact verified installer and project configuration
 });
 
 test('frontend bundle must contain successful-action capture hooks', () => {
-  const events = ['dice_rolled', 'timer_started', 'timer_completed', 'vote_created', 'vote_counting_started', 'vote_completed'];
+  const events = [
+    'dice_rolled',
+    'timer_started',
+    'timer_completed',
+    'vote_created',
+    'vote_counting_started',
+    'vote_completed',
+    'dday_created',
+    'dday_completed',
+    'dday_restored',
+    'dday_deleted',
+    'dday_skin_changed',
+  ];
   assert.doesNotThrow(() => verifyAnalyticsFrontend(Buffer.from(events.join(' '))));
   for (const missing of events) {
     assert.throws(() => verifyAnalyticsFrontend(Buffer.from(events.filter(event => event !== missing).join(' '))), /프런트 배포 번들/);

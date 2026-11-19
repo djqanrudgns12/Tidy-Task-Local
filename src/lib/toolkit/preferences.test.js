@@ -17,9 +17,9 @@ test('custom order survives reload while toggled tools join the end of their new
 
 test('new defaults and untouched legacy defaults use the recommended order and six hidden tools', () => {
   assert.deepEqual(defaults().toolkit.visibleToolIds, DEFAULT_VISIBLE_TOOL_IDS);
-  assert.deepEqual(DEFAULT_TOOL_ORDER, ['timer', 'picker', 'noticeboard', 'vote', 'seating', 'roster', 'external', 'focus-bell', 'clock', 'scoreboard', 'dice', 'thermometer', 'tournament']);
+  assert.deepEqual(DEFAULT_TOOL_ORDER, ['timer', 'picker', 'noticeboard', 'vote', 'seating', 'roster', 'external', 'focus-bell', 'clock', 'scoreboard', 'dice', 'thermometer', 'dday', 'tournament']);
   const legacy = normalizeSettings({ schemaVersion: 11, toolkit: {
-    visibleToolIds: [...TOOL_IDS], toolOrderIds: [...TOOL_IDS.slice(0, -1), 'external', 'roster'],
+    visibleToolIds: TOOL_IDS.filter((id) => id !== 'dday'), toolOrderIds: [...TOOL_IDS.filter((id) => id !== 'dday').slice(0, -1), 'external', 'roster'],
   } });
   assert.deepEqual(legacy.toolkit.visibleToolIds, DEFAULT_VISIBLE_TOOL_IDS);
   assert.deepEqual(legacy.toolkit.toolOrderIds, DEFAULT_TOOL_ORDER);
@@ -102,17 +102,17 @@ test('schema 7 adds the dice tool once and later hiding sticks', () => {
   // 토너먼트를 숨긴 기존 선택은 이전 기본값으로 취급하지 않습니다.
   const existing = ['timer', 'picker', 'noticeboard', 'focus-bell', 'roster'];
   const migrated = normalizeSettings({ schemaVersion: 6, toolkit: { visibleToolIds: existing } });
-  assert.equal(migrated.schemaVersion, 12);
+  assert.equal(migrated.schemaVersion, 13);
   assert.deepEqual(migrated.toolkit.visibleToolIds, [...existing, 'dice', 'clock', 'scoreboard', 'thermometer', 'vote', 'seating']);
   assert.ok(!defaults().toolkit.visibleToolIds.includes('dice'));
   const hidden = applySettingsPatch(migrated, 'toolkit', { visibleToolIds: ['timer'] });
   assert.deepEqual(normalizeSettings(JSON.parse(JSON.stringify(hidden))).toolkit.visibleToolIds, ['timer']);
-  assert.throws(() => normalizeSettings({ schemaVersion: 13 }));
+  assert.throws(() => normalizeSettings({ schemaVersion: 14 }));
 });
 
 test('schema 8 adds the clock once, keeps dice, and validates clock preferences', () => {
   const migrated = normalizeSettings({ schemaVersion: 7, toolkit: { visibleToolIds: ['timer', 'dice'] } });
-  assert.equal(migrated.schemaVersion, 12);
+  assert.equal(migrated.schemaVersion, 13);
   assert.deepEqual(migrated.toolkit.visibleToolIds, ['timer', 'dice', 'clock', 'scoreboard', 'thermometer', 'vote', 'seating']);
   assert.ok(!defaults().toolkit.visibleToolIds.includes('clock'));
   const hidden = applySettingsPatch(migrated, 'toolkit', { visibleToolIds: ['timer', 'dice'] });

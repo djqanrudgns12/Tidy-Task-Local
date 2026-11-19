@@ -43,6 +43,13 @@ async function start() {
     return mount(DatePickerPreview, { target });
   }
   if (
+    label === 'dday-control' ||
+    (!isTauri() && import.meta.env.DEV && new URLSearchParams(location.search).has('dday-control-preview'))
+  ) {
+    const { default: DdayControlModal } = await import('./components/dday/DdayControlModal.svelte');
+    return mount(DdayControlModal, { target, props: { preview: !isTauri() } });
+  }
+  if (
     label === 'initial-setup' ||
     (!isTauri() && import.meta.env.DEV && new URLSearchParams(location.search).has('initial-setup-preview'))
   ) {
@@ -88,6 +95,7 @@ async function start() {
         "scoreboard-custom",
         "thermometer",
         "thermometer-display",
+        "dday",
         "vote",
         "vote-teacher",
         "seating",

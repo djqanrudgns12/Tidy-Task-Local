@@ -28,6 +28,7 @@ use tauri::{Emitter, Manager};
 pub const SCOREBOARD_FILE: &str = "tidy-task-scoreboard.json";
 pub const THERMOMETER_FILE: &str = "tidy-task-thermometer.json";
 pub const VOTE_FILE: &str = "tidy-task-vote.json";
+pub const DDAY_FILE: &str = "tidy-task-dday.json";
 const SCHEMA_VERSION: u64 = 1;
 // 한 구역의 크기 상한. 온도계 기록 300개 × 2개 × 학급 50개도 이 안에 들어갑니다.
 const MAX_SECTION_BYTES: usize = 2 * 1024 * 1024;
@@ -62,6 +63,7 @@ fn file_for(store: &str) -> Result<&'static str, String> {
         "scoreboard" => Ok(SCOREBOARD_FILE),
         "thermometer" => Ok(THERMOMETER_FILE),
         "vote" => Ok(VOTE_FILE),
+        "dday" => Ok(DDAY_FILE),
         _ => Err("알 수 없는 저장소입니다.".into()),
     }
 }
@@ -71,6 +73,7 @@ fn section_allowed(store: &str, section: &str) -> bool {
         "scoreboard" => matches!(section, "shared" | "personal" | "group" | "custom"),
         "thermometer" => matches!(section, "main" | "display"),
         "vote" => matches!(section, "session" | "archive" | "draft" | "prefs"),
+        "dday" => matches!(section, "settings" | "widget"),
         _ => false,
     }
 }
@@ -296,6 +299,25 @@ pub(crate) fn restore_thermometer_display(app: &tauri::AppHandle) {
     }
 }
 
+pub(crate) fn restore_dday_widget(app: &tauri::AppHandle) {
+    let enabled = (|| -> Result<bool, String> {
+        let dir = data_dir(app)?;
+        let _g = LOCK.lock().map_err(|_| "저장 잠금 오류")?;
+        with_cache(&dir, DDAY_FILE, |loaded| {
+            loaded.doc["sections"]["widget"]["data"]["autoOpen"]
+                .as_bool()
+                .unwrap_or(false)
+        })
+    })()
+    .unwrap_or(false);
+    // 툴킷 활성화 여부와 독립적이며, 저장소 잠금을 놓은 뒤 위젯 창을 복원합니다.
+    if enabled {
+        if let Err(error) = crate::toolkit::create_window(app, "dday") {
+            log::warn!("D-Day 위젯 복원 실패: {error}");
+        }
+    }
+}
+
 pub(crate) fn last_thermometer_count(app: &tauri::AppHandle) -> usize {
     let Ok(dir) = data_dir(app) else { return 1 };
     let Ok(_g) = LOCK.lock() else { return 1 };
@@ -311,7 +333,7 @@ fn count_in(doc: &Value) -> usize {
 
 /// 업데이트 설치 직전 사본(`*.before-update.json`). 손상 파일로 이전 사본을 덮지 않습니다.
 pub(crate) fn snapshot_before_update(dir: &Path) {
-    for file in [SCOREBOARD_FILE, THERMOMETER_FILE, VOTE_FILE] {
+    for file in [SCOREBOARD_FILE, THERMOMETER_FILE, VOTE_FILE, DDAY_FILE] {
         let path = dir.join(file);
         if let Ok(bytes) = fs::read(&path) {
             if parse_valid(&bytes).is_some() {
@@ -486,5 +508,33 @@ mod tests {
             "lastSetKey":"c1","sets":{"c1":{"thermometers":[{},{}]},"default":{"thermometers":[{}]}}}}}});
         assert_eq!(count_in(&doc), 2);
         assert_eq!(count_in(&empty_doc()), 1);
+    }
+
+    #[test]
+    fn dday_settings_and_widget_preferences_survive_independently() {
+        let _s = SERIAL.lock().unwrap_or_else(|e| e.into_inner());
+        reset_cache();
+        let dir = temp_dir("dday");
+        let settings = json!({
+            "completeWithTodo": true,
+            "deleteWithTodo": false,
+            "defaultChannelsFromTodo": {"showInTodo": true, "showInBanner": true, "showInWidget": true},
+            "defaultChannelsFromNew": {"showInTodo": false, "showInBanner": true, "showInWidget": true}
+        });
+        let widget = json!({
+            "skin": "w4",
+            "autoOpen": true,
+            "alwaysOnTop": true,
+            "geometry": {"x": 120, "y": 140, "width": 236, "height": 256}
+        });
+        assert_eq!(write_in(&dir, "dday", "settings", 0, settings.clone()).unwrap(), 1);
+        assert_eq!(write_in(&dir, "dday", "widget", 0, widget.clone()).unwrap(), 1);
+        assert!(write_in(&dir, "dday", "unknown", 0, json!({})).is_err());
+        reset_cache();
+        let read = read_in(&dir, "dday").unwrap();
+        assert_eq!(read.sections["settings"]["data"], settings);
+        assert_eq!(read.sections["widget"]["data"], widget);
+        snapshot_before_update(&dir);
+        assert!(dir.join("tidy-task-dday.before-update.json").exists());
     }
 }

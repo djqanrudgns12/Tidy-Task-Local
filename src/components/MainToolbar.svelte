@@ -16,6 +16,9 @@
   } from "lucide-svelte";
   import { onMount } from "svelte";
   import HeaderActions from './HeaderActions.svelte';
+  import DdayBanner from './dday/DdayBanner.svelte';
+  import { computeDdayCounter } from '../lib/dday/ddayModel.js';
+  import { Flag } from 'lucide-svelte';
   import '../lib/header.css';
   import { isTauri } from '@tauri-apps/api/core';
   let formatOpen = $state(true);
@@ -717,6 +720,25 @@
       >
         <Archive size={11} class="transition-colors" style="color: {appState.isDarkMode ? '#d1d5db' : '#6b7280'};" />
       </button>
+
+      <button
+        type="button"
+        onclick={() => appState.openDdayControl()}
+        onmousedown={(e) => e.preventDefault()}
+        class="relative flex items-center justify-center w-[24px] h-[22px] rounded-md border transition-all shrink-0 hover:scale-105 active:scale-95"
+        style="background-color: {appState.activeDdays.length > 0 ? `color-mix(in srgb, ${appState.getThemeAccentColor()} 14%, ${appState.isDarkMode ? '#1e222b' : '#ffffff'})` : (appState.isDarkMode ? 'rgba(255,255,255,0.06)' : 'rgba(255,255,255,0.6)')}; border-color: {appState.activeDdays.length > 0 ? `color-mix(in srgb, ${appState.getThemeAccentColor()} 38%, transparent)` : (appState.isDarkMode ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)')};"
+        aria-label="D-Day 컨트롤 열기"
+        title={appState.activeDdays.length > 0 ? `D-Day 컨트롤 (${appState.activeDdays[0].title} · ${computeDdayCounter(appState.activeDdays[0], appState.todayKey).label})` : 'D-Day 컨트롤 열기'}
+      >
+        <Flag size={11} strokeWidth={2.2} style="color: {appState.activeDdays.length > 0 ? appState.getThemeAccentColor() : (appState.isDarkMode ? '#d1d5db' : '#6b7280')};" />
+        {#if appState.activeDdays.length > 0}
+          <span
+            aria-hidden="true"
+            class="absolute -top-[2px] -right-[2px] w-[5px] h-[5px] rounded-full"
+            style="background-color: {appState.getThemeAccentColor()};"
+          ></span>
+        {/if}
+      </button>
     </div>
 
     <div class="flex items-center justify-center w-full min-w-0">
@@ -746,6 +768,20 @@
   {:else}
   <div class="note-heading">
     <input class="note-title" type="text" bind:value={appState.title} onblur={() => appState.save()} placeholder="제목 쓰기" aria-label="노트 제목" maxlength="15" />
+    {#if appState.activeDdays.length > 0}
+      {@const topDday = appState.activeDdays[0]}
+      {@const topCounter = computeDdayCounter(topDday, appState.todayKey)}
+      <button
+        type="button"
+        class="dday-header-pill"
+        onclick={() => appState.openDdayControl({ focusDdayId: topDday.id })}
+        onmousedown={(e) => e.preventDefault()}
+        title={`D-Day 컨트롤 (${appState.activeDdays.length}건)`}
+      >
+        <Flag size={10} strokeWidth={2.4} />
+        <span class="tnum">{topCounter.label}</span>
+      </button>
+    {/if}
     <HeaderActions kind="create" />
   </div>
   <div class="note-tools" aria-label="노트 도구" role="group">
@@ -1021,6 +1057,8 @@
       {/if}
     </div>
   {/if}
+
+  <DdayBanner />
 </div>
 
 <style>
@@ -1092,6 +1130,10 @@
     .tool-status { display:none; }
   }
 
+  .dday-header-pill { display:inline-flex; align-items:center; gap:4px; height:23px; padding:0 7px; border-radius:999px; border:1px solid color-mix(in srgb,var(--header-accent) 30%,transparent); background:var(--header-tint); color:var(--header-accent); font-size:10.5px; font-weight:700; line-height:1; flex-shrink:0; cursor:pointer; white-space:nowrap; transition:filter .15s ease,transform .12s ease; }
+  .dday-header-pill:hover { filter:brightness(0.97); }
+  .dday-header-pill:active { transform:scale(0.96); }
+  .dday-header-pill .tnum { font-variant-numeric:tabular-nums; letter-spacing:-0.02em; }
   @media(max-width:229px) {
     .note-tools { gap:1px; padding-inline:6px; }
     .note-tools :global(.tidy-header-button) { width:100%; font-size:min(.917em, 10px); padding-inline:1px; gap:2px; }

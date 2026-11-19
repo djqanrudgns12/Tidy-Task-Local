@@ -106,6 +106,7 @@ fn window_kind(label: &str) -> &'static str {
             "dice" => "dice",
             "clock" => "clock",
             "thermometer" | "thermometer-display" => "thermometer",
+            "dday" | "dday-control" => "dday",
             "vote" | "vote-teacher" => "vote",
             "seating" | "seating-teacher" | "seating-display" => "seating",
             "scoreboard-personal" | "scoreboard-group" | "scoreboard-custom" => "scoreboard",
@@ -158,6 +159,24 @@ fn properties(event: &str, count: Option<u32>, choice: Option<&str>) -> Option<V
         | "settings_applied"
         | "update_download_opened"
         | "update_install_started" => {}
+        "dday_created" => {
+            if let Some(value) = choice {
+                if !["todo", "control"].contains(&value) {
+                    return None;
+                }
+                p["source"] = json!(value);
+            }
+        }
+        "dday_completed" | "dday_restored" | "dday_deleted" => {
+            p["count"] = json!(count.unwrap_or(1).clamp(1, 10000));
+        }
+        "dday_skin_changed" => {
+            let value = choice?;
+            if !["w1", "w4"].contains(&value) {
+                return None;
+            }
+            p["skin"] = json!(value);
+        }
         // 앱 안 업데이트가 멈춘 이유 (app_update.rs의 실패 코드를 소문자로 보냅니다. 사용자가 누른 취소·중복 클릭은 보내지 않습니다)
         "update_install_failed" => {
             let value = choice?;
@@ -589,6 +608,7 @@ mod tests {
         {
             assert_ne!(window_kind(role), "other", "통계 분류가 빠진 창: {role}");
         }
+        assert_eq!(window_kind("dday"), window_kind("dday-control"));
         for id in crate::toolkit::TOOL_IDS {
             if id != "timer" && id != "scoreboard" {
                 assert_ne!(window_kind(id), "other", "통계 분류가 빠진 도구: {id}");
@@ -779,6 +799,10 @@ mod tests {
     #[test]
     fn schema_rejects_content_and_unknown_events() {
         assert!(properties("arbitrary", None, None).is_none());
+        assert!(properties("dday_created", None, Some("secret title")).is_none());
+        assert_eq!(properties("dday_created", None, Some("todo")), Some(json!({"source":"todo"})));
+        assert!(properties("dday_skin_changed", None, Some("secret")).is_none());
+        assert_eq!(properties("dday_skin_changed", None, Some("w4")), Some(json!({"skin":"w4"})));
         assert!(properties("app_error", None, Some("secret file path")).is_none());
         assert!(properties("theme_changed", None, Some("school name")).is_none());
         assert!(properties(

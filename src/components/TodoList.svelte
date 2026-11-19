@@ -4,7 +4,7 @@
   import { applyTodoOrder } from "../lib/todos/order.js";
   import { appState } from "../lib/appState.svelte.js";
   import { editable } from "../lib/editable.js";
-  import { Check, Plus, Trash2, GripVertical } from "lucide-svelte";
+  import { Check, Plus, Trash2, GripVertical, Flag } from "lucide-svelte";
   import clsx from "clsx";
   import { onMount } from "svelte";
   import Icon from "@iconify/svelte";
@@ -54,6 +54,26 @@
   // 업데이트 설치 직전(입력 잠금)에는 달력을 닫습니다. 잠근 뒤 고른 날짜는 저장되지 못하기 때문입니다.
   $effect(() => {
     if (appState.isUpdateFrozen && datePicker.openKey) datePicker.close("frozen");
+  });
+
+  $effect(() => {
+    const id = appState.pendingPinTodoId;
+    if (!id) return;
+    appState.pendingPinTodoId = null;
+    const anchor = listViewportEl?.querySelector(`[data-todo-id="${CSS.escape(id)}"] [data-todo-deadline-btn]`);
+    if (!(anchor instanceof HTMLElement)) return;
+    void datePicker.open({
+      key: todoPickerKey(id),
+      anchor,
+      value: appState.todos.find((t) => t.id === id)?.deadline || '',
+      viaKeyboard: false,
+      appearance: pickerAppearance(),
+      onSelect: (v) => {
+        if (!v) return;
+        appState.setTodoDeadline(id, v);
+        void appState.pinTodoAsDday(id);
+      },
+    });
   });
 
   onMount(() => {
@@ -169,6 +189,7 @@
     >
       {#each visibleTodos as todo, index (todo.id)}
         {@const dlInfo = getDeadlineInfo(todo.deadline)}
+        {@const linkedDday = appState.findActiveDdayForTodo(todo.id)}
 
         <!--
           transition-all 을 transition-colors 로 바꾼 이유:
@@ -234,6 +255,7 @@
                 outline-offset: 1px;
               "
               title="마감일 설정"
+              data-todo-deadline-btn
               aria-expanded={datePicker.openKey === todoPickerKey(todo.id)}
             >
               {#if dlInfo.isIcon}
@@ -260,6 +282,20 @@
             role="textbox"
             tabindex="0"
           ></div>
+
+          {#if linkedDday}
+            <button
+              type="button"
+              onclick={() => appState.openDdayControl({ focusDdayId: linkedDday.id })}
+              onmousedown={(e) => e.preventDefault()}
+              class="todo-lead px-1 rounded transition-transform hover:scale-110 active:scale-95 shrink-0"
+              style="color: {appState.getThemeAccentColor()}; opacity: 0.85;"
+              title="D-Day 컨트롤에서 보기"
+              aria-label="D-Day 연결됨 · 컨트롤 열기"
+            >
+              <Flag size={11} strokeWidth={2.4} />
+            </button>
+          {/if}
 
           <div class="todo-actions todo-lead">
             <button

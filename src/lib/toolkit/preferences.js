@@ -31,11 +31,12 @@ export function isValidUiFontName(value) {
   return chars.length <= UI_FONT_NAME_MAX && !chars.some((ch) => /[\u0000-\u001f\u007f-\u009f]/.test(ch));
 }
 // 툴바에 보일 수 있는 도구 id. Rust toolkit.rs의 TOOL_IDS와 같아야 합니다.
-export const TOOL_IDS = ['timer', 'clock', 'picker', 'noticeboard', 'tournament', 'focus-bell', 'dice', 'scoreboard', 'thermometer', 'vote', 'seating', 'roster'];
+export const TOOL_IDS = ['timer', 'clock', 'picker', 'noticeboard', 'tournament', 'focus-bell', 'dice', 'scoreboard', 'thermometer', 'dday', 'vote', 'seating', 'roster'];
 // 외부 툴은 툴바에서 하나의 버튼이므로 순서 목록에서도 하나의 항목입니다.
 export const DEFAULT_VISIBLE_TOOL_IDS = ['timer', 'picker', 'noticeboard', 'vote', 'seating', 'roster'];
-export const DEFAULT_TOOL_ORDER = [...DEFAULT_VISIBLE_TOOL_IDS, 'external', 'focus-bell', 'clock', 'scoreboard', 'dice', 'thermometer', 'tournament'];
-const LEGACY_TOOL_ORDER = [...TOOL_IDS.slice(0, -1), 'external', 'roster'];
+export const DEFAULT_TOOL_ORDER = [...DEFAULT_VISIBLE_TOOL_IDS, 'external', 'focus-bell', 'clock', 'scoreboard', 'dice', 'thermometer', 'dday', 'tournament'];
+const LEGACY_TOOL_IDS_11 = 12;
+const LEGACY_TOOL_ORDER = [...TOOL_IDS.filter((id) => id !== 'dday').slice(0, -1), 'external', 'roster'];
 /** @param {unknown} ids */
 export function normalizeToolOrder(ids) {
   const known = Array.isArray(ids) ? ids.filter((id) => typeof id === 'string' && DEFAULT_TOOL_ORDER.includes(id)) : [];
@@ -95,7 +96,7 @@ export function defaultPreferences(kind) {
 /** @returns {Settings} */
 export function defaults() {
   return {
-    schemaVersion: 12,
+    schemaVersion: 13,
     revision: 0,
     toolkit: {
       // 처음 설정에서 사용 여부를 고르기 전에는 조용히 대기합니다.
@@ -142,7 +143,7 @@ export function normalizePreferences(kind, input = {}) {
 }
 /** @param {any} input @returns {Settings} */
 export function normalizeSettings(input) {
-  if (input?.schemaVersion != null && ![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].includes(input.schemaVersion))
+  if (input?.schemaVersion != null && ![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13].includes(input.schemaVersion))
     throw new Error('더 최신 버전의 툴킷 설정입니다.');
   const out = defaults();
   out.revision = Number.isSafeInteger(input?.revision) ? input.revision : 0;
@@ -181,7 +182,7 @@ export function normalizeSettings(input) {
   if (input?.schemaVersion <= 10 && !out.toolkit.visibleToolIds.includes('seating')) out.toolkit.visibleToolIds.push('seating');
   // 이전 기본값 그대로인 항목만 바꿉니다. 선생님이 숨기거나 재정렬한 설정은 유지합니다.
   if (input?.schemaVersion <= 11) {
-    if (out.toolkit.visibleToolIds.length === TOOL_IDS.length)
+    if (out.toolkit.visibleToolIds.length === LEGACY_TOOL_IDS_11 || out.toolkit.visibleToolIds.length === TOOL_IDS.length)
       out.toolkit.visibleToolIds = [...DEFAULT_VISIBLE_TOOL_IDS];
     const order = input?.toolkit?.toolOrderIds;
     if (Array.isArray(order) && order.length === LEGACY_TOOL_ORDER.length && order.every((id, index) => id === LEGACY_TOOL_ORDER[index]))

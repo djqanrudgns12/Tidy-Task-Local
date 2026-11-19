@@ -2,9 +2,30 @@ import { LazyStore } from '@tauri-apps/plugin-store';
 import { track, trackThrottled } from './analytics.js';
 import { getCurrentWindow, primaryMonitor } from '@tauri-apps/api/window';
 import { WebviewWindow } from '@tauri-apps/api/webviewWindow';
-import { emit, listen } from '@tauri-apps/api/event';
+import { emit, emitTo, listen } from '@tauri-apps/api/event';
 import { TINY_NOTE_MIN_WIDTH, TINY_NOTE_ROLLED_HEIGHT } from './tinyNoteWindow.js';
-import { NOTE_PREFIX, TINY_NOTE_PREFIX, isDataWindowLabel } from './windows/windowLabels.js';
+import { NOTE_PREFIX, TINY_NOTE_PREFIX, isDataWindowLabel, isTinyNoteLabel } from './windows/windowLabels.js';
+import {
+  normalizeDdaySettings,
+  todayDateKey,
+} from './dday/ddayModel.js';
+import {
+  deleteDdayItem,
+  syncArchivedTodosDeletedToDdays,
+  syncTodoDeadlineToDdays,
+  syncTodoRestoredToDdays,
+  syncTodosCompletedToDdays,
+  syncTodosDeletedToDdays,
+} from './dday/ddayActions.js';
+import {
+  DDAY_EVENTS,
+  applyDdayCommandToState,
+  buildWindowDdaySnapshot,
+  createDdaySettingsSection,
+  ddayWindowSignature,
+  openDdayControlWindow,
+  subscribeDdayStore,
+} from './dday/ddaySync.js';
 import { pickManager } from './windows/managerElection.js';
 import { findSlot, isSlotLimitReached, noteWindowOptions, tinyNoteWindowOptions } from './windows/windowSlots.js';
 import { getOpenWindowLabels, openWindow } from './windows/windowRegistry.js';
@@ -270,6 +291,22 @@ export class AppState {
   /** @type {TimerHandle | null} */
   maxWindowToastTimer = null;
 
+// ✨ [D-Day 상태 및 전역 설정 동기화 변수]
+  /** @type {import('./dday/ddayModel.js').DdayItem[]} */
+  ddayItems = $state([]);
+  /** @type {import('./dday/ddayModel.js').DdayBannerMode} */
+  ddayBannerMode = $state('single');
+  /** @type {import('./dday/ddayModel.js').DdaySettings} */
+  ddaySettings = $state(normalizeDdaySettings(undefined));
+  todayKey = $state(todayDateKey());
+  /** @type {string | null} */
+  pendingPinTodoId = $state(null);
+  showDdayKeptToast = $state(false);
+  /** @type {any} */
+  _ddaySection = null;
+  /** @type {string | null} */
+  _lastDdaySignature = null;
+
 // ✨ [다중 복사/붙여넣기 시스템 알림 변수]
   showCopySuccessToast = $state(false);
   showPasteSuccessToast = $state(false);
@@ -281,24 +318,27 @@ export class AppState {
   // Ctrl+S 즉시 저장 안내 (도움말에 적힌 단축키)
   showSaveToast = $state(false);
 
-  /** @param {'copy' | 'paste' | 'limit' | 'save'} type */
+  /** @param {'copy' | 'paste' | 'limit' | 'save' | 'dday-kept'} type */
   triggerToast(type) {
     this.showCopySuccessToast = false;
     this.showPasteSuccessToast = false;
     this.showPasteLimitToast = false;
     this.showSaveToast = false;
+    this.showDdayKeptToast = false;
     if (this.toastTimer) clearTimeout(this.toastTimer);
 
     if (type === 'copy') this.showCopySuccessToast = true;
     else if (type === 'paste') this.showPasteSuccessToast = true;
     else if (type === 'limit') this.showPasteLimitToast = true;
     else if (type === 'save') this.showSaveToast = true;
+    else if (type === 'dday-kept') this.showDdayKeptToast = true;
 
     this.toastTimer = setTimeout(() => {
       this.showCopySuccessToast = false;
       this.showPasteSuccessToast = false;
       this.showPasteLimitToast = false;
       this.showSaveToast = false;
+      this.showDdayKeptToast = false;
     }, 2500);
   }
 
@@ -571,6 +611,10 @@ async init() {
         invoke('tray_take_pending_request')
           .then((kind) => { if (typeof kind === 'string') this._runTrayRequest(kind); })
           .catch(() => {});
+
+        if (!isTinyNoteLabel(this.windowLabel)) {
+          this._initDdayListeners();
+        }
       }
 
       // 새 커스텀 폰트가 등록되면 모든 창이 목록에 추가하고 글꼴을 불러옵니다.
@@ -1599,6 +1643,15 @@ async init() {
           emit('req-reminder-sync');
         }
       }
+
+      if (!isTinyNoteLabel(this.windowLabel)) {
+        const ddaySnap = this.getDdayWindowSnapshot();
+        const nextDdaySig = ddayWindowSignature(ddaySnap);
+        if (nextDdaySig !== this._lastDdaySignature) {
+          this._lastDdaySignature = nextDdaySig;
+          void emit(DDAY_EVENTS.windowUpdated, { label: this.windowLabel, snapshot: ddaySnap }).catch(() => {});
+        }
+      }
       
       return true;
     } catch (e) {
@@ -1691,6 +1744,7 @@ async init() {
     this.todos = [];
     this.archivedTodos = [];
     this.notes = '';
+    this.ddayItems = [];
     await this.saveNow();
   }
 
@@ -1741,6 +1795,14 @@ async init() {
     // 같은 날짜를 다시 고른 경우: 저장·되돌리기 기록을 새로 만들지 않습니다.
     if ((todo.deadline || '') === next) return true;
     todo.deadline = next;
+    const synced = syncTodoDeadlineToDdays(
+      this._ddayWindowState(),
+      id,
+      next,
+    );
+    if (synced.changed) {
+      this.ddayItems = synced.state.ddayItems;
+    }
     this._sortTodosByDeadline();
     this.saveNow();
     if (next) this.checkReminders();
@@ -1767,6 +1829,14 @@ async init() {
       const movedItem = { ...this.todos[idx], completed: true };
       this.todos.splice(idx, 1);
       this.archivedTodos.unshift(movedItem);
+      const synced = syncTodosCompletedToDdays(
+        this._ddayWindowState(),
+        [id],
+        this.ddaySettings,
+        this.todayKey,
+      );
+      this.ddayItems = synced.state.ddayItems;
+      if (synced.archivedCount > 0) track('dday_completed', { count: synced.archivedCount });
       track('todo_completed');
       this.saveNow();
     }
@@ -1779,6 +1849,13 @@ async init() {
       const restoredItem = { ...this.archivedTodos[idx], completed: false };
       this.archivedTodos.splice(idx, 1);
       this.todos.push(restoredItem);
+      const synced = syncTodoRestoredToDdays(
+        this._ddayWindowState(),
+        id,
+        this.ddaySettings,
+      );
+      this.ddayItems = synced.state.ddayItems;
+      if (synced.restoredCount > 0) track('dday_restored', { count: synced.restoredCount });
       track('todo_restored');
       this.saveNow();
     }
@@ -1788,17 +1865,35 @@ async init() {
   deleteTodo(id) {
     if (this.todos.some(t => t.id === id)) track('todo_deleted');
     this.todos = this.todos.filter(t => t.id !== id);
+    const synced = syncTodosDeletedToDdays(
+      this._ddayWindowState(),
+      [id],
+      this.ddaySettings,
+    );
+    this.ddayItems = synced.state.ddayItems;
+    if (synced.deletedCount > 0) track('dday_deleted', { count: synced.deletedCount });
+    if (synced.keptCount > 0) this.triggerToast('dday-kept');
     this.saveNow();
   }
 
   /** @param {string} id */
   deleteArchivedTodo(id) {
     this.archivedTodos = this.archivedTodos.filter(t => t.id !== id);
+    const synced = syncArchivedTodosDeletedToDdays(
+      this._ddayWindowState(),
+      [id],
+    );
+    this.ddayItems = synced.ddayItems;
     this.saveNow();
   }
 
   deleteAllArchivedTodos() {
     this.archivedTodos = [];
+    const synced = syncArchivedTodosDeletedToDdays(
+      this._ddayWindowState(),
+      null,
+    );
+    this.ddayItems = synced.ddayItems;
     this.saveNow();
   }
 
@@ -2249,8 +2344,18 @@ async init() {
 
   async deleteSelected() {
     if (this.selectedTodoIds.length === 0) return;
+    const removedActiveIds = this.todos.filter(t => this.selectedTodoIds.includes(t.id)).map(t => t.id);
+    const removedArchivedIds = this.archivedTodos.filter(t => this.selectedTodoIds.includes(t.id)).map(t => t.id);
     this.todos = this.todos.filter(t => !this.selectedTodoIds.includes(t.id));
     this.archivedTodos = this.archivedTodos.filter(t => !this.selectedTodoIds.includes(t.id));
+    const synced = syncTodosDeletedToDdays(
+      this._ddayWindowState(),
+      removedActiveIds,
+      this.ddaySettings,
+    );
+    this.ddayItems = syncArchivedTodosDeletedToDdays(synced.state, removedArchivedIds).ddayItems;
+    if (synced.deletedCount > 0) track('dday_deleted', { count: synced.deletedCount });
+    if (synced.keptCount > 0) this.triggerToast('dday-kept');
     this.selectedTodoIds = [];
     await this.saveNow(); 
   }
@@ -2309,6 +2414,10 @@ async init() {
       deadline: item.deadline,
     }));
     this.notes = linesToHtml(notesLines);
+    this.ddayItems = syncArchivedTodosDeletedToDdays(
+      this._ddayWindowState(),
+      null,
+    ).ddayItems;
 
     await this.saveNow();
     if (todos.length + archived.length > 0) track('todos_imported', { count: todos.length + archived.length });
@@ -2321,10 +2430,19 @@ async init() {
     const activeToArchive = this.todos
       .filter(t => this.selectedTodoIds.includes(t.id))
       .map(t => ({ ...t, completed: true }));
+    const archivedIds = activeToArchive.map(t => t.id);
 
     this.todos = this.todos.filter(t => !this.selectedTodoIds.includes(t.id));
     this.archivedTodos = [...activeToArchive, ...this.archivedTodos];
     if (activeToArchive.length) track('todos_archived', { count: activeToArchive.length });
+    const synced = syncTodosCompletedToDdays(
+      this._ddayWindowState(),
+      archivedIds,
+      this.ddaySettings,
+      this.todayKey,
+    );
+    this.ddayItems = synced.state.ddayItems;
+    if (synced.archivedCount > 0) track('dday_completed', { count: synced.archivedCount });
     
     this.selectedTodoIds = [];
     await this.saveNow();
@@ -2430,6 +2548,155 @@ async init() {
     );
 
     this.saveNow();
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // ✨ [D-Day] 컨트롤 타워 · 배너 · 위젯 공용 제어
+  // ═══════════════════════════════════════════════════════════
+
+  get activeDdays() {
+    return (this.ddayItems || [])
+      .filter((d) => d.status === 'active')
+      .slice()
+      .sort((a, b) => a.order - b.order);
+  }
+
+  get bannerDdays() {
+    return this.activeDdays.filter((d) => d.showInBanner);
+  }
+
+  /** @param {string} todoId */
+  findActiveDdayForTodo(todoId) {
+    return this.activeDdays.find((d) => d.linkedTodoId === todoId) || null;
+  }
+
+  /** @returns {import('./dday/ddayActions.js').DdayWindowState} */
+  _ddayWindowState() {
+    return {
+      todos: this.todos,
+      archivedTodos: this.archivedTodos,
+      ddayItems: this.ddayItems,
+      sortOrder: this.sortOrder === 'desc' ? 'desc' : 'asc',
+    };
+  }
+
+  getDdayWindowSnapshot() {
+    return buildWindowDdaySnapshot(this.windowLabel, {
+      title: this.title,
+      themeColor: this.themeColor,
+      isDarkMode: this.isDarkMode,
+      uiFontFamily: this.uiFontFamily,
+      uiFontSize: this.uiFontSize,
+      ddayBannerMode: this.ddayBannerMode,
+      ddayItems: $state.snapshot(this.ddayItems),
+      todos: $state.snapshot(this.todos),
+      archivedTodos: $state.snapshot(this.archivedTodos),
+      sortOrder: this.sortOrder,
+    });
+  }
+
+  _initDdayListeners() {
+    this._ddaySection = createDdaySettingsSection({
+      onChange: (/** @type {import('./dday/ddayModel.js').DdaySettings} */ next) => {
+        this.ddaySettings = next;
+      },
+    });
+    void this._ddaySection.load().catch(() => {});
+    void subscribeDdayStore(({ section, revision }) => {
+      if (section === 'settings') void this._ddaySection?.external(revision);
+    }).catch(() => {});
+
+    const refreshToday = () => {
+      const next = todayDateKey();
+      if (next !== this.todayKey) this.todayKey = next;
+    };
+    setInterval(refreshToday, 60_000);
+    window.addEventListener('focus', refreshToday);
+
+    void listen(DDAY_EVENTS.queryOpen, (ev) => {
+      const p = /** @type {any} */ (ev.payload);
+      if (!p?.requestId) return;
+      void emit(DDAY_EVENTS.queryReply, {
+        requestId: p.requestId,
+        snapshot: this.getDdayWindowSnapshot(),
+      }).catch(() => {});
+    }).catch(() => {});
+
+    void listen(DDAY_EVENTS.command, async (ev) => {
+      const p = /** @type {any} */ (ev.payload);
+      if (!p || p.targetLabel !== this.windowLabel) return;
+      const res = await this.applyDdayCommand(p.action, p.payload);
+      const reply = { requestId: p.requestId, ok: true, snapshot: this.getDdayWindowSnapshot(), item: res.item };
+      if (p.requester) {
+        void emitTo(p.requester, DDAY_EVENTS.commandAck, reply).catch(() => {});
+      } else {
+        void emit(DDAY_EVENTS.commandAck, reply).catch(() => {});
+      }
+    }).catch(() => {});
+  }
+
+  /** @param {string} action @param {any} payload */
+  async applyDdayCommand(action, payload) {
+    if (this.isUpdateFrozen) return { item: null };
+    const next = applyDdayCommandToState(
+      {
+        todos: $state.snapshot(this.todos),
+        archivedTodos: $state.snapshot(this.archivedTodos),
+        ddayItems: $state.snapshot(this.ddayItems),
+        ddayBannerMode: this.ddayBannerMode,
+        sortOrder: this.sortOrder,
+      },
+      action,
+      payload,
+      this.ddaySettings,
+      this.todayKey,
+    );
+    this.todos = next.todos;
+    this.archivedTodos = next.archivedTodos;
+    this.ddayItems = next.ddayItems;
+    this.ddayBannerMode = next.ddayBannerMode;
+    await this.saveNow();
+    return { item: next.item };
+  }
+
+  /** @param {string} todoId @param {Partial<import('./dday/ddayModel.js').DdayItem>} [customPatch] */
+  async pinTodoAsDday(todoId, customPatch = {}) {
+    return this.applyDdayCommand('pin-todo', { todoId, customPatch });
+  }
+
+  /** @param {string} todoId */
+  async unpinTodoDday(todoId) {
+    const linked = this.findActiveDdayForTodo(todoId);
+    if (!linked) return false;
+    this.ddayItems = deleteDdayItem(
+      this._ddayWindowState(),
+      linked.id,
+      { deleteLinkedTodo: false },
+    ).ddayItems;
+    track('dday_deleted', { count: 1 });
+    await this.saveNow();
+    return true;
+  }
+
+  /** @param {import('./dday/ddayModel.js').DdayBannerMode} mode */
+  async setDdayBannerMode(mode) {
+    await this.applyDdayCommand('set-banner-mode', { mode });
+  }
+
+  /** @param {{ focusDdayId?: string | null, initialTab?: 'list'|'settings'|'archive', openCreate?: boolean }} [opts] */
+  async openDdayControl(opts = {}) {
+    await openDdayControlWindow({
+      requesterLabel: this.windowLabel,
+      focusDdayId: opts.focusDdayId ?? null,
+      initialTab: opts.initialTab || 'list',
+      openCreate: opts.openCreate,
+      appearance: {
+        themeColor: this.themeColor,
+        isDarkMode: this.isDarkMode,
+        uiFontFamily: this.uiFontFamily,
+        uiFontSize: this.uiFontSize,
+      },
+    });
   }
 }
 

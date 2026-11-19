@@ -352,7 +352,7 @@ pub fn run() {
                 let mut has_active_notes = false;
                 for label in windows.keys() {
                     // 삭제 중인 창 자신은 제외하고 남은 창이 있는지 검사합니다.
-                    if label != destroyed_label && (toolkit::is_work_window(label) || label == "main" || label.starts_with("note-") || label.starts_with("tinynote-") || label == "reminder" || label == "archive" || matches!(label.as_str(), "meal" | "meal-search" | "meal-settings")) {
+                    if label != destroyed_label && (toolkit::is_work_window(label) || label == "main" || label.starts_with("note-") || label.starts_with("tinynote-") || label == "reminder" || label == "archive" || label == "dday-control" || matches!(label.as_str(), "meal" | "meal-search" | "meal-settings")) {
                         has_active_notes = true;
                         break;
                     }
@@ -391,7 +391,7 @@ pub fn run() {
             }
             // 학급 온도계 열람판은 툴킷을 꺼 두어도 앱 시작 시 복원합니다.
             let thermometer_handle = app.handle().clone();
-            std::thread::spawn(move || scores::restore_thermometer_display(&thermometer_handle));
+            std::thread::spawn(move || scores::restore_thermometer_display(&thermometer_handle)); let dday_handle = app.handle().clone(); std::thread::spawn(move || scores::restore_dday_widget(&dday_handle));
 
             // ✨ [표시 보장] 시작 후 일정 시간이 지나도 main 창이 숨어 있거나 화면 밖이면 Rust가 직접 꺼냅니다.
             // 왜: main 창은 숨긴 채 만들어지고 화면(JS)이 위치를 맞춘 뒤 스스로 보여 주는데,

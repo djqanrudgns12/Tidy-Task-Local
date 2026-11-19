@@ -30,13 +30,13 @@ function previewDoc(store) {
   }
 }
 
-/** @param {'scoreboard'|'thermometer'|'vote'} store @returns {Promise<ReadResult>} */
+/** @param {'scoreboard'|'thermometer'|'vote'|'dday'} store @returns {Promise<ReadResult>} */
 export async function readStore(store) {
   if (native) return invoke('scores_read', { store });
   return { sections: previewDoc(store).sections, readOnly: false, notice: null };
 }
 
-/** @param {'scoreboard'|'thermometer'|'vote'} store @param {string} section @param {number} expectedRevision @param {any} data
+/** @param {'scoreboard'|'thermometer'|'vote'|'dday'} store @param {string} section @param {number} expectedRevision @param {any} data
  * @returns {Promise<number>} 새 revision */
 export async function writeSection(store, section, expectedRevision, data) {
   if (native) return invoke('scores_write', { store, section, expectedRevision, data });
@@ -50,7 +50,7 @@ export async function writeSection(store, section, expectedRevision, data) {
   return revision;
 }
 
-/** @param {'scoreboard'|'thermometer'|'vote'} store @param {(change:{section:string,revision:number})=>void} callback
+/** @param {'scoreboard'|'thermometer'|'vote'|'dday'} store @param {(change:{section:string,revision:number})=>void} callback
  * @returns {Promise<()=>void>} */
 export async function subscribeStore(store, callback) {
   if (native)

@@ -8,11 +8,15 @@
   import { watchCustomFonts } from '../lib/toolkit/appearance.js';
   import { registerFontFace } from '../lib/fonts.js';
   import { getMonitorGeometries } from '../lib/windows/windowRegistry.js';
-  import { Undo2, Redo2, Pencil, Check, Download, Upload, Settings2, CircleHelp, PanelsTopLeft, Utensils, CopyPlus, StickyNote, Archive, NotebookPen, Omega, Scissors, Copy, ClipboardPaste, TextSelect, Pin, Palette, ChevronUp, ChevronDown } from 'lucide-svelte';
+  import { Undo2, Redo2, Pencil, Check, Download, Upload, Settings2, CircleHelp, PanelsTopLeft, Utensils, CopyPlus, StickyNote, Archive, NotebookPen, Omega, Scissors, Copy, ClipboardPaste, TextSelect, Pin, Palette, ChevronUp, ChevronDown, Flag, PinOff, Calendar, Trash2 } from 'lucide-svelte';
 
   let { isStandalone = false, preview = false, previewType = 'bar', previewDark = false, previewConfig = {}, onaction = undefined }  = $props();
   let type = $state('bar');
-  let config = $state({ themeColor: 'amber', isDarkMode: false, showArchived: true, showNotes: true, isEditMode: false, isPinned: false, isRolledUp: false, isFullscreen: false });
+  let config = $state({
+    themeColor: 'amber', isDarkMode: false, showArchived: true, showNotes: true,
+    isEditMode: false, isPinned: false, isRolledUp: false, isFullscreen: false,
+    todoMeta: null,
+  });
   let visible = $state(false);
   let menuRef = $state(null);
   let requesterLabel = $state('');
@@ -24,7 +28,14 @@
     { action: 'spawn-tiny', label: '새 Tiny Note', icon: StickyNote },
   ];
   onMount(() => {
-    if (preview) { type = previewType; config = { ...config, hasEditor: true, ...previewConfig, isDarkMode: previewDark }; visible = true; }
+    if (preview) {
+      const sampleTodo = previewType === 'todo'
+        ? { id: 'demo-t1', hasDeadline: true, deadlineLabel: '11.23 (월)', linkedDdayId: null, linkedCounter: '' }
+        : null;
+      type = previewType;
+      config = { uiFontFamily: '메이플스토리 L', ...config, hasEditor: true, todoMeta: sampleTodo, ...previewConfig, isDarkMode: previewDark };
+      visible = true;
+    }
     if (!isStandalone) return;
     document.body.style.backgroundColor = 'transparent';
     document.body.style.overflow = 'hidden';
@@ -114,8 +125,44 @@
 {/snippet}
 
 {#if visible}
-  <div bind:this={menuRef} class="context-menu" class:dark={config.isDarkMode} role="menu" tabindex="-1" aria-label={type === 'tiny' ? 'Tiny Note 메뉴' : 'Tidy Task 메뉴'} onkeydown={keydown} oncontextmenu={e => e.preventDefault()}
-    style="--surface:{config.isDarkMode ? '#24262c' : getTidyTheme(config.themeColor).tidy.bg}; --accent:{getThemeAccent(config.themeColor, config.isDarkMode)}; --limit:{maxHeight}px; font-family:'{config.uiFontFamily || 'Gulim'}',sans-serif; font-size:{Math.max(10, config.uiFontSize || 10)}pt;">
+  <div bind:this={menuRef} class="context-menu" class:dark={config.isDarkMode} role="menu" tabindex="-1" aria-label={type === 'tiny' ? 'Tiny Note 메뉴' : type === 'todo' ? '할 일 메뉴' : 'Tidy Task 메뉴'} onkeydown={keydown} oncontextmenu={e => e.preventDefault()}
+    style="--surface:{config.isDarkMode ? '#24262c' : getTidyTheme(config.themeColor).tidy.bg}; --accent:{getThemeAccent(config.themeColor, config.isDarkMode)}; --limit:{maxHeight}px; font-family:'{config.uiFontFamily || '메이플스토리 L'}','Maplestory',system-ui,sans-serif; font-size:{Math.max(10, config.uiFontSize || 10)}pt;">
+    {#if type === 'todo'}
+      {@const meta = config.todoMeta || {}}
+      <div class="brand" aria-hidden="true">선택한 할 일<span>빠른 동작</span></div>
+      {#if meta.linkedDdayId}
+        <button role="menuitem" class="hero-action" onclick={() => triggerAction('todo-open-dday')}>
+          <span class="hero-bubble"><Flag size={16} strokeWidth={2.1} /></span>
+          <span class="hero-txt"><strong>D-Day 컨트롤에서 열기</strong><small>{meta.linkedCounter ? `${meta.linkedCounter} · 별칭 · 위젯 관리` : '표시 채널 · 별칭 편집'}</small></span>
+        </button>
+        {@render item('todo-unpin-dday', 'D-Day 고정 해제 (할 일 유지)', PinOff)}
+      {:else}
+        <button role="menuitem" class="hero-action" onclick={() => triggerAction('todo-pin-dday')}>
+          <span class="hero-bubble"><Flag size={16} strokeWidth={2.1} /></span>
+          <span class="hero-txt"><strong>D-Day로 고정</strong><small>{meta.hasDeadline ? `${meta.deadlineLabel} 기준 상단 배너 · 위젯 고정` : '목표 날짜를 먼저 고른 뒤 바로 고정'}</small></span>
+        </button>
+      {/if}
+      <div class="separator" role="separator"></div>
+      {@render item('todo-edit-deadline', meta.hasDeadline ? `마감일 변경 (${meta.deadlineLabel})` : '마감일 설정하기', Calendar)}
+      {@render item('todo-complete', '마감 처리 (보관함으로)', Check)}
+      <button role="menuitem" class="item danger" onclick={() => triggerAction('todo-delete')}>
+        <Trash2 size={17} strokeWidth={1.7} /><span>할 일 삭제</span>
+      </button>
+      {#if config.hasEditor}
+        <div class="separator" role="separator"></div>
+        <div class="todo-clip-bar" role="group" aria-label="텍스트 편집">
+          <button role="menuitem" class="clip-btn" disabled={!config.hasSelection} onclick={() => triggerAction('cut')} title="잘라내기"><Scissors size={14} /><span>잘라내기</span></button>
+          <button role="menuitem" class="clip-btn" disabled={!config.hasSelection} onclick={() => triggerAction('copy')} title="복사"><Copy size={14} /><span>복사</span></button>
+          <button role="menuitem" class="clip-btn" onclick={() => triggerAction('paste')} title="붙여넣기"><ClipboardPaste size={14} /><span>붙여넣기</span></button>
+          <button role="menuitem" class="clip-btn" onclick={() => triggerAction('symbols')} title="특수문자"><Omega size={14} /><span>기호</span></button>
+        </div>
+      {/if}
+      <div class="separator" role="separator"></div>
+      <div class="pair">
+        {@render item('undo', '실행 취소', Undo2)}
+        {@render item('redo', '다시 실행', Redo2)}
+      </div>
+    {:else}
     <div class="brand" aria-hidden="true">{type === 'tiny' ? 'Tiny Note' : 'Tidy Task'}<span>빠른 메뉴</span></div>
     <div class="launchers">
       {#each launchers as entry}
@@ -159,6 +206,7 @@
       {@render item('open-help', '기능 설명', CircleHelp)}
       {@render item('open-settings', '설정', Settings2)}
     </div>
+    {/if}
   </div>
 {/if}
 
@@ -171,8 +219,21 @@
   button { color:inherit; font:inherit; cursor:pointer; border:0; background:transparent; }
   .launcher { display:flex; align-items:center; gap:8px; padding:11px 9px; border:1px solid var(--line); border-radius:8px; text-align:left; font-size:.9em; white-space:nowrap; }
   .launcher :global(svg) { color:var(--accent); flex-shrink:0; }
+  .hero-action { display:flex; align-items:center; gap:10px; width:100%; padding:8px 9px; border-radius:10px; border:1px solid color-mix(in srgb,var(--accent) 26%,transparent); background:color-mix(in srgb,var(--accent) 8%,transparent); text-align:left; }
+  .hero-action:hover:not(:disabled) { background:color-mix(in srgb,var(--accent) 14%,transparent); }
+  .hero-bubble { flex:none; width:30px; height:30px; border-radius:37%; display:grid; place-items:center; background:color-mix(in srgb,var(--accent) 18%,white); color:var(--accent); }
+  .dark .hero-bubble { background:color-mix(in srgb,var(--accent) 28%,#1f2430); color:color-mix(in srgb,var(--accent) 80%,white); }
+  .hero-txt { flex:1; min-width:0; display:flex; flex-direction:column; gap:1px; }
+  .hero-txt strong { font-size:.96em; font-weight:700; color:var(--ink); }
+  .hero-txt small { font-size:.8em; color:var(--muted); white-space:nowrap; }
+  .todo-clip-bar { display:grid; grid-template-columns:repeat(4,1fr); gap:4px; }
+  .clip-btn { display:flex; flex-direction:column; align-items:center; justify-content:center; gap:3px; padding:6px 4px; border-radius:7px; font-size:.76em; color:var(--ink); white-space:nowrap; }
+  .clip-btn :global(svg) { color:var(--muted); }
   .item { display:flex; align-items:center; width:100%; gap:10px; padding:8px 9px; min-height:36px; border-radius:7px; text-align:left; line-height:1.4; white-space:nowrap; }
   .item > :global(svg) { flex-shrink:0; color:var(--muted); }
+  .item.danger { color:#dc2626; }
+  .dark .item.danger { color:#fca5a5; }
+  .item.danger > :global(svg) { color:inherit; }
   .item > span:first-of-type { flex:1; }
   button:disabled { opacity:.38; cursor:default; }
   button:hover:not(:disabled) { background:var(--hover); }

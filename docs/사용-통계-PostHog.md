@@ -117,6 +117,11 @@ npm.cmd run tauri build
 | `todos_imported` | TXT 가져오기로 적용한 활성·완료 항목 / `count` |
 | `note_edited` | 메모 편집, 창별 최대 1분에 1회 |
 | `note_archived` | Tiny Note 아카이브 저장 성공 |
+| `dday_created` | D-Day 생성 확정 / `source` (`todo` · `control`) |
+| `dday_completed` | D-Day 완료 처리(보관 이동) / `count` |
+| `dday_restored` | 완료 아카이브에서 D-Day 복원 / `count` |
+| `dday_deleted` | D-Day 영구 삭제 또는 고정 해제 / `count` |
+| `dday_skin_changed` | D-Day 데스크톱 위젯 스킨 변경 / 허용된 `skin` (`w1` · `w4`) |
 | `meal_navigated` | 급식 이전/다음 날짜 탐색 |
 | `meal_copied` | 급식 메뉴 클립보드 복사 성공 |
 | `settings_applied` | 설정 적용 요청 전달 |
@@ -143,6 +148,7 @@ npm.cmd run tauri build
 | `noticeboard`, `roster` | 알림장·학급 명단 |
 | `scoreboard` | 개인·모둠·커스텀 점수판 |
 | `thermometer` | 온도계 + 표시 창 |
+| `dday` | D-Day 데스크톱 위젯 + 컨트롤 타워 |
 | `seating` | 자리 배치 + 선생님·표시 창 |
 | `toolkit` | 도구 모음 자체 |
 
