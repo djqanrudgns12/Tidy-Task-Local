@@ -28,6 +28,7 @@ use tauri::{Emitter, Manager};
 pub const SCOREBOARD_FILE: &str = "tidy-task-scoreboard.json";
 pub const THERMOMETER_FILE: &str = "tidy-task-thermometer.json";
 pub const VOTE_FILE: &str = "tidy-task-vote.json";
+pub const GROUP_PICKER_FILE: &str = "tidy-task-group-picker.json";
 pub const DDAY_FILE: &str = "tidy-task-dday.json";
 const SCHEMA_VERSION: u64 = 1;
 // 한 구역의 크기 상한. 온도계 기록 300개 × 2개 × 학급 50개도 이 안에 들어갑니다.
@@ -63,6 +64,7 @@ fn file_for(store: &str) -> Result<&'static str, String> {
         "scoreboard" => Ok(SCOREBOARD_FILE),
         "thermometer" => Ok(THERMOMETER_FILE),
         "vote" => Ok(VOTE_FILE),
+        "group-picker" => Ok(GROUP_PICKER_FILE),
         "dday" => Ok(DDAY_FILE),
         _ => Err("알 수 없는 저장소입니다.".into()),
     }
@@ -73,6 +75,7 @@ fn section_allowed(store: &str, section: &str) -> bool {
         "scoreboard" => matches!(section, "shared" | "personal" | "group" | "custom"),
         "thermometer" => matches!(section, "main" | "display"),
         "vote" => matches!(section, "session" | "archive" | "draft" | "prefs"),
+        "group-picker" => matches!(section, "prefs" | "classes" | "custom"),
         "dday" => matches!(section, "settings" | "widget"),
         _ => false,
     }
@@ -333,7 +336,7 @@ fn count_in(doc: &Value) -> usize {
 
 /// 업데이트 설치 직전 사본(`*.before-update.json`). 손상 파일로 이전 사본을 덮지 않습니다.
 pub(crate) fn snapshot_before_update(dir: &Path) {
-    for file in [SCOREBOARD_FILE, THERMOMETER_FILE, VOTE_FILE, DDAY_FILE] {
+    for file in [SCOREBOARD_FILE, THERMOMETER_FILE, VOTE_FILE, GROUP_PICKER_FILE, DDAY_FILE] {
         let path = dir.join(file);
         if let Ok(bytes) = fs::read(&path) {
             if parse_valid(&bytes).is_some() {
@@ -508,6 +511,28 @@ mod tests {
             "lastSetKey":"c1","sets":{"c1":{"thermometers":[{},{}]},"default":{"thermometers":[{}]}}}}}});
         assert_eq!(count_in(&doc), 2);
         assert_eq!(count_in(&empty_doc()), 1);
+    }
+
+    #[test]
+    fn group_picker_sections_persist_and_snapshot_before_update() {
+        let _s = SERIAL.lock().unwrap_or_else(|e| e.into_inner());
+        reset_cache();
+        let dir = temp_dir("group-picker");
+        for section in ["prefs", "classes", "custom"] {
+            assert_eq!(
+                write_in(&dir, "group-picker", section, 0, json!({"ok": section})).unwrap(),
+                1,
+                "{section}"
+            );
+        }
+        assert!(write_in(&dir, "group-picker", "unknown", 0, json!({})).is_err());
+        reset_cache();
+        let read = read_in(&dir, "group-picker").unwrap();
+        assert_eq!(read.sections["prefs"]["data"]["ok"], "prefs");
+        assert_eq!(read.sections["classes"]["data"]["ok"], "classes");
+        assert_eq!(read.sections["custom"]["data"]["ok"], "custom");
+        snapshot_before_update(&dir);
+        assert!(dir.join("tidy-task-group-picker.before-update.json").exists());
     }
 
     #[test]

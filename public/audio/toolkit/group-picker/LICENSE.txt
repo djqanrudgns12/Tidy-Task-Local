@@ -1,0 +1,5 @@
+Tidy Task 모둠원 뽑기(picker-group) 전용 가공 효과음 라이브러리
+이 폴더의 WAV 파일은 public/audio/toolkit/timer-sounds/ 음원을 기반으로
+무음 구간(-50 dBFS 이하) 트리밍 및 BS.1770(-20 LUFS / -16 LUFS) 재정규화만 수행한 파생본입니다.
+원저작자 및 라이선스(CC0 1.0 · CC BY 4.0 · Apache-2.0) 상세 내역은 ../timer-sounds/LICENSE.txt 를 따릅니다.
+재생성: node scripts/prepare-group-picker-audio.mjs

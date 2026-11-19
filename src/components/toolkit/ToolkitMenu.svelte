@@ -2,7 +2,7 @@
   import { onMount, tick } from 'svelte';
   import { getCurrentWindow } from '@tauri-apps/api/window';
   import { WebviewWindow } from '@tauri-apps/api/webviewWindow';
-  import { TIMER_TOOLS, SCOREBOARD_TOOLS, PLATFORM_TOOLS } from '../../lib/toolkit/registry.js';
+  import { TIMER_TOOLS, PICKER_TOOLS, SCOREBOARD_TOOLS, PLATFORM_TOOLS } from '../../lib/toolkit/registry.js';
   import { defaults } from '../../lib/toolkit/preferences.js';
   import { moreTools } from '../../lib/toolkit/moreTools.js';
   import ToolIcon from './ToolIcon.svelte';
@@ -13,7 +13,7 @@
   import TimerIcon from './TimerIcon.svelte';
   import { ArrowUpRight, Minimize2, Maximize2, LocateFixed, Settings, Power, GripHorizontal } from 'lucide-svelte';
   // ondone: 브라우저 미리보기에서는 메뉴가 툴바 안에 그려지므로, 동작 뒤 닫기를 툴바에 맡깁니다.
-  let { kind = 'timer', ondone } = $props<{ kind?: 'timer' | 'scoreboard' | 'external' | 'more' | 'context'; ondone?: () => void }>();
+  let { kind = 'timer', ondone } = $props<{ kind?: 'timer' | 'picker' | 'scoreboard' | 'external' | 'more' | 'context'; ondone?: () => void }>();
   // 점수판 메뉴: 마지막으로 연 항목에 초점을 두어 Enter 한 번으로 다시 열게 하고, 이미 열린 창에는 점을 찍습니다.
   // 왜 localStorage인가: 잃어도 첫 항목에 초점이 갈 뿐인 편의 값이라 저장소를 따로 두지 않습니다.
   let config = $state(defaults().toolkit);
@@ -21,18 +21,20 @@
   const archived = $derived(moreTools(config));
   const group = $derived(archived.find((tool) => tool.id === groupId));
   async function selectGroup(id: string) { groupId = id; await tick(); focusFirst(); }
-  const LAST_KEY = 'tidy-scoreboard-menu-last';
+  const LAST_KEY = $derived(kind === 'picker' ? 'tidy-picker-menu-last' : 'tidy-scoreboard-menu-last');
+  const isRememberedMenu = $derived(kind === 'scoreboard' || kind === 'picker');
   let openLabels = $state<string[]>([]);
   function lastScoreboard() {
+    if (kind !== 'scoreboard' && kind !== 'picker') return null;
     try { return localStorage.getItem(LAST_KEY); } catch { return null; }
   }
   async function refreshOpen() {
-    if (kind !== 'scoreboard' || !native) return;
-    const found = await Promise.all(SCOREBOARD_TOOLS.map(async (tool) => ((await WebviewWindow.getByLabel(tool.id)) ? tool.id : '')));
+    if ((kind !== 'scoreboard' && kind !== 'picker') || !native) return;
+    const found = await Promise.all((kind === 'picker' ? PICKER_TOOLS : SCOREBOARD_TOOLS).map(async (tool) => ((await WebviewWindow.getByLabel(tool.id)) ? tool.id : '')));
     openLabels = found.filter(Boolean);
   }
   function focusFirst() {
-    const last = kind === 'scoreboard' ? lastScoreboard() : null;
+    const last = (kind === 'scoreboard' || kind === 'picker') ? lastScoreboard() : null;
     const target = (last && list.querySelector<HTMLButtonElement>(`button[data-tool="${last}"]`)) || list.querySelector('button');
     target?.focus();
   }
@@ -48,11 +50,11 @@
   const visiblePlatforms = $derived(
     PLATFORM_TOOLS.filter((tool) => externalToolsEnabled && !hiddenPlatformIds.includes(tool.id)),
   );
-  const menuLabel = $derived(kind === 'timer' ? '타이머' : kind === 'scoreboard' ? '점수판' : kind === 'external' ? '외부 툴' : kind === 'more' ? '더보기' : 'Tidy 툴킷');
+  const menuLabel = $derived(kind === 'timer' ? '타이머' : kind === 'picker' ? '간단 뽑기' : kind === 'scoreboard' ? '점수판' : kind === 'external' ? '외부 툴' : kind === 'more' ? '더보기' : 'Tidy 툴킷');
   async function launch(id: string, platform = false) {
     try {
       if (kind === 'timer' || (kind === 'more' && !platform)) await openTool(id);
-      else if (kind === 'scoreboard') {
+      else if (kind === 'scoreboard' || kind === 'picker') {
         await openTool(id);
         try { localStorage.setItem(LAST_KEY, id); } catch {}
       } else await openPlatform(id);
@@ -77,7 +79,12 @@
     }
   }
   async function keys(e: KeyboardEvent) {
-    if (e.defaultPrevented) return;
+    if (e.isComposing || e.keyCode === 229 || e.defaultPrevented) return;
+    if ((kind === 'picker' || kind === 'scoreboard') && /^[1-3]$/.test(e.key)) {
+      const items = kind === 'picker' ? PICKER_TOOLS : SCOREBOARD_TOOLS;
+      const item = items[Number(e.key) - 1];
+      if (item) { e.preventDefault(); await launch(item.id); return; }
+    }
     const buttons = Array.from(list.querySelectorAll<HTMLButtonElement>('button:not(:disabled)'));
     if (kind === 'context' && e.key !== 'Escape') return;
     const i = buttons.indexOf(document.activeElement as HTMLButtonElement);
@@ -143,7 +150,7 @@
       observeContent();
       stopSizing = () => { cancelAnimationFrame(frame); sizes.disconnect(); content.disconnect(); };
     }
-    if (kind !== 'timer' && kind !== 'scoreboard') {
+    if (kind !== 'timer' && !isRememberedMenu) {
       const apply = (settings: Awaited<ReturnType<typeof readSettings>>) => {
         if (disposed) return;
         config = settings.toolkit;
@@ -198,7 +205,8 @@
   aria-label={`${menuLabel} 선택`}
   class:more-menu={kind === 'more'}
   class:external-menu={kind === 'external'}
-  class:scoreboard-menu={kind === 'scoreboard'}
+  class:scoreboard-menu={isRememberedMenu}
+  class:picker-menu={kind === 'picker'}
   class:context-menu={kind === 'context'}
   tabindex="-1"
   oncontextmenu={(e) => e.preventDefault()}
@@ -238,8 +246,8 @@
         size={14}
       /></button
     >{/each}
-  {:else if kind === 'scoreboard'}
-    {#each SCOREBOARD_TOOLS as tool}<button
+  {:else if isRememberedMenu}
+    {#each (kind === 'picker' ? PICKER_TOOLS : SCOREBOARD_TOOLS) as tool}<button
       role="menuitem"
       data-tool={tool.id}
       title={openLabels.includes(tool.id) ? `${tool.label} (열려 있어요 · 누르면 앞으로)` : tool.label}

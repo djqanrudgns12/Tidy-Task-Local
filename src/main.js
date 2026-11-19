@@ -85,6 +85,7 @@ async function start() {
         "stopwatch",
         "roster",
         "picker",
+        "picker-group",
         "tournament",
         "focus-bell",
         "dice",

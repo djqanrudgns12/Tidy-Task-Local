@@ -71,6 +71,7 @@
         aria-label="툴킷 설정 준비 중"
       ></div>{:then module}<module.default />{:catch}<p role="alert">설정 화면을 불러오지 못했어요. 창을 다시 열어 주세요.</p>{/await}
   {:else if role === "toolkit-menu"}<ToolkitMenu />
+  {:else if role === "toolkit-picker-menu"}<ToolkitMenu kind="picker" />
   {:else if role === "toolkit-scoreboard-menu"}<ToolkitMenu kind="scoreboard" />
   {:else if role === "toolkit-external-menu"}<ToolkitMenu kind="external" />
   {:else if role === "toolkit-more-menu"}<ToolkitMenu kind="more" />
@@ -88,6 +89,7 @@
   {:else if role === "dice"}{#await import('../dice/DiceApp.svelte')}<p>주사위를 준비하고 있어요…</p>{:then module}<module.default />{:catch}<p role="alert">주사위를 불러오지 못했어요. 창을 다시 열어 주세요.</p>{/await}
   {:else if role === "clock"}{#await import('../clock/ClockApp.svelte')}<p>시계를 준비하고 있어요…</p>{:then module}<module.default />{:catch}<p role="alert">시계를 불러오지 못했어요. 창을 다시 열어 주세요.</p>{/await}
   {:else if role === "picker"}{#await import('../picker/PickerApp.svelte')}<p>뽑기를 준비하고 있어요…</p>{:then module}<module.default />{:catch}<p role="alert">뽑기 화면을 불러오지 못했어요. 창을 다시 열어 주세요.</p>{/await}
+  {:else if role === "picker-group"}{#await import('../group-picker/GroupPickerApp.svelte')}<p>모둠원 뽑기를 준비하고 있어요…</p>{:then module}<module.default />{:catch}<p role="alert">모둠원 뽑기를 불러오지 못했어요. 창을 다시 열어 주세요.</p>{/await}
   {:else if role === "noticeboard"}{#await import('../noticeboard/NoticeboardApp.svelte')}<div
         aria-label="알림장 준비 중"
       ></div>{:then module}<module.default

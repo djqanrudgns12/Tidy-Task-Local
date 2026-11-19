@@ -9,11 +9,16 @@ export const SCOREBOARD_TOOLS = Object.freeze([
   { id: 'scoreboard-group', label: '모둠 점수판', hint: '모둠 수만 정하면 끝' },
   { id: 'scoreboard-custom', label: '커스텀 점수판', hint: '항목을 직접 입력해요' },
 ].map((tool) => Object.freeze(tool)));
+// 간단 뽑기 버튼을 누르면 뜨는 드롭다운 항목. id는 창 이름(label)이며 Rust toolkit.rs의 PICKER_ROLES와 같습니다.
+export const PICKER_TOOLS = Object.freeze([
+  { id: 'picker', label: '한 명 뽑기', hint: '발표자 · 당번을 한 명씩' },
+  { id: 'picker-group', label: '모둠원 뽑기', hint: '학급 명단으로 모둠 배정' },
+].map((tool) => Object.freeze(tool)));
 export const TOOL_REGISTRY = Object.freeze([
   { id: 'timer', label: '타이머', entries: TIMER_TOOLS },
   // 시간을 다루는 도구끼리 모이도록 타이머 바로 오른쪽에 둡니다(툴바 순서는 이 배열을 따릅니다).
   { id: 'clock', label: '시계', entries: [] },
-  { id: 'picker', label: '간단 뽑기', entries: [] },
+  { id: 'picker', label: '간단 뽑기', entries: PICKER_TOOLS },
   { id: 'noticeboard', label: '알림장', entries: [] },
   { id: 'tournament', label: '토너먼트', entries: [] },
   { id: 'focus-bell', label: '집중벨', entries: [] },

@@ -46,6 +46,7 @@ test('skip-build requires the exact verified installer and project configuration
 test('frontend bundle must contain successful-action capture hooks', () => {
   const events = [
     'dice_rolled',
+    'group_picker_drawn',
     'timer_started',
     'timer_completed',
     'vote_created',

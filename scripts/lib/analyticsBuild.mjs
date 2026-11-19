@@ -37,6 +37,7 @@ export function verifyAnalyticsBinary(binary, settings) {
 export function verifyAnalyticsFrontend(assets) {
   for (const event of [
     'dice_rolled',
+    'group_picker_drawn',
     'timer_started',
     'timer_completed',
     'vote_created',

@@ -103,6 +103,7 @@ npm.cmd run tauri build
 | `window_used` | 세션별 창 종류를 처음 사용 |
 | `tool_active_minute` | 5.6.3부터 설치·도구·UTC 분마다 실제 입력 1회. 재시작·동일 도구 다중 창 중복 제거. 한국 자정 전후에도 각 날짜 관측 가능 |
 | `dice_rolled` | 새 굴리기를 받아 무작위 값을 만든 시점 / `count` = 주사위 수(1~3). 눈·합계·결과는 미수집 |
+| `group_picker_drawn` | 모둠원 뽑기 무작위 분할이 확정된 시점 / `count` = 모둠 수(2~12). 학생명·구성·모둠명은 미수집 |
 | `timer_started` | 새 실행 또는 다시 시작. 일시정지 후 재개는 제외 |
 | `timer_resumed`, `timer_paused` | 실제 재개·일시정지 상태 전이. 중복 클릭 제외 |
 | `timer_completed` | 실행 중 → 완료 전이. 자동 완료 자체는 활동 집계 안 함. 스톱워치는 완료 없음 |
@@ -144,7 +145,7 @@ npm.cmd run tauri build
 | `timer_digital`, `timer_analog`, `timer_hourglass`, `timer_stopwatch` | 디지털·아날로그·모래시계·스톱워치 |
 | `vote` | 투표판 + 선생님 창 |
 | `dice`, `clock`, `focus_bell` | 주사위·시계·집중벨 |
-| `picker`, `tournament` | 뽑기·토너먼트 |
+| `picker`, `picker_group`, `tournament` | 간단 뽑기(한 명)·모둠원 뽑기·토너먼트 |
 | `noticeboard`, `roster` | 알림장·학급 명단 |
 | `scoreboard` | 개인·모둠·커스텀 점수판 |
 | `thermometer` | 온도계 + 표시 창 |

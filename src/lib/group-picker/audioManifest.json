@@ -1,0 +1,115 @@
+{
+  "generatedAt": "2026-11-19T02:31:48.252Z",
+  "samples": {
+    "woodblock": {
+      "url": "/audio/toolkit/group-picker/woodblock.wav",
+      "sampleRate": 48000,
+      "durationMs": 126,
+      "gateMs": 81,
+      "origDurationMs": 1000,
+      "lufs": -20.16,
+      "truePeakDb": -1.03,
+      "bytes": 12094
+    },
+    "soft-tap": {
+      "url": "/audio/toolkit/group-picker/soft-tap.wav",
+      "sampleRate": 48000,
+      "durationMs": 47,
+      "gateMs": 47,
+      "origDurationMs": 1000,
+      "lufs": -20.21,
+      "truePeakDb": -1.24,
+      "bytes": 4516
+    },
+    "glass-tink": {
+      "url": "/audio/toolkit/group-picker/glass-tink.wav",
+      "sampleRate": 48000,
+      "durationMs": 109,
+      "gateMs": 86,
+      "origDurationMs": 1000,
+      "lufs": -20.01,
+      "truePeakDb": -1.41,
+      "bytes": 10476
+    },
+    "kalimba": {
+      "url": "/audio/toolkit/group-picker/kalimba.wav",
+      "sampleRate": 48000,
+      "durationMs": 879,
+      "gateMs": 768,
+      "origDurationMs": 1000,
+      "lufs": -22.02,
+      "truePeakDb": -1.1,
+      "bytes": 84382
+    },
+    "soft-ding": {
+      "url": "/audio/toolkit/group-picker/soft-ding.wav",
+      "sampleRate": 48000,
+      "durationMs": 233,
+      "gateMs": 182,
+      "origDurationMs": 1000,
+      "lufs": -20,
+      "truePeakDb": -3.7,
+      "bytes": 22386
+    },
+    "hurry-tick": {
+      "url": "/audio/toolkit/group-picker/hurry-tick.wav",
+      "sampleRate": 48000,
+      "durationMs": 825,
+      "gateMs": 799,
+      "origDurationMs": 1000,
+      "lufs": -23.08,
+      "truePeakDb": -1.1,
+      "bytes": 79230
+    },
+    "heartbeat": {
+      "url": "/audio/toolkit/group-picker/heartbeat.wav",
+      "sampleRate": 48000,
+      "durationMs": 915,
+      "gateMs": 889,
+      "origDurationMs": 1000,
+      "lufs": -20,
+      "truePeakDb": -6.81,
+      "bytes": 87894
+    },
+    "music-box": {
+      "url": "/audio/toolkit/group-picker/music-box.wav",
+      "sampleRate": 48000,
+      "durationMs": 1861,
+      "gateMs": 900,
+      "origDurationMs": 2000,
+      "lufs": -20,
+      "truePeakDb": -4.14,
+      "bytes": 178708
+    },
+    "doorbell": {
+      "url": "/audio/toolkit/group-picker/doorbell.wav",
+      "sampleRate": 48000,
+      "durationMs": 3831,
+      "gateMs": 900,
+      "origDurationMs": 4600,
+      "lufs": -20,
+      "truePeakDb": -5.27,
+      "bytes": 367842
+    },
+    "xylophone-finish": {
+      "url": "/audio/toolkit/group-picker/xylophone-finish.wav",
+      "sampleRate": 48000,
+      "durationMs": 2104,
+      "gateMs": 900,
+      "origDurationMs": 3100,
+      "lufs": -16,
+      "truePeakDb": -6.99,
+      "bytes": 202072
+    },
+    "celebration": {
+      "url": "/audio/toolkit/group-picker/celebration.wav",
+      "sampleRate": 48000,
+      "durationMs": 1055,
+      "gateMs": 862,
+      "origDurationMs": 2000,
+      "lufs": -16,
+      "truePeakDb": -2.94,
+      "bytes": 101346
+    }
+  }
+}

@@ -769,4 +769,105 @@ mod tests {
         assert_eq!(h.len(), size);
         assert_eq!(read(&c).unwrap(), s);
     }
+    #[test]
+    fn replace_groups_is_atomic_preserves_seating_and_undoes_in_one_step() {
+        let mut c = setup();
+        let mut h = vec![];
+        let s = populated(&mut c, &mut h);
+        let cid = s.classes[0].id.clone();
+        // 학생 2명을 추가해 총 3명으로 만듭니다(번호 1, 2, 3).
+        let s = transact(
+            &mut c,
+            &id(),
+            s.revision,
+            Command::SaveStudents {
+                class_id: cid.clone(),
+                students: vec![
+                    StudentInput { id: None, number: 2, name: "예시 둘".into(), gender: Some("male".into()) },
+                    StudentInput { id: None, number: 3, name: "예시 셋".into(), gender: Some("female".into()) },
+                ],
+                delete_ids: vec![],
+            },
+            &mut h,
+        )
+        .unwrap();
+        let old_group_id = s.classes[0].groups[0].id.clone();
+        let old_group_name = s.classes[0].groups[0].name.clone();
+        let p1 = s.classes[0].students[0].id.clone();
+        let p2 = s.classes[0].students[1].id.clone();
+        let p3 = s.classes[0].students[2].id.clone();
+        // 기존 자리 배치 문서와 첫 배정을 심어 두고 보존 여부를 함께 확인합니다.
+        c.execute(
+            "INSERT INTO seating_documents(class_id, document) VALUES(?1, ?2)",
+            params![cid, json!({"version":1,"revision":0,"draft":{"title":"자리","layout":{"shape":"single","columns":2,"rows":1,"front":"top","props":[],"seats":[{"id":"s1","x":1,"y":1,"angle":0,"active":true}]},"assignments":{},"rules":[],"excluded":[],"appearances":{}},"archives":[],"currentId":null}).to_string()],
+        )
+        .unwrap();
+        let s = transact(
+            &mut c,
+            &id(),
+            s.revision,
+            Command::Assign { class_id: cid.clone(), ids: vec![p3.clone()], group_id: Some(old_group_id.clone()) },
+            &mut h,
+        )
+        .unwrap();
+        let before_history = h.len();
+        let next = transact(
+            &mut c,
+            &id(),
+            s.revision,
+            Command::ReplaceGroups {
+                class_id: cid.clone(),
+                groups: vec![
+                    GroupInput { name: old_group_name.clone(), student_ids: vec![p1.clone()] },
+                    GroupInput { name: "새 탐구모둠".into(), student_ids: vec![p2.clone()] },
+                ],
+            },
+            &mut h,
+        )
+        .unwrap();
+        // 1건으로 기록되고, 같은 이름 모둠 ID 재사용 + 결석(p3) 미배정 + seating_documents 보존
+        assert_eq!(h.len(), before_history + 1);
+        assert_eq!(next.classes[0].groups.len(), 2);
+        assert_eq!(next.classes[0].groups[0].id, old_group_id);
+        assert_eq!(next.classes[0].groups[1].name, "새 탐구모둠");
+        assert_eq!(next.classes[0].students[0].group_id.as_deref(), Some(old_group_id.as_str()));
+        assert_eq!(next.classes[0].students[1].group_id.as_deref(), Some(next.classes[0].groups[1].id.as_str()));
+        assert_eq!(next.classes[0].students[2].group_id, None);
+        assert!(next.seating.contains_key(&cid));
+        // 중복 학생/중복 모둠명/타 학급 학생은 거절되고 상태를 건드리지 않습니다.
+        assert!(transact(
+            &mut c,
+            &id(),
+            next.revision,
+            Command::ReplaceGroups {
+                class_id: cid.clone(),
+                groups: vec![
+                    GroupInput { name: "1모둠".into(), student_ids: vec![p1.clone()] },
+                    GroupInput { name: "2모둠".into(), student_ids: vec![p1.clone()] },
+                ],
+            },
+            &mut h,
+        )
+        .is_err());
+        assert!(transact(
+            &mut c,
+            &id(),
+            next.revision,
+            Command::ReplaceGroups {
+                class_id: cid,
+                groups: vec![
+                    GroupInput { name: "같음".into(), student_ids: vec![] },
+                    GroupInput { name: " 같음 ".into(), student_ids: vec![] },
+                ],
+            },
+            &mut h,
+        )
+        .is_err());
+        assert_eq!(read(&c).unwrap(), next);
+        // Undo 1회로 ReplaceGroups 이전 상태(p3만 old_group_id 배정)가 완벽히 복구됩니다.
+        let undone = transact(&mut c, &id(), next.revision, Command::Undo, &mut h).unwrap();
+        assert_eq!(undone.classes[0].groups, s.classes[0].groups);
+        assert_eq!(undone.classes[0].students[0].group_id, None);
+        assert_eq!(undone.classes[0].students[2].group_id.as_deref(), Some(old_group_id.as_str()));
+    }
 }

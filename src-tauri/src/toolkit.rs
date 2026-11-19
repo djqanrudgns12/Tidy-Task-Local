@@ -27,7 +27,9 @@ const TOOL_ORDER_IDS: [&str; 14] = ["timer", "picker", "noticeboard", "vote", "s
 const LEGACY_TOOL_ORDER_IDS: [&str; 13] = ["timer", "clock", "picker", "noticeboard", "tournament", "focus-bell", "dice", "scoreboard", "thermometer", "vote", "seating", "external", "roster"];
 // 점수판 3종의 창 이름(드롭다운 항목). JS registry.js의 SCOREBOARD_TOOLS와 같습니다.
 pub(crate) const SCOREBOARD_ROLES: [&str; 3] = ["scoreboard-personal", "scoreboard-group", "scoreboard-custom"];
-pub(crate) const TOOL_ROLES: [&str; 16] = ["roster", "noticeboard", "picker", "tournament", "focus-bell", "dice", "clock", "thermometer", "thermometer-display", "dday", "vote", "vote-teacher", "seating", "seating-teacher", "seating-display", "toolkit"];
+// 간단 뽑기 2종의 창 이름(드롭다운 항목). JS registry.js의 PICKER_TOOLS와 같습니다.
+pub(crate) const PICKER_ROLES: [&str; 2] = ["picker", "picker-group"];
+pub(crate) const TOOL_ROLES: [&str; 15] = ["roster", "noticeboard", "tournament", "focus-bell", "dice", "clock", "thermometer", "thermometer-display", "dday", "vote", "vote-teacher", "seating", "seating-teacher", "seating-display", "toolkit"];
 // 타이머 소리 id(시계음·종료 경고음·종료음). JS src/lib/timers/soundLibrary.js의 SOUND_LIBRARY와 같아야 합니다
 // (soundLibrary.test.js가 이 세 목록을 읽어 대조). 목록에 없는 값은 저장을 거부하고, 읽을 때는 기본 소리로 둡니다.
 const TICK_SOUNDS: [&str; 14] = ["clock-closeup", "small-tick", "wall-clock", "grandfather-clock", "alarm-clock", "stopwatch", "kitchen-timer", "metronome", "woodblock", "water-drop", "button-click", "soft-tap", "digital-tick", "glass-tink"];
@@ -417,6 +419,7 @@ pub fn is_work_window(label: &str) -> bool {
 fn is_tool_role(role: &str) -> bool {
     TOOL_ROLES.contains(&role) && role != "toolkit"
         || SCOREBOARD_ROLES.contains(&role)
+        || PICKER_ROLES.contains(&role)
 }
 
 /// 교실 도구 창의 첫 크기 규칙(모두 논리 px).
@@ -449,6 +452,7 @@ fn work_window_size(role: &str) -> Option<WorkWindowSize> {
         "clock" => ((880.0, 560.0), (320.0, 220.0), FOCUS, (1480.0, 960.0)),
         "tournament" => ((1180.0, 800.0), (640.0, 520.0), WIDE, (1680.0, 1040.0)),
         "picker" => ((1440.0, 920.0), (640.0, 520.0), WIDE, (1680.0, 1040.0)),
+        "picker-group" => ((1440.0, 920.0), (800.0, 560.0), WIDE, (1680.0, 1040.0)),
         "roster" | "noticeboard" => ((1040.0, 720.0), (640.0, 480.0), WIDE, (1680.0, 1040.0)),
         // 점수판은 교실 뒤에서 숫자를 읽어야 해서 넓게 엽니다. 개인은 30명 카드가 들어가도록 최소 폭을 조금 더 둡니다.
         "scoreboard-personal" => ((1280.0, 820.0), (720.0, 520.0), WIDE, (1680.0, 1040.0)),
@@ -502,7 +506,7 @@ pub(crate) fn create_window(app: &tauri::AppHandle, role: &str) -> Result<String
     }
     let _guard = WINDOW_LOCK.lock().map_err(|_| "창 잠금 오류")?;
     let timer = KINDS.contains(&role);
-    if !timer && !is_tool_role(role) && !["toolkit", "toolkit-menu", "toolkit-scoreboard-menu", "toolkit-external-menu", "toolkit-more-menu", "toolkit-context-menu", "toolkit-settings"].contains(&role) {
+    if !timer && !is_tool_role(role) && !["toolkit", "toolkit-menu", "toolkit-picker-menu", "toolkit-scoreboard-menu", "toolkit-external-menu", "toolkit-more-menu", "toolkit-context-menu", "toolkit-settings"].contains(&role) {
         return Err("알 수 없는 도구입니다.".into());
     }
     let id = NEXT_WINDOW.fetch_add(1, Ordering::SeqCst);
@@ -531,6 +535,9 @@ pub(crate) fn create_window(app: &tauri::AppHandle, role: &str) -> Result<String
         (380.0, 480.0, 340.0, 400.0)
     } else if role == "toolkit-menu" {
         (244.0, 250.0, 244.0, 250.0)
+    } else if role == "toolkit-picker-menu" {
+        // 간단 뽑기 드롭다운 — JS windows.js의 MENU_WINDOWS.picker와 같은 크기
+        (276.0, 174.0, 276.0, 174.0)
     } else if role == "toolkit-scoreboard-menu" {
         // 점수판 드롭다운 — JS windows.js의 MENU_WINDOWS.scoreboard와 같은 크기
         (264.0, 222.0, 264.0, 222.0)
@@ -547,6 +554,7 @@ pub(crate) fn create_window(app: &tauri::AppHandle, role: &str) -> Result<String
     let title = match role {
         "roster" => "학급 명단",
         "picker" => "간단 뽑기",
+        "picker-group" => "모둠원 뽑기",
         "tournament" => "토너먼트",
         "focus-bell" => "집중벨",
         "dice" => "주사위",
@@ -628,7 +636,7 @@ pub async fn toolkit_set_enabled(app: tauri::AppHandle, enabled: bool) -> Result
     if enabled {
         create_window(&app, "toolkit")?;
     } else {
-        for label in ["toolkit-menu", "toolkit-scoreboard-menu", "toolkit-external-menu", "toolkit-more-menu", "toolkit-context-menu", "toolkit-settings", "toolkit"] {
+        for label in ["toolkit-menu", "toolkit-picker-menu", "toolkit-scoreboard-menu", "toolkit-external-menu", "toolkit-more-menu", "toolkit-context-menu", "toolkit-settings", "toolkit"] {
             if let Some(win) = app.get_webview_window(label) {
                 let _ = win.destroy();
             }
@@ -929,6 +937,9 @@ mod tests {
         assert!(is_work_window("timer-analog-42"));
         assert!(is_work_window("noticeboard"));
         assert!(is_work_window("picker"));
+        assert!(is_work_window("picker-group"));
+        assert!(is_tool_role("picker"));
+        assert!(is_tool_role("picker-group"));
         assert!(is_work_window("dice"));
         assert!(is_work_window("clock"));
         for role in ["scoreboard-personal", "scoreboard-group", "scoreboard-custom", "thermometer", "dday", "vote", "vote-teacher"] {
@@ -936,6 +947,7 @@ mod tests {
             assert!(is_tool_role(role), "{role}");
         }
         assert!(!is_work_window("scoreboard"));
+        assert!(!is_work_window("toolkit-picker-menu"));
         assert!(!is_work_window("toolkit-scoreboard-menu"));
         assert!(!is_work_window("toolkit-menu"));
         assert!(!is_work_window("toolkit-external-menu"));
@@ -1014,11 +1026,12 @@ mod tests {
         // 뽑기는 예전부터 높이가 넉넉해(920) 높이는 그대로, 너비만 넓어집니다.
         assert_eq!(initial_work_size(&picker, 1920.0, 1032.0), (1574.0, 920.0));
         // 모든 도구가 예전 고정 크기보다 작아지지 않고, 너비는 모두 커집니다.
-        for role in ["digital", "analog", "hourglass", "stopwatch", "focus-bell", "dice", "clock", "tournament", "picker", "roster", "noticeboard", "scoreboard-personal", "scoreboard-group", "scoreboard-custom", "thermometer", "vote"] {
+        for role in ["digital", "analog", "hourglass", "stopwatch", "focus-bell", "dice", "clock", "tournament", "picker", "picker-group", "roster", "noticeboard", "scoreboard-personal", "scoreboard-group", "scoreboard-custom", "thermometer", "vote"] {
             let rule = work_window_size(role).unwrap();
             let (w, h) = initial_work_size(&rule, 1920.0, 1032.0);
             assert!(w > rule.base.0 && h >= rule.base.1, "{role}: {w}×{h}");
         }
+        assert_eq!(work_window_size("picker-group").unwrap().min, (800.0, 560.0));
     }
     #[test]
     fn vote_board_opens_wide_and_teacher_window_stays_small() {

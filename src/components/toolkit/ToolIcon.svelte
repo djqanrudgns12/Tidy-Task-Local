@@ -4,6 +4,7 @@
     timer: ['#e3effb', '#426f9e'],
     clock: ['#fde8ef', '#b65a7a'],
     picker: ['#f1e7fa', '#8661a4'],
+    'picker-group': ['#e3f5ec', '#3e8c6c'],
     noticeboard: ['#e5f1e6', '#4c8064'],
     tournament: ['#fff0d3', '#a9782c'],
     'focus-bell': ['#fbe6de', '#b96e53'],
@@ -45,6 +46,16 @@
     {:else if kind === 'picker'}
       <rect x="10" y="10" width="21" height="22" rx="5" fill="#fffdf8" transform="rotate(-9 20 21)" />
       <g fill={palette[1]} stroke="none"><circle cx="15" cy="16" r="1.8" /><circle cx="25" cy="15" r="1.8" /><circle cx="20" cy="21" r="1.8" /><circle cx="16" cy="27" r="1.8" /><circle cx="26" cy="26" r="1.8" /></g>
+    {:else if kind === 'picker-group'}
+      <!-- 크림 티켓 카드와 세 모둠 색 점 — 간단 뽑기(한 명 카드)의 짝이 되는 모둠원 뽑기 아이콘입니다. -->
+      <rect x="7" y="10" width="13.5" height="20" rx="4" fill="#fffdf8" transform="rotate(-7 13.5 20)" />
+      <rect x="19.5" y="10" width="13.5" height="20" rx="4" fill="#d9f2e5" transform="rotate(7 26 20)" />
+      <g stroke="none">
+        <circle cx="13.5" cy="18" r="2.1" fill="#3e8c6c" />
+        <path d="M9.8 25.2a3.7 3.7 0 0 1 7.4 0Z" fill="#3e8c6c" />
+        <circle cx="26.5" cy="18" r="2.1" fill="#ef6f86" />
+        <path d="M22.8 25.2a3.7 3.7 0 0 1 7.4 0Z" fill="#f59a6b" />
+      </g>
     {:else if kind === 'noticeboard'}
       <path d="M20 12c-4-3-8-3-12-2v21c4-1 8-1 12 2 4-3 8-3 12-2V10c-4-1-8-1-12 2Z" fill="#fffdf8" />
       <path d="M20 12v21m-8-17 4 1m-4 4 4 1m8-5 4-1m-4 6 4-1" />

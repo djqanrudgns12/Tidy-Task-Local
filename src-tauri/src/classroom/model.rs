@@ -44,6 +44,12 @@ pub struct StudentInput {
     pub gender: Option<String>,
 }
 #[derive(Clone, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct GroupInput {
+    pub name: String,
+    pub student_ids: Vec<String>,
+}
+#[derive(Clone, Deserialize)]
 #[serde(
     tag = "type",
     rename_all = "camelCase",
@@ -100,6 +106,10 @@ pub enum Command {
         class_id: String,
         ids: Vec<String>,
         group_id: Option<String>,
+    },
+    ReplaceGroups {
+        class_id: String,
+        groups: Vec<GroupInput>,
     },
     Restore {
         backup: Backup,
@@ -338,6 +348,53 @@ pub fn apply(s: &mut Snapshot, cmd: Command) -> Result<(), String> {
                     p.group_id = group_id.clone();
                 }
             }
+        }
+        Command::ReplaceGroups { class_id, groups } => {
+            let c = class(s, &class_id)?;
+            if groups.len() > 100 {
+                return Err(fail("모둠 수는 100개까지 등록할 수 있어요."));
+            }
+            let mut used_names = HashSet::new();
+            let mut seen_students = HashSet::new();
+            let mut used_group_ids = HashSet::new();
+            let mut next_groups = Vec::with_capacity(groups.len());
+            let mut assignments: Vec<(String, Vec<String>)> = Vec::with_capacity(groups.len());
+            for item in groups {
+                let normalized_name = name(&item.name, 40)?;
+                if !used_names.insert(normalized_name.clone()) {
+                    return Err(fail("모둠 이름이 중복돼요."));
+                }
+                ids_exist(c, &item.student_ids)?;
+                for sid in &item.student_ids {
+                    if !seen_students.insert(sid.clone()) {
+                        return Err(fail("학생이 여러 모둠에 중복 배정되었어요."));
+                    }
+                }
+                // 같은 이름의 기존 모둠 ID를 이어 받아 개인 점수판·연결 도구 참조가 끊기지 않게 합니다.
+                let gid = c
+                    .groups
+                    .iter()
+                    .find(|old| old.name == normalized_name && !used_group_ids.contains(&old.id))
+                    .map(|old| old.id.clone())
+                    .unwrap_or_else(id);
+                used_group_ids.insert(gid.clone());
+                next_groups.push(Group {
+                    id: gid.clone(),
+                    name: normalized_name,
+                });
+                assignments.push((gid, item.student_ids));
+            }
+            for p in &mut c.students {
+                p.group_id = None;
+            }
+            for (gid, student_ids) in assignments {
+                for p in &mut c.students {
+                    if student_ids.contains(&p.id) {
+                        p.group_id = Some(gid.clone());
+                    }
+                }
+            }
+            c.groups = next_groups;
         }
         Command::Restore { backup } => {
             if backup.format != "tidy-classroom" || ![1, 2].contains(&backup.schema_version) {

@@ -12,7 +12,7 @@ import { fitToolbarPosition, centerToolbarPosition } from './toolbarPlacement.js
 /** @param {string} role */
 export async function openTool(role) {
   if (native) return invoke('toolkit_open', { role });
-  const size = role === 'picker' || role === 'vote' || role.startsWith('scoreboard-') ? 'width=1440,height=888' : role === 'vote-teacher' ? 'width=440,height=760' : role === 'thermometer' ? 'width=880,height=888' : role === 'dice' ? 'width=960,height=720' : 'width=960,height=680';
+  const size = role === 'picker' || role === 'picker-group' || role === 'vote' || role.startsWith('scoreboard-') ? 'width=1440,height=888' : role === 'vote-teacher' ? 'width=440,height=760' : role === 'thermometer' ? 'width=880,height=888' : role === 'dice' ? 'width=960,height=720' : 'width=960,height=680';
   window.open(`/?toolkit-preview=${role}`, '_blank', size);
 }
 /** @param {string} id */
@@ -28,6 +28,8 @@ export async function closeWindow() {
 }
 const MENU_WINDOWS = {
   timer: { label: 'toolkit-menu', width: 244, height: 250 },
+  // 간단 뽑기 드롭다운 — 항목 2개(한 명 뽑기 · 모둠원 뽑기). 크기는 Rust toolkit.rs와 같습니다.
+  picker: { label: 'toolkit-picker-menu', width: 276, height: 174 },
   // 점수판 드롭다운 — 항목 3개(아이콘·이름·한 줄 설명). 크기는 Rust toolkit.rs와 같습니다.
   scoreboard: { label: 'toolkit-scoreboard-menu', width: 264, height: 222 },
   more: { label: 'toolkit-more-menu', width: 264, height: 480 },
@@ -35,7 +37,7 @@ const MENU_WINDOWS = {
   // 우클릭 메뉴 — 높이는 ToolkitMenu의 context 항목 높이(CSS)와 맞춘 값입니다.
   context: { label: 'toolkit-context-menu', width: 340, height: 640 },
 };
-/** @param {'timer'|'scoreboard'|'external'|'more'|'context'} [kind] */
+/** @param {'timer'|'picker'|'scoreboard'|'external'|'more'|'context'} [kind] */
 export async function dismissMenu(kind) {
   if (native) {
     const menus = kind
@@ -51,7 +53,7 @@ export async function dismissMenu(kind) {
 }
 /**
  * @param {HTMLElement} trigger
- * @param {'timer'|'scoreboard'|'external'|'more'} kind
+ * @param {'timer'|'picker'|'scoreboard'|'external'|'more'} kind
  * @param {number} [entryCount]
  */
 export async function showToolkitMenu(trigger, kind, entryCount) {
@@ -204,7 +206,7 @@ export async function setToolMinSize(minLogicalWidth, minLogicalHeight) {
 export async function resizeToolbar(width, height) {
   if (!native) return;
   // 도구 관리 중 툴바 폭이 바뀌어도 우클릭 패널은 유지합니다.
-  await Promise.all(['timer', 'scoreboard', 'external'].map(kind => dismissMenu(/** @type {any} */ (kind))));
+  await Promise.all(['timer', 'picker', 'scoreboard', 'external'].map(kind => dismissMenu(/** @type {any} */ (kind))));
   const win = getCurrentWindow();
   await win.setSize(new LogicalSize(Math.ceil(width), Math.ceil(height)));
   const [position, size, monitors] = await Promise.all([

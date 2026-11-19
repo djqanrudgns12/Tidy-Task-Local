@@ -101,6 +101,7 @@ fn window_kind(label: &str) -> &'static str {
             "roster" => "roster",
             "noticeboard" => "noticeboard",
             "picker" => "picker",
+            "picker-group" => "picker_group",
             "tournament" => "tournament",
             "focus-bell" => "focus_bell",
             "dice" => "dice",
@@ -125,6 +126,7 @@ fn window_kind(label: &str) -> &'static str {
 fn action_allowed(event: &str, kind: &str) -> bool {
     match event {
         "dice_rolled" => kind == "dice",
+        "group_picker_drawn" => kind == "picker_group",
         "timer_started" | "timer_resumed" | "timer_paused" | "timer_completed" => matches!(
             kind,
             "timer_digital" | "timer_analog" | "timer_hourglass" | "timer_stopwatch"
@@ -140,6 +142,9 @@ fn properties(event: &str, count: Option<u32>, choice: Option<&str>) -> Option<V
     match event {
         "dice_rolled" => {
             p["count"] = json!(count.unwrap_or(1).clamp(1, 3));
+        }
+        "group_picker_drawn" => {
+            p["count"] = json!(count.unwrap_or(2).clamp(2, 12));
         }
         "timer_started"
         | "timer_resumed"
@@ -379,8 +384,9 @@ impl Engine {
             return Ok(());
         }
         let mut p = properties(event, count, choice).ok_or("invalid_event")?;
-        let action =
-            event.starts_with("timer_") || event.starts_with("vote_") || event == "dice_rolled";
+        let action = event.starts_with("timer_")
+            || event.starts_with("vote_")
+            || matches!(event, "dice_rolled" | "group_picker_drawn");
         if action {
             if !action_allowed(event, kind) {
                 return Err("invalid_window".into());
@@ -605,9 +611,11 @@ mod tests {
         for role in crate::toolkit::TOOL_ROLES
             .into_iter()
             .chain(crate::toolkit::SCOREBOARD_ROLES)
+            .chain(crate::toolkit::PICKER_ROLES)
         {
             assert_ne!(window_kind(role), "other", "통계 분류가 빠진 창: {role}");
         }
+        assert_ne!(window_kind("picker"), window_kind("picker-group"));
         assert_eq!(window_kind("dday"), window_kind("dday-control"));
         for id in crate::toolkit::TOOL_IDS {
             if id != "timer" && id != "scoreboard" {
@@ -685,6 +693,28 @@ mod tests {
         assert!(next
             .track("dice", "dice_rolled", None, None, None, 103)
             .is_err());
+        assert!(next
+            .track("picker", "group_picker_drawn", Some(6), None, Some("op-gp-wrong"), 104)
+            .is_err());
+        next.track(
+            "picker_group",
+            "group_picker_drawn",
+            Some(6),
+            None,
+            Some("op-gp-1"),
+            105,
+        )
+        .unwrap();
+        next.track(
+            "picker_group",
+            "group_picker_drawn",
+            Some(6),
+            None,
+            Some("op-gp-1"),
+            106,
+        )
+        .unwrap();
+        assert_eq!(count(&next, "group_picker_drawn"), 1);
     }
     #[test]
     fn background_completion_does_not_create_activity() {

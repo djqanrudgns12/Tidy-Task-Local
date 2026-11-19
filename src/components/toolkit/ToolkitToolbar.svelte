@@ -30,7 +30,7 @@
   let config = $state(defaults().toolkit),
     ready = $state(false),
     error = $state(''),
-    previewMenu = $state<'' | 'timer' | 'scoreboard' | 'external' | 'more' | 'context'>('');
+    previewMenu = $state<'' | 'timer' | 'picker' | 'scoreboard' | 'external' | 'more' | 'context'>('');
   const visiblePlatforms = $derived(
     PLATFORM_TOOLS.filter((tool) => config.externalToolsEnabled && !config.hiddenPlatformIds.includes(tool.id)),
   );
@@ -99,17 +99,17 @@
       error = '설정을 저장하지 못했어요.';
     }
   }
-  async function menu(trigger: HTMLButtonElement, kind: 'timer' | 'scoreboard' | 'external' | 'more') {
+  async function menu(trigger: HTMLButtonElement, kind: 'timer' | 'picker' | 'scoreboard' | 'external' | 'more') {
     menuTrigger = trigger;
     try {
       if (!(await showToolkitMenu(trigger, kind, kind === 'external' ? visiblePlatforms.length : undefined)))
         previewMenu = previewMenu === kind ? '' : kind;
     } catch {
-      error = `${kind === 'timer' ? '타이머' : kind === 'scoreboard' ? '점수판' : kind === 'more' ? '더보기' : '외부 툴'} 메뉴를 열지 못했어요.`;
+      error = `${kind === 'timer' ? '타이머' : kind === 'picker' ? '간단 뽑기' : kind === 'scoreboard' ? '점수판' : kind === 'more' ? '더보기' : '외부 툴'} 메뉴를 열지 못했어요.`;
     }
   }
-  // 항목이 여럿인 도구(타이머·점수판)는 드롭다운을 열고, 나머지는 바로 창을 엽니다.
-  const menuKind = (id: string) => (id === 'timer' || id === 'scoreboard' ? id : null);
+  // 항목이 여럿인 도구(타이머·간단 뽑기·점수판)는 드롭다운을 열고, 나머지는 바로 창을 엽니다.
+  const menuKind = (id: string) => (id === 'timer' || id === 'picker' || id === 'scoreboard' ? id : null);
   // 아이콘·패널 어디서 우클릭해도 WebView 기본 메뉴(뒤로·새로 고침·검사) 대신 툴킷 메뉴를 띄웁니다.
   async function contextMenu(e: MouseEvent) {
     e.preventDefault();

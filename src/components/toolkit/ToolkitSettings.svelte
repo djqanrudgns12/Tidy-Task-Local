@@ -66,7 +66,7 @@
   const TOOL_ROWS: ToolRow[] = [
     { id: 'timer', title: '타이머', hint: '수업 시간을 한눈에 확인해요' },
     { id: 'clock', title: '시계', hint: '지금 몇 시인지 표준시로 크게 보여줘요' },
-    { id: 'picker', title: '간단 뽑기', hint: '클래식 · 인형 뽑기 · 풍선 다트' },
+    { id: 'picker', title: '간단 뽑기', hint: '한 명 뽑기 · 모둠원 뽑기' },
     { id: 'noticeboard', title: '알림장', hint: '작성하고 화이트보드로 보여줘요' },
     { id: 'tournament', title: '토너먼트', hint: '대진을 만들고 우리 반 우승자를 정해요' },
     { id: 'focus-bell', title: '집중벨', hint: '소리와 애니메이션으로 시선을 모아요' },

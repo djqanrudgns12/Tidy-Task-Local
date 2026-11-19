@@ -4260,12 +4260,18 @@
 .ui-font-hint { color:var(--tk-muted); font-size:11px; line-height:1.5; margin:8px 0 0; word-break:keep-all; }
 .tk-option-note { flex:none; color:var(--tk-muted); font-family:var(--tk-font); font-size:10.5px; }
 
-/* 점수판 드롭다운 — 항목마다 이름 + 한 줄 설명. 항목 높이 56px × 3 + 제목이 네이티브 창 높이(222, windows.js MENU_WINDOWS.scoreboard)에 맞습니다.
+/* 점수판·뽑기 드롭다운 — 항목마다 이름 + 한 줄 설명. 항목 높이 56~58px + 제목이 네이티브 창 높이(222 / 174)에 맞습니다.
    설명은 줄바꿈하지 않고, 넘치면 말줄임으로 끝냅니다(도구 창 공통 규칙). */
 .toolkit-menu.scoreboard-menu button {
   height: 56px;
   min-height: 0;
   padding: 6px 8px;
+}
+.toolkit-menu.picker-menu button {
+  height: 58px;
+}
+.toolkit-preview-menu:has(.picker-menu) {
+  width: 276px;
 }
 .toolkit-menu.scoreboard-menu button:nth-of-type(n) .menu-icon {
   width: 32px;

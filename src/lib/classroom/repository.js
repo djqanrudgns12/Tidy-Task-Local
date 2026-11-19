@@ -129,6 +129,43 @@ export async function execute(
         if (command.ids.includes(s.id)) s.groupId = command.groupId;
       });
       break;
+    case "replaceGroups": {
+      if (!Array.isArray(command.groups) || command.groups.length > 100) {
+        throw new Error("모둠 수를 확인해 주세요.");
+      }
+      const usedNames = new Set();
+      const seenStudents = new Set();
+      const usedGroupIds = new Set();
+      /** @type {{id:string,name:string}[]} */
+      const nextGroups = [];
+      /** @type {{gid:string,studentIds:string[]}[]} */
+      const assignments = [];
+      for (const item of command.groups) {
+        const label = cleanName(item?.name);
+        if (!label || [...label].length > 40) throw new Error("모둠 이름을 확인해 주세요.");
+        if (usedNames.has(label)) throw new Error("모둠 이름이 중복돼요.");
+        usedNames.add(label);
+        const ids = Array.isArray(item?.studentIds) ? item.studentIds : [];
+        if (new Set(ids).size !== ids.length || ids.some((/** @type {string} */ sid) => !c.students.some((p) => p.id === sid))) {
+          throw new Error("선택한 학생이 변경되었어요.");
+        }
+        for (const sid of ids) {
+          if (seenStudents.has(sid)) throw new Error("학생이 여러 모둠에 중복 배정되었어요.");
+          seenStudents.add(sid);
+        }
+        const reused = c.groups.find((old) => old.name === label && !usedGroupIds.has(old.id));
+        const gid = reused ? reused.id : uid();
+        usedGroupIds.add(gid);
+        nextGroups.push({ id: gid, name: label });
+        assignments.push({ gid, studentIds: ids });
+      }
+      c.students.forEach((s) => { s.groupId = null; });
+      for (const { gid, studentIds } of assignments) {
+        c.students.forEach((s) => { if (studentIds.includes(s.id)) s.groupId = gid; });
+      }
+      c.groups = nextGroups;
+      break;
+    }
     case "undo":
       if (!history.length) throw new Error("실행 취소할 작업이 없어요.");
       s = history.pop() || before;

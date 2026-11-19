@@ -36,10 +36,11 @@ const CASCADE_STEP: f64 = 30.0;
 // 버튼 옆에 붙어 뜨는 임시 창은 좌표 초기화 대상이 아닙니다 (열릴 때마다 스스로 위치를 잡습니다).
 // 왜 꼭 빼야 하는가: 좌표 초기화는 대상 창마다 show()를 부릅니다. 숨어 상주하는 날짜 선택 창(date-picker)이
 //   여기 빠지면 빈 투명 창이 떠서 그 자리의 클릭을 가로챕니다. (JS datePicker/protocol.js의 DATE_PICKER_LABEL)
-const TRANSIENT_LABELS: [&str; 7] = [
+const TRANSIENT_LABELS: [&str; 8] = [
     "ctx-menu",
     "reminder",
     "toolkit-menu",
+    "toolkit-picker-menu",
     "toolkit-scoreboard-menu",
     "toolkit-external-menu",
     "toolkit-context-menu",
@@ -476,7 +477,7 @@ mod tests {
     // 숨어 상주하는 팝업 창은 좌표 초기화(show)에 끌려 나오면 안 되고, 데이터 창도 아닙니다.
     #[test]
     fn hidden_popup_windows_are_transient_not_data() {
-        for label in ["ctx-menu", "date-picker"] {
+        for label in ["ctx-menu", "date-picker", "toolkit-picker-menu"] {
             assert!(TRANSIENT_LABELS.contains(&label), "{label}");
             assert!(!is_data_window(label), "{label}");
         }
