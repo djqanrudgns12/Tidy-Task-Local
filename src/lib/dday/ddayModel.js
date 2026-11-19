@@ -2,7 +2,13 @@ import { todayKey as localTodayKey } from '../dateUtils.js';
 import { WEEKDAY_LABELS, parseDateKey } from '../datePicker/calendarModel.js';
 import { newId } from '../ids.js';
 
-/** @typedef {'flag'|'puzzle'|'snow'|'sparkle'|'sprout'|'star'|'trophy'|'cal'} DdayIconId */
+/**
+ * @typedef {
+ *   | 'flag' | 'cal' | 'bell' | 'hourglass' | 'book' | 'pencil' | 'puzzle'
+ *   | 'trophy' | 'party' | 'cake' | 'gift' | 'heart' | 'plane' | 'camera'
+ *   | 'sprout' | 'flower' | 'sun' | 'snow' | 'star' | 'sparkle' | 'clover'
+ * } DdayIconId
+ */
 /** @typedef {'accent'|'emerald'|'sky'|'lilac'|'rose'|'gold'} DdayToneId */
 /** @typedef {'countdown'|'since'} DdayCountMode */
 /** @typedef {'active'|'archived'} DdayStatus */
@@ -11,8 +17,40 @@ import { newId } from '../ids.js';
 /** @typedef {'auto'|'light'|'dark'} DdayAppearanceMode */
 
 export const DDAY_TITLE_MAX = 30;
+// 7열 × 3행(21종) 순서: 1행 일정·배움 / 2행 성취·기념 / 3행 계절·응원.
+// 기존 저장 데이터(flag, puzzle, snow, sparkle, sprout, star, trophy, cal) 8종 ID를 그대로 유지해 무손실 호환을 보장합니다.
 /** @type {readonly DdayIconId[]} */
-export const DDAY_ICONS = Object.freeze(['flag', 'puzzle', 'snow', 'sparkle', 'sprout', 'star', 'trophy', 'cal']);
+export const DDAY_ICONS = Object.freeze([
+  'flag', 'cal', 'bell', 'hourglass', 'book', 'pencil', 'puzzle',
+  'trophy', 'party', 'cake', 'gift', 'heart', 'plane', 'camera',
+  'sprout', 'flower', 'sun', 'snow', 'star', 'sparkle', 'clover',
+]);
+
+// 아이콘 라벨·카테고리의 단일 원천(편집 시트·접근성·테스트 공용)
+/** @type {Readonly<Record<DdayIconId, Readonly<{ label: string, category: string }>>>} */
+export const DDAY_ICON_META = Object.freeze({
+  flag: Object.freeze({ label: '깃발', category: '일정·배움' }),
+  cal: Object.freeze({ label: '달력', category: '일정·배움' }),
+  bell: Object.freeze({ label: '알림종', category: '일정·배움' }),
+  hourglass: Object.freeze({ label: '모래시계', category: '일정·배움' }),
+  book: Object.freeze({ label: '책', category: '일정·배움' }),
+  pencil: Object.freeze({ label: '연필', category: '일정·배움' }),
+  puzzle: Object.freeze({ label: '퍼즐', category: '일정·배움' }),
+  trophy: Object.freeze({ label: '트로피', category: '성취·기념' }),
+  party: Object.freeze({ label: '축하폭죽', category: '성취·기념' }),
+  cake: Object.freeze({ label: '케이크', category: '성취·기념' }),
+  gift: Object.freeze({ label: '선물', category: '성취·기념' }),
+  heart: Object.freeze({ label: '하트', category: '성취·기념' }),
+  plane: Object.freeze({ label: '비행기', category: '성취·기념' }),
+  camera: Object.freeze({ label: '카메라', category: '성취·기념' }),
+  sprout: Object.freeze({ label: '새싹', category: '계절·응원' }),
+  flower: Object.freeze({ label: '꽃', category: '계절·응원' }),
+  sun: Object.freeze({ label: '햇살', category: '계절·응원' }),
+  snow: Object.freeze({ label: '눈꽃', category: '계절·응원' }),
+  star: Object.freeze({ label: '별', category: '계절·응원' }),
+  sparkle: Object.freeze({ label: '반짝', category: '계절·응원' }),
+  clover: Object.freeze({ label: '네잎클로버', category: '계절·응원' }),
+});
 /** @type {readonly DdayToneId[]} */
 export const DDAY_TONES = Object.freeze(['accent', 'emerald', 'sky', 'lilac', 'rose', 'gold']);
 /** @type {readonly DdayBannerMode[]} */
@@ -90,7 +128,8 @@ export function stripHtmlToTitle(raw, maxLen = DDAY_TITLE_MAX) {
       }
       return ENTITY_MAP[code.toLowerCase()] ?? m;
     })
-    .replace(/[\u0000-\u001F\u007F-\u009F\u200B-\u200D\uFEFF]/g, ' ')
+    // \uC774\uBAA8\uC9C0 \uC787\uAE30 \uAE00\uC790(ZWJ, U+200D)\uB294 \uB0A8\uAE41\uB2C8\uB2E4. \uC9C0\uC6B0\uBA74 \uAC00\uC871\u00B7\uC9C1\uC5C5 \uC774\uBAA8\uC9C0\uAC00 \uB0B1\uAC1C \uADF8\uB9BC\uC73C\uB85C \uCABC\uAC1C\uC838 \uBCF4\uC600\uC2B5\uB2C8\uB2E4.
+    .replace(/[\u0000-\u001F\u007F-\u009F\u200B\u200C\uFEFF]/g, ' ')
     .replace(/\s+/g, ' ')
     .trim();
   return truncateCodepoints(text, maxLen);

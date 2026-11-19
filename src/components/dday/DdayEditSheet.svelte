@@ -11,6 +11,7 @@
     Trash2,
   } from 'lucide-svelte';
   import {
+    DDAY_ICON_META,
     DDAY_ICONS,
     DDAY_TITLE_MAX,
     DDAY_TONES,
@@ -24,17 +25,7 @@
   import CalendarPanel from '../datePicker/CalendarPanel.svelte';
   import DdayIcon from './DdayIcon.svelte';
 
-  /** @type {Record<import('../../lib/dday/ddayModel.js').DdayIconId, string>} */
-  const ICON_LABELS = {
-    flag: '깃발',
-    puzzle: '퍼즐',
-    snow: '눈꽃',
-    sparkle: '반짝',
-    sprout: '새싹',
-    star: '별',
-    trophy: '트로피',
-    cal: '달력',
-  };
+  const ICON_GRID_COLS = 7;
 
   /** @type {Record<import('../../lib/dday/ddayModel.js').DdayToneId, string>} */
   const TONE_LABELS = {
@@ -137,6 +128,7 @@
 
   const codepointCount = $derived([...title].length);
   const toneColor = $derived(resolveToneColor(tone, accent));
+  const selectedIconMeta = $derived(DDAY_ICON_META[icon] ?? DDAY_ICON_META.flag);
   const previewCounter = $derived(
     computeDdayCounter({ date: date || todayKey, countMode, repeatYearly }, todayKey),
   );
@@ -145,6 +137,27 @@
   const showLinkedHint = $derived(
     mode === 'edit' && Boolean(item?.linkedTodoId) && Boolean(strippedTodoHint) && strippedTodoHint !== title.trim(),
   );
+
+  /**
+   * 7×3 아이콘 라디오 그룹에서 방향키로 바로 이동·선택할 수 있게 합니다.
+   * @param {KeyboardEvent} e
+   * @param {number} idx
+   */
+  function handleIconKeydown(e, idx) {
+    const len = DDAY_ICONS.length;
+    let nextIdx = -1;
+    if (e.key === 'ArrowRight') nextIdx = (idx + 1) % len;
+    else if (e.key === 'ArrowLeft') nextIdx = (idx - 1 + len) % len;
+    else if (e.key === 'ArrowDown') nextIdx = (idx + ICON_GRID_COLS) % len;
+    else if (e.key === 'ArrowUp') nextIdx = (idx - ICON_GRID_COLS + len) % len;
+    else return;
+
+    e.preventDefault();
+    icon = DDAY_ICONS[nextIdx];
+    const group = /** @type {HTMLElement | null} */ (e.currentTarget)?.parentElement;
+    const targetBtn = group?.querySelectorAll('button[role="radio"]')[nextIdx];
+    if (targetBtn instanceof HTMLElement) targetBtn.focus();
+  }
 
   /** @param {Event & { currentTarget: HTMLInputElement }} e */
   function handleTitleInput(e) {
@@ -312,44 +325,53 @@
     </div>
 
     <div class="es-field">
-      <span class="es-sec-label">아이콘 · 색상</span>
+      <div class="es-label-row">
+        <span class="es-sec-label">아이콘 · 색상</span>
+        <span class="es-icon-meta">{selectedIconMeta.label} · {selectedIconMeta.category}</span>
+      </div>
       <div class="es-style-card">
         <div class="es-icons" role="radiogroup" aria-label="아이콘 선택">
-          {#each DDAY_ICONS as iconId}
+          {#each DDAY_ICONS as iconId, idx}
+            {@const meta = DDAY_ICON_META[iconId]}
             <button
               type="button"
               role="radio"
               aria-checked={icon === iconId}
-              aria-label={ICON_LABELS[iconId]}
-              title={ICON_LABELS[iconId]}
+              aria-label={`${meta.label} (${meta.category})`}
+              title={`${meta.label} · ${meta.category}`}
+              tabindex={icon === iconId ? 0 : -1}
               class="es-icon-opt"
               class:on={icon === iconId}
               onclick={() => (icon = iconId)}
+              onkeydown={(e) => handleIconKeydown(e, idx)}
             >
-              <DdayIcon icon={iconId} {tone} {accent} size={24} {dark} />
+              <DdayIcon icon={iconId} variant="bare" size={20} {dark} />
             </button>
           {/each}
         </div>
 
-        <div class="es-tones" role="radiogroup" aria-label="색상 선택">
-          {#each DDAY_TONES as toneId}
-            {@const swatch = resolveToneColor(toneId, accent)}
-            <button
-              type="button"
-              role="radio"
-              aria-checked={tone === toneId}
-              aria-label={TONE_LABELS[toneId]}
-              title={TONE_LABELS[toneId]}
-              class="es-tone-opt"
-              class:on={tone === toneId}
-              style="--sw: {swatch};"
-              onclick={() => (tone = toneId)}
-            >
-              {#if tone === toneId}
-                <Check size={11} strokeWidth={3} />
-              {/if}
-            </button>
-          {/each}
+        <div class="es-tones">
+          <div class="es-tone-swatches" role="radiogroup" aria-label="색상 선택">
+            {#each DDAY_TONES as toneId}
+              {@const swatch = resolveToneColor(toneId, accent)}
+              <button
+                type="button"
+                role="radio"
+                aria-checked={tone === toneId}
+                aria-label={TONE_LABELS[toneId]}
+                title={TONE_LABELS[toneId]}
+                class="es-tone-opt"
+                class:on={tone === toneId}
+                style="--sw: {swatch};"
+                onclick={() => (tone = toneId)}
+              >
+                {#if tone === toneId}
+                  <Check size={10.5} strokeWidth={3.2} />
+                {/if}
+              </button>
+            {/each}
+          </div>
+          <span class="es-tone-name">{TONE_LABELS[tone]}</span>
         </div>
       </div>
     </div>
@@ -602,18 +624,19 @@
     flex: 1;
     min-height: 0;
     overflow-y: auto;
-    padding: 12px 14px 14px;
+    /* 21종 아이콘 3줄 배치 뒤에도 계산 방식까지 한눈에 보이도록 세로 리듬을 콤팩트하게 정돈합니다 */
+    padding: 10px 14px 12px;
     display: flex;
     flex-direction: column;
-    gap: 13px;
+    gap: 9px;
     scrollbar-width: thin;
   }
 
   .es-preview-strip {
     display: flex;
     align-items: center;
-    gap: 9px;
-    padding: 9px 11px;
+    gap: 8px;
+    padding: 7px 10px;
     border-radius: 13px;
     background: linear-gradient(155deg, color-mix(in srgb, var(--dd-tone) 8%, #ffffff), #ffffff);
     border: 1px solid color-mix(in srgb, var(--dd-tone) 24%, rgba(15, 23, 42, 0.08));
@@ -661,7 +684,7 @@
   .es-field {
     display: flex;
     flex-direction: column;
-    gap: 6px;
+    gap: 4.5px;
   }
   .es-label-row {
     display: flex;
@@ -679,6 +702,15 @@
   .es-sheet[data-scheme='dark'] .es-sec-label {
     color: #cbd5e1;
   }
+  .es-icon-meta {
+    font-size: 10px;
+    font-weight: 700;
+    color: #64748b;
+    white-space: nowrap;
+  }
+  .es-sheet[data-scheme='dark'] .es-icon-meta {
+    color: #94a3b8;
+  }
   .es-count {
     font-size: 10px;
     font-weight: 700;
@@ -690,7 +722,7 @@
 
   .es-input {
     width: 100%;
-    height: 36px;
+    height: 32px;
     padding: 0 11px;
     border-radius: 10px;
     border: 1.5px solid rgba(15, 23, 42, 0.1);
@@ -757,7 +789,7 @@
 
   .es-date-btn {
     width: 100%;
-    height: 36px;
+    height: 32px;
     padding: 0 11px;
     border-radius: 10px;
     border: 1.5px solid rgba(15, 23, 42, 0.1);
@@ -795,13 +827,13 @@
   }
 
   .es-style-card {
-    padding: 9px 10px;
+    padding: 7px 8px;
     border-radius: 12px;
     background: #ffffff;
     border: 1px solid rgba(15, 23, 42, 0.08);
     display: flex;
     flex-direction: column;
-    gap: 9px;
+    gap: 6px;
   }
   .es-sheet[data-scheme='dark'] .es-style-card {
     background: #232733;
@@ -810,43 +842,68 @@
 
   .es-icons {
     display: grid;
-    grid-template-columns: repeat(8, minmax(0, 1fr));
+    grid-template-columns: repeat(7, minmax(0, 1fr));
     gap: 4px;
   }
   .es-icon-opt {
-    height: 34px;
-    border-radius: 9px;
+    height: 31px;
+    border-radius: 8px;
     border: 1.5px solid transparent;
-    background: transparent;
+    background: rgba(15, 23, 42, 0.025);
     display: grid;
     place-items: center;
     padding: 0;
     cursor: pointer;
-    transition: border-color 130ms ease, background-color 130ms ease, transform 110ms ease;
+    transition: border-color 120ms ease, background-color 120ms ease, box-shadow 120ms ease, transform 110ms ease;
+  }
+  .es-sheet[data-scheme='dark'] .es-icon-opt {
+    background: rgba(255, 255, 255, 0.045);
   }
   .es-icon-opt:hover {
-    background: rgba(15, 23, 42, 0.04);
+    background: rgba(15, 23, 42, 0.065);
+    transform: translateY(-1px);
+  }
+  .es-sheet[data-scheme='dark'] .es-icon-opt:hover {
+    background: rgba(255, 255, 255, 0.095);
+  }
+  .es-icon-opt:active {
+    transform: scale(0.95);
+  }
+  .es-icon-opt:focus-visible {
+    outline: 2px solid color-mix(in srgb, var(--dd-tone) 60%, transparent);
+    outline-offset: 1px;
   }
   .es-icon-opt.on {
     border-color: var(--dd-tone);
-    background: color-mix(in srgb, var(--dd-tone) 10%, transparent);
+    background: color-mix(in srgb, var(--dd-tone) 12%, #ffffff);
+    box-shadow: 0 2px 6px color-mix(in srgb, var(--dd-tone) 22%, transparent);
     transform: translateY(-1px);
+  }
+  .es-sheet[data-scheme='dark'] .es-icon-opt.on {
+    background: color-mix(in srgb, var(--dd-tone) 24%, #232733);
+    box-shadow: 0 2px 7px color-mix(in srgb, var(--dd-tone) 34%, transparent);
   }
 
   .es-tones {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 6px;
-    padding-top: 4px;
+    gap: 8px;
+    padding: 8px 3px 3px;
     border-top: 1px solid rgba(15, 23, 42, 0.06);
   }
   .es-sheet[data-scheme='dark'] .es-tones {
     border-top-color: rgba(255, 255, 255, 0.07);
   }
+  .es-tone-swatches {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+  }
   .es-tone-opt {
-    flex: 1;
-    height: 24px;
+    width: 21px;
+    height: 21px;
+    padding: 0;
     border-radius: 999px;
     border: 2px solid transparent;
     background: var(--sw);
@@ -857,13 +914,30 @@
     transition: transform 120ms ease, box-shadow 120ms ease;
   }
   .es-tone-opt:hover {
-    transform: scale(1.04);
+    transform: scale(1.08);
+  }
+  .es-tone-opt:focus-visible {
+    outline: 2px solid var(--sw);
+    outline-offset: 2px;
   }
   .es-tone-opt.on {
     box-shadow: 0 0 0 2px #ffffff, 0 0 0 3.5px var(--sw);
   }
   .es-sheet[data-scheme='dark'] .es-tone-opt.on {
     box-shadow: 0 0 0 2px #232733, 0 0 0 3.5px var(--sw);
+  }
+  .es-tone-name {
+    font-size: 10.5px;
+    font-weight: 800;
+    color: color-mix(in srgb, var(--dd-tone) 86%, #1e2430);
+    background: color-mix(in srgb, var(--dd-tone) 10%, #ffffff);
+    padding: 2px 7px;
+    border-radius: 999px;
+    white-space: nowrap;
+  }
+  .es-sheet[data-scheme='dark'] .es-tone-name {
+    color: color-mix(in srgb, var(--dd-tone) 82%, #ffffff);
+    background: color-mix(in srgb, var(--dd-tone) 20%, #1b1e26);
   }
 
   .es-mode-grid {
@@ -872,7 +946,7 @@
     gap: 7px;
   }
   .es-mode-card {
-    padding: 9px 10px;
+    padding: 7px 9px;
     border-radius: 11px;
     border: 1.5px solid rgba(15, 23, 42, 0.08);
     background: #ffffff;

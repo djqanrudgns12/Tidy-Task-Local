@@ -1,6 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import {
+  DDAY_ICON_META,
+  DDAY_ICONS,
   DDAY_TITLE_MAX,
   computeDdayCounter,
   computeProgressPercent,
@@ -18,6 +21,13 @@ test('stripHtmlToTitle strips markup cleanly and clamps to 30 codepoints includi
   assert.equal(stripHtmlToTitle(html), '과학&탐구 페스티벌 안내');
   const thirtyOnes = '가'.repeat(DDAY_TITLE_MAX) + '나';
   assert.equal([...stripHtmlToTitle(thirtyOnes)].length, DDAY_TITLE_MAX);
+});
+
+test('stripHtmlToTitle keeps emoji joiners (ZWJ) so family emojis do not split apart', () => {
+  const family = '\u{1F468}‍\u{1F469}‍\u{1F467}';
+  assert.equal(stripHtmlToTitle(`<b>${family}</b> 소풍`), `${family} 소풍`);
+  // 폭 없는 띄어쓰기·ZWNJ·BOM은 예전처럼 공백으로 정리합니다.
+  assert.equal(stripHtmlToTitle('가​나‌다﻿라'), '가 나 다 라');
 });
 
 test('countdown and since mode compute local calendar days without timezone drift', () => {
@@ -102,4 +112,48 @@ test('settings and widget prefs sanitize malformed values cleanly', () => {
   });
   assert.equal(wMin.skin, 'w4');
   assert.equal(wMin.geometry, null);
+});
+
+test('DDAY_ICONS 21종 카탈로그는 기존 8종 하위 호환과 메타·SVG 1:1 정합성을 보장한다', () => {
+  const legacyIds = ['flag', 'puzzle', 'snow', 'sparkle', 'sprout', 'star', 'trophy', 'cal'];
+  assert.equal(DDAY_ICONS.length, 21);
+  assert.equal(new Set(DDAY_ICONS).size, DDAY_ICONS.length);
+
+  for (const legacyId of legacyIds) {
+    assert.ok(DDAY_ICONS.includes(/** @type {any} */ (legacyId)), `기존 아이콘 ID 누락: ${legacyId}`);
+  }
+
+  const stickerSvgSource = readFileSync(
+    new URL('../../components/dday/DdayStickerSvg.svelte', import.meta.url),
+    'utf8',
+  );
+
+  for (const iconId of DDAY_ICONS) {
+    const meta = DDAY_ICON_META[iconId];
+    assert.ok(meta && meta.label.trim().length > 0 && meta.category.trim().length > 0, `메타 누락: ${iconId}`);
+
+    const normalized = normalizeDdayItem({
+      id: `test-${iconId}`,
+      title: '테스트 일정',
+      date: '2026-12-01',
+      icon: iconId,
+    });
+    assert.equal(normalized?.icon, iconId);
+
+    assert.ok(
+      stickerSvgSource.includes(`resolvedIcon === '${iconId}'`),
+      `DdayStickerSvg.svelte에 아이콘 분기 누락: ${iconId}`,
+    );
+  }
+
+  assert.deepEqual(Object.keys(DDAY_ICON_META).sort(), [...DDAY_ICONS].sort());
+
+  // 알 수 없는 아이콘 ID는 기본값 flag로 안전 폴백
+  const fallback = normalizeDdayItem({
+    id: 'unknown-icon-item',
+    title: '미지원 아이콘',
+    date: '2026-12-01',
+    icon: 'non-existent-icon',
+  });
+  assert.equal(fallback?.icon, 'flag');
 });
