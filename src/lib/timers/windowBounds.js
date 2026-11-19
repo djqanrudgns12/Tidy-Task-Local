@@ -192,8 +192,8 @@ export function defaultWidgetPlacement({
   const scale = hostMonitor.scale > 0 ? hostMonitor.scale : 1;
   const w = Math.min(340, Math.max(WIDGET_MIN_WIDTH, Math.floor(hostMonitor.work.width / scale - 24)));
   const h = Math.min(236, Math.max(WIDGET_MIN_HEIGHT, Math.floor(hostMonitor.work.height / scale - 24)));
-  const desiredX = hostMonitor.work.x + Math.max(0, hostMonitor.work.width - Math.round((w + 10) * scale));
-  const desiredY = hostMonitor.work.y + Math.round(10 * scale);
+  const desiredX = hostMonitor.work.x + Math.max(0, hostMonitor.work.width - Math.round((w + 8) * scale));
+  const desiredY = hostMonitor.work.y + Math.round(8 * scale);
 
   const placed = resolveNonOverlappingWidgetBounds(
     {

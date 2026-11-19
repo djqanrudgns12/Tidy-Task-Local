@@ -17,6 +17,30 @@ export const WIDGET_MAX_HEIGHT = 1200;
 export const NOTE_ALIGNS = /** @type {const} */ (['auto', 'center', 'left']);
 export const LAYOUT_FOCUSES = /** @type {const} */ (['balanced', 'note', 'timer']);
 
+export const DISPLAY_PRESET_RESET = Object.freeze({
+  titleScale: 100,
+  noteScale: 100,
+  noteAlign: /** @type {const} */ ('auto'),
+  layoutFocus: /** @type {const} */ ('balanced'),
+});
+
+/**
+ * 글자 배율(제목 80~160%, 설명 80~180%)을 5% 단위로 안전하게 증감합니다.
+ * @param {'titleScale' | 'noteScale'} key
+ * @param {number} current
+ * @param {number} delta
+ */
+export function stepDisplayScale(key, current, delta) {
+  const min = key === 'titleScale' ? TITLE_SCALE_MIN : NOTE_SCALE_MIN;
+  const max = key === 'titleScale' ? TITLE_SCALE_MAX : NOTE_SCALE_MAX;
+  return Math.max(min, Math.min(max, Math.round((current + delta) / 5) * 5));
+}
+
+/** @param {number} val */
+export function displayPresetLabel(val) {
+  return val === 100 ? '자동' : val < 100 ? '작게' : val <= 125 ? '크게' : '더 크게';
+}
+
 const WIDGET_BOUNDS_KEYS = /** @type {const} */ ([
   'physicalX',
   'physicalY',

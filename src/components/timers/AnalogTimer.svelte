@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { onMount, untrack } from 'svelte';
   import { pointAt, sectorPath, pointerAngle, advanceAngle } from '../../lib/timers/geometry.js';
   let { remaining, range, editable, density = 'full', onset } = $props<{
     remaining: number;
@@ -11,14 +11,49 @@
   let svg: SVGSVGElement;
   let preview = $state<number | null>(null);
   let gesture: { pointer: number; angle: number; previous: number } | null = null;
-  const angle = $derived(preview ?? (remaining / (range * 60000)) * 360),
-    tip = $derived(pointAt(angle, 84));
+  let gestureActive = $state(false);
+  let animFrame = 0;
+  let initializedAngle = false;
+  const angle = $derived(preview ?? (remaining / (range * 60000)) * 360);
+  let displayAngle = $state(untrack(() => (remaining / (range * 60000)) * 360));
+
+  // 정지·준비 상태에서 ±1분/±10초·프리셋 등으로 시간이 바뀔 때만 바늘·부채꼴을 160ms 부드럽게 보간합니다.
+  $effect(() => {
+    const target = angle;
+    const instant = !initializedAngle || !editable || gestureActive;
+    initializedAngle = true;
+    cancelAnimationFrame(animFrame);
+    animFrame = 0;
+    if (instant || Math.abs(target - untrack(() => displayAngle)) < 0.4) {
+      displayAngle = target;
+      return;
+    }
+    const from = untrack(() => displayAngle);
+    const start = performance.now();
+    const duration = 160;
+    const stepFrame = (now: number) => {
+      const t = Math.min(1, (now - start) / duration);
+      const eased = 1 - Math.pow(1 - t, 3);
+      displayAngle = from + (target - from) * eased;
+      if (t < 1) {
+        animFrame = requestAnimationFrame(stepFrame);
+      } else {
+        animFrame = 0;
+        displayAngle = target;
+      }
+    };
+    animFrame = requestAnimationFrame(stepFrame);
+  });
+
+  const shownAngle = $derived(gestureActive || !editable ? angle : displayAngle);
+  const tip = $derived(pointAt(shownAngle, 84));
   function down(e: PointerEvent) {
     if (!editable || e.button !== 0 || !e.isPrimary) return;
     const p = coords(e);
     if (!p || Math.hypot(p.x - tip.x, p.y - tip.y) > 30) return;
     e.preventDefault();
     gesture = { pointer: e.pointerId, angle, previous: pointerAngle(p.x, p.y) };
+    gestureActive = true;
     preview = angle;
     svg.setPointerCapture(e.pointerId);
   }
@@ -37,12 +72,14 @@
   }
   function cancel() {
     gesture = null;
+    gestureActive = false;
     preview = null;
   }
   function up(e: PointerEvent) {
     if (!gesture) return;
     const ms = Math.round(((preview ?? angle) / 360) * range) * 60000;
     gesture = null;
+    gestureActive = false;
     preview = null;
     if (svg.hasPointerCapture(e.pointerId)) svg.releasePointerCapture(e.pointerId);
     onset(ms);
@@ -76,7 +113,10 @@
   onMount(() => {
     const observer = new ResizeObserver(cancel);
     observer.observe(svg);
-    return () => observer.disconnect();
+    return () => {
+      observer.disconnect();
+      cancelAnimationFrame(animFrame);
+    };
   });
 </script>
 
@@ -100,8 +140,8 @@
   onkeydown={keys}
 >
   <circle cx="150" cy="150" r="146" fill="var(--tk-panel)" stroke="var(--tk-line)" stroke-width="1.5" />
-  <circle cx="150" cy="150" r="135" fill="white" />
-  <path d={sectorPath(angle / 360)} fill="var(--tk-peach)" />
+  <circle cx="150" cy="150" r="135" fill="var(--analog-face-bg, #ffffff)" />
+  <path d={sectorPath(shownAngle / 360)} fill="var(--analog-sector-fill, var(--tk-peach))" />
   {#each Array(range).fill(0) as _, i}
     {@const major = i % 5 === 0}
     {@const p = pointAt((i / range) * 360, major ? (density === 'minimal' ? 114 : 120) : 124)}
@@ -143,14 +183,14 @@
     cx="150"
     cy="150"
     r="3.5"
-    fill="white"
+    fill="var(--analog-face-bg, #ffffff)"
   />
   {#if editable}
     <circle
       cx={tip.x}
       cy={tip.y}
       r="5.5"
-      fill="white"
+      fill="var(--analog-face-bg, #ffffff)"
       stroke="var(--tk-accent)"
       stroke-width="2.5"
     />

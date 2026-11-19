@@ -20,6 +20,7 @@
     Plus,
     NotebookPen,
     PictureInPicture2,
+    Type,
   } from 'lucide-svelte';
   import { getCurrentWindow } from '@tauri-apps/api/window';
   import { PhysicalPosition } from '@tauri-apps/api/dpi';
@@ -32,6 +33,7 @@
   } from '../../lib/toolkit/store.js';
   import { defaultPreferences, TIMER_NAMES, TIMER_KINDS } from '../../lib/toolkit/preferences.js';
   import {
+    DISPLAY_PRESET_RESET,
     WIDGET_MAX_HEIGHT,
     WIDGET_MAX_WIDTH,
     WIDGET_MIN_HEIGHT,
@@ -71,6 +73,7 @@
   import { dragRegion } from '../../lib/dragRegion.js';
   import TimerResizeHandles from './TimerResizeHandles.svelte';
   import TimerSettingsPanel from './TimerSettingsPanel.svelte';
+  import WidgetDisplayPopover from './WidgetDisplayPopover.svelte';
   import AnalogTimer from './AnalogTimer.svelte';
   import HourglassTimer from './HourglassTimer.svelte';
   import LapTimeline from './LapTimeline.svelte';
@@ -106,6 +109,7 @@
     noteFocused = $state(false),
     pinned = $state(false),
     settingsOpen = $state(!stopwatch),
+    widgetDisplayOpen = $state(false),
     lapsOpen = $state(false),
     lapsManuallyClosed = $state(false),
     error = $state(''),
@@ -123,11 +127,13 @@
     maximized = $state(false),
     windowTransitioning = false,
     programmaticMoveLock = false,
-    modeBeforeFullscreen: 'normal' | 'widget' = 'normal',
+    modeBeforeFullscreen: 'normal' | 'widget' | 'shrunk-snug' = 'normal',
+    settingsBeforeFullscreen = !stopwatch,
     pinnedBeforeWidget = false;
   let normalWindowBounds: TimerWindowTarget | null = null;
   let widgetWindowBoundsBeforeFullscreen: TimerWindowTarget | null = null;
   let widgetSnapTimer: ReturnType<typeof setTimeout> | undefined;
+  let programmaticUnlockTimer: ReturnType<typeof setTimeout> | undefined;
 
   // 전체화면 3초 유휴 크롬 숨김
   let idle = $state(false);
@@ -200,12 +206,17 @@
       : '진행 중인 타이머가 종료돼요.',
   );
 
+  const widgetHeadline = $derived(resolveWidgetHeadline(title, note, name));
+  const widgetNoteBody = $derived((note || '').trim());
+  const hasVisibleWidgetNote = $derived(noteFocused || hasNote);
+
   const surface = $derived.by(() => {
     const next = classifyTimerSurface({
       width: winW || 960,
       height: winH || 680,
       widgetMode,
       fullscreen,
+      hasVisibleNote: hasVisibleWidgetNote,
       prevForm: committedForm,
     });
     committedForm = next.snugWidget ? next.form : null;
@@ -214,8 +225,8 @@
 
   const typo = $derived.by(() => {
     const next = computeSmartTypography({
-      width: mainW || 900,
-      height: mainH || 600,
+      width: mainW || winW || 900,
+      height: mainH || winH || 600,
       form: surface.form,
       title,
       note,
@@ -228,19 +239,32 @@
     return next;
   });
 
-  const widgetHeadline = $derived(resolveWidgetHeadline(title, note, name));
-  const widgetNoteBody = $derived.by(() => {
-    const trimmed = (note || '').trim();
-    if (!trimmed) return '';
-    if (!widgetHeadline.promotedFromNote) return trimmed;
-    const lines = trimmed.split(/\r?\n/);
-    const firstNonEmptyIdx = lines.findIndex((l) => l.trim().length > 0);
-    if (firstNonEmptyIdx < 0) return '';
-    return lines
-      .slice(firstNonEmptyIdx + 1)
-      .join('\n')
-      .trim();
+  const effectiveWidgetNoteLines = $derived(
+    Math.max(1, Math.min(surface.maxNoteLines || 1, typo.effectiveNoteLines || 1)),
+  );
+
+  // 위젯 모드를 벗어나거나 전체화면·확인창으로 전환하면 위젯 글자 팝오버를 즉시 정리합니다.
+  $effect(() => {
+    if ((!surface.snugWidget || fullscreen || confirmOpen) && widgetDisplayOpen) {
+      widgetDisplayOpen = false;
+    }
   });
+
+  // 오버레이 서랍 판정(작은 창 820px 미만 또는 스톱워치 기록+설정 동시 열림 시 닫기 버튼·백드롭 제공)
+  const settingsAsDrawer = $derived(
+    !surface.snugWidget && settingsOpen && (surface.overlayPanels || (stopwatch && lapsOpen)),
+  );
+  const lapsAsDrawer = $derived(!surface.snugWidget && stopwatch && lapsOpen && surface.overlayPanels);
+  const hasDrawerBackdrop = $derived(settingsAsDrawer || lapsAsDrawer);
+
+  // 종료 임박 경고(마지막 경고 초 구간) 시 절제된 림 강조를 위한 파생 상태
+  const isWarning = $derived(
+    !stopwatch &&
+      view.phase === 'running' &&
+      Boolean(prefs.warningEnabled) &&
+      view.remainingMs > 0 &&
+      view.remainingMs <= (prefs.warningLeadSeconds ?? 5) * 1000,
+  );
 
   // 전광판·스톱워치 숫자 길이에 맞춘 동적 폭 계수(1시간 초과 등 자릿수 변화 대응)
   const mainRunUnits = $derived.by(() => {
@@ -406,9 +430,11 @@
 
   function noteKeys(e: KeyboardEvent) {
     if (e.isComposing || e.keyCode === 229) return;
-    if (e.key !== 'Escape') return;
-    e.stopPropagation();
-    (e.currentTarget as HTMLTextAreaElement).blur();
+    if (e.key === 'Escape' || ((e.ctrlKey || e.metaKey) && e.key === 'Enter')) {
+      e.preventDefault();
+      e.stopPropagation();
+      (e.currentTarget as HTMLTextAreaElement).blur();
+    }
   }
 
   function titleKeys(e: KeyboardEvent) {
@@ -493,12 +519,16 @@
           let finalY = pos.y;
           if (snap.snapped && (snap.x !== pos.x || snap.y !== pos.y)) {
             programmaticMoveLock = true;
-            await win.setPosition(new PhysicalPosition(snap.x, snap.y));
-            finalX = snap.x;
-            finalY = snap.y;
-            setTimeout(() => {
-              programmaticMoveLock = false;
-            }, 220);
+            try {
+              await win.setPosition(new PhysicalPosition(snap.x, snap.y));
+              finalX = snap.x;
+              finalY = snap.y;
+            } finally {
+              clearTimeout(programmaticUnlockTimer);
+              programmaticUnlockTimer = setTimeout(() => {
+                programmaticMoveLock = false;
+              }, 220);
+            }
           }
 
           const safeScale = scale > 0 ? scale : 1;
@@ -524,17 +554,26 @@
     }, 200);
   }
 
-  async function toggleWidgetMode() {
+  async function toggleWidgetMode(options?: { openSettings?: boolean }) {
     if (windowTransitioning) return;
+    widgetDisplayOpen = false;
+    await flushDisplayPatch().catch(() => {});
+    const wasExplicitWidget = widgetMode;
+    const exitToNormal = widgetMode || surface.snugWidget;
     if (!native) {
-      if (!widgetMode) settingsOpen = false;
-      widgetMode = !widgetMode;
+      if (!exitToNormal) {
+        settingsOpen = false;
+        widgetMode = true;
+      } else {
+        widgetMode = false;
+        if (options?.openSettings) settingsOpen = true;
+      }
       return;
     }
     const win = getCurrentWindow();
     windowTransitioning = true;
     try {
-      if (!widgetMode) {
+      if (!exitToNormal) {
         pinnedBeforeWidget = pinned;
         const { isFull, isMax } = await readExpandedState();
         if (!isFull && !isMax) {
@@ -570,7 +609,7 @@
         pinned = true;
         widgetMode = true;
       } else {
-        if (!fullscreen && !maximized) {
+        if (wasExplicitWidget && !fullscreen && !maximized) {
           const currentWidget = await captureValidWidgetBounds();
           if (currentWidget) changeDisplayPrefs({ widgetBounds: currentWidget });
         }
@@ -587,9 +626,12 @@
           minWidth: WIDGET_MIN_WIDTH,
           minHeight: WIDGET_MIN_HEIGHT,
         });
-        await win.setAlwaysOnTop(pinnedBeforeWidget);
-        pinned = pinnedBeforeWidget;
+        if (wasExplicitWidget) {
+          await win.setAlwaysOnTop(pinnedBeforeWidget);
+          pinned = pinnedBeforeWidget;
+        }
         widgetMode = false;
+        if (options?.openSettings) settingsOpen = true;
       }
     } catch {
       error = '위젯 모드를 전환하지 못했어요.';
@@ -603,11 +645,16 @@
     if (!native) {
       if (!fullscreen) {
         modeBeforeFullscreen = widgetMode ? 'widget' : 'normal';
+        settingsBeforeFullscreen = settingsOpen;
+        settingsOpen = false;
         await document.documentElement.requestFullscreen?.().catch(() => {});
         fullscreen = true;
       } else {
         if (document.fullscreenElement) await document.exitFullscreen?.().catch(() => {});
         fullscreen = false;
+        if (modeBeforeFullscreen === 'normal' && !settingsOpen) {
+          settingsOpen = settingsBeforeFullscreen;
+        }
       }
       wake();
       return;
@@ -617,11 +664,17 @@
     try {
       const { isFull, isMax } = await readExpandedState();
       if (!isFull) {
-        modeBeforeFullscreen = widgetMode ? 'widget' : 'normal';
-        if (widgetMode) {
+        const inSnug = widgetMode || surface.snugWidget;
+        modeBeforeFullscreen = widgetMode ? 'widget' : surface.snugWidget ? 'shrunk-snug' : 'normal';
+        settingsBeforeFullscreen = settingsOpen;
+        settingsOpen = false;
+        if (inSnug) {
           widgetWindowBoundsBeforeFullscreen = await captureCurrentWindowTarget();
         } else if (!isMax) {
-          normalWindowBounds = await captureCurrentWindowTarget();
+          const captured = await captureCurrentWindowTarget();
+          if (captured && captured.width >= 480 && captured.height >= 350) {
+            normalWindowBounds = captured;
+          }
         }
         if (isMax) {
           await win.unmaximize();
@@ -640,8 +693,17 @@
               minHeight: WIDGET_MIN_HEIGHT,
             });
           }
+        } else if (modeBeforeFullscreen === 'shrunk-snug') {
+          widgetMode = false;
+          if (widgetWindowBoundsBeforeFullscreen) {
+            await applyTimerWindowBounds(win, widgetWindowBoundsBeforeFullscreen, {
+              minWidth: WIDGET_MIN_WIDTH,
+              minHeight: WIDGET_MIN_HEIGHT,
+            });
+          }
         } else {
           widgetMode = false;
+          if (!settingsOpen) settingsOpen = settingsBeforeFullscreen;
           if (normalWindowBounds) {
             await applyTimerWindowBounds(win, normalWindowBounds, {
               minWidth: WIDGET_MIN_WIDTH,
@@ -699,7 +761,15 @@
         const { isFull, isMax } = await readExpandedState();
         if (isFull || isMax) await restoreNormalFromMaximizedOrFullscreen();
         else {
-          normalWindowBounds = await captureCurrentWindowTarget();
+          const captured = await captureCurrentWindowTarget();
+          if (
+            captured &&
+            !surface.snugWidget &&
+            captured.width >= 480 &&
+            captured.height >= 350
+          ) {
+            normalWindowBounds = captured;
+          }
           await win.maximize();
           maximized = true;
         }
@@ -750,6 +820,12 @@
     // 선택 상자 등 하위 팝업이 먼저 Esc를 처리했으면 건너뜁니다.
     if (e.key === 'Escape' && e.defaultPrevented) return;
     if (e.key === 'Escape') {
+      if (widgetDisplayOpen) {
+        e.preventDefault();
+        widgetDisplayOpen = false;
+        void flushDisplayPatch();
+        return;
+      }
       if (confirmOpen) {
         e.preventDefault();
         confirmOpen = false;
@@ -783,7 +859,7 @@
       e.repeat ||
       (e.target instanceof Element &&
         e.target.closest(
-          'button,input,select,textarea,[role="slider"],[role="menu"],[role="dialog"]',
+          'input,textarea,select,[contenteditable="true"],[role="menu"],[role="dialog"],[role="listbox"],.widget-display-popover',
         ))
     )
       return;
@@ -801,11 +877,19 @@
       }
       if (e.code === 'KeyW') {
         e.preventDefault();
-        void windowAction(toggleWidgetMode);
+        void windowAction(() => toggleWidgetMode());
+        return;
+      }
+      if (e.code === 'KeyR' && view.phase !== 'running') {
+        e.preventDefault();
+        if (stopwatch) void ask('reset');
+        else void act('reset');
         return;
       }
     }
+    // 아날로그 다이얼([role="slider"]) 위에서는 Space로 시작/정지할 수 있게 하되, 일반 버튼 중복 클릭은 막습니다.
     if (e.code !== 'Space') return;
+    if (e.target instanceof Element && e.target.closest('button,a')) return;
     e.preventDefault();
     void act(view.phase === 'running' ? 'pause' : view.phase === 'completed' ? 'restart' : 'start');
   }
@@ -852,6 +936,7 @@
       clearInterval(interval);
       clearTimeout(idleTimer);
       clearTimeout(widgetSnapTimer);
+      clearTimeout(programmaticUnlockTimer);
       clearTimeout(displaySaveTimer);
       offs.forEach((fn) => fn());
       audio.dispose();
@@ -890,7 +975,13 @@
           await readExpandedState();
           const resized = await win.onResized(async () => {
             try {
-              await readExpandedState();
+              const { isFull, isMax } = await readExpandedState();
+              if (!widgetMode && !isFull && !isMax && !windowTransitioning) {
+                const target = await captureCurrentWindowTarget();
+                if (target && target.width >= 480 && target.height >= 350) {
+                  normalWindowBounds = target;
+                }
+              }
               scheduleWidgetSnapAndSave();
             } catch {}
           });
@@ -944,6 +1035,7 @@
   class:is-complete={view.phase === 'completed'}
   class:is-running={view.phase === 'running'}
   class:is-paused={view.phase === 'paused'}
+  class:is-warning={isWarning}
   class:stopwatch-frame={stopwatch}
   class:snug-widget={surface.snugWidget}
   class:widget-explicit={widgetMode}
@@ -958,7 +1050,7 @@
   style:--timer-note-max-h={`${typo.noteMaxHeightPx}px`}
   style:--timer-note-width={`${typo.availNoteWidth}px`}
   style:--timer-note-align={typo.resolvedAlign}
-  style:--widget-note-lines={surface.maxNoteLines}
+  style:--widget-note-lines={effectiveWidgetNoteLines}
 >
   <TimerResizeHandles
     {native}
@@ -984,7 +1076,7 @@
           class="widget-toggle-btn"
           aria-label="위젯 모드로 전환"
           title="작은 플로팅 위젯으로 띄우기 (W)"
-          onclick={() => void windowAction(toggleWidgetMode)}
+          onclick={() => void windowAction(() => toggleWidgetMode())}
           ><PictureInPicture2 size={15} /><span>위젯</span></button
         ><button
           class:pinned
@@ -1015,13 +1107,15 @@
     >
       <section
         class="timer-main"
+        class:has-widget-note={hasVisibleWidgetNote}
+        class:display-popover-open={widgetDisplayOpen}
         aria-label={name}
         bind:clientWidth={mainW}
         bind:clientHeight={mainH}
         use:widgetBodyDrag={surface.snugWidget}
       >
         {#if surface.snugWidget}
-          <!-- 착 달라붙은 위젯 상단 리본: 상태 점 + 제목(또는 승격된 설명 1줄) + 호버 마이크로 버튼 -->
+          <!-- 착 달라붙은 위젯 상단 리본: 상태 점 + 독립 제목 + 종료 배지 -->
           <header class="widget-ribbon">
             <span
               class="widget-status-dot"
@@ -1031,7 +1125,6 @@
             ></span>
             <input
               class="timer-title-input widget-title-input"
-              class:promoted={widgetHeadline.promotedFromNote && !titleFocused}
               aria-label="활동 제목"
               placeholder={widgetHeadline.text}
               title={title ? '활동 이름 수정' : '활동 이름 입력'}
@@ -1041,10 +1134,33 @@
               onblur={() => (titleFocused = false)}
               onkeydown={titleKeys}
             />
+            {#if view.phase === 'completed'}
+              <span class="widget-complete-pill" aria-live="polite">시간 종료</span>
+            {/if}
           </header>
 
-          <!-- 호버·정지·완료 상태에서만 부드럽게 나타나는 상단 우측 마이크로 액션 -->
+          <!-- 호버·포커스·터치 시 나타나는 우측 상단 마이크로 액션([설명 추가(미작성시)] [글자·화면] [항상 위] [일반 창] [닫기]) -->
           <div class="widget-micro-actions" data-no-drag>
+            {#if !hasNote && !noteFocused}
+              <button
+                aria-label="설명 추가"
+                title="설명 추가"
+                onclick={() => {
+                  widgetDisplayOpen = false;
+                  void beginNoteEdit();
+                }}><NotebookPen size={13} /></button
+              >
+            {/if}
+            <button
+              class:active={widgetDisplayOpen}
+              aria-label="위젯 글자와 화면 조절"
+              aria-expanded={widgetDisplayOpen}
+              title="글자 크기·정렬·화면 비중 조절"
+              onclick={() => {
+                if (noteFocused) leaveNote();
+                widgetDisplayOpen = !widgetDisplayOpen;
+              }}><Type size={13} /></button
+            >
             <button
               class:active={pinned}
               aria-label={pinned ? '항상 위 해제' : '항상 위 고정'}
@@ -1054,9 +1170,9 @@
               >{#if pinned}<Pin size={13} />{:else}<PinOff size={13} />{/if}</button
             >
             <button
-              aria-label={widgetMode ? '일반 창으로 돌아가기' : '위젯 모드 전환'}
-              title={widgetMode ? '일반 창으로 돌아가기 (W)' : '플로팅 위젯으로 고정 (W)'}
-              onclick={() => void windowAction(toggleWidgetMode)}
+              aria-label="일반 창으로 돌아가기"
+              title="일반 창으로 돌아가기 (W)"
+              onclick={() => void windowAction(() => toggleWidgetMode())}
               ><Maximize2 size={13} /></button
             >
             <button
@@ -1067,42 +1183,59 @@
             >
           </div>
 
-          {#if surface.form === 'card' || surface.form === 'tall' || (surface.form === 'tile' && surface.maxNoteLines > 0 && hasNote)}
-            {#if noteFocused}
-              <label class="widget-note-editor" data-no-drag>
-                <textarea
-                  bind:this={noteInputEl}
-                  class="timer-note-input widget-note-textarea"
-                  aria-label="활동 설명"
-                  placeholder="활동 내용을 적어 주세요."
-                  rows="2"
-                  maxlength="1000"
-                  spellcheck="false"
-                  bind:value={note}
-                  onblur={leaveNote}
-                  onkeydown={noteKeys}
-                ></textarea>
-              </label>
-            {:else if hasNote && widgetNoteBody}
-              <button
-                type="button"
-                class="widget-note-preview"
-                data-no-drag
-                title="클릭하여 설명 수정"
-                onclick={() => void beginNoteEdit()}
-              >
-                {widgetNoteBody}
-              </button>
-            {:else if surface.form === 'card' || surface.form === 'tall'}
-              <button
-                type="button"
-                class="widget-note-add"
-                data-no-drag
-                onclick={() => void beginNoteEdit()}
-              >
-                <NotebookPen size={12} /><span>{hasNote ? '설명 수정' : '설명'}</span>
-              </button>
-            {/if}
+          {#if widgetDisplayOpen}
+            <button
+              type="button"
+              class="widget-popover-backdrop"
+              tabindex="-1"
+              aria-label="글자 조절 창 닫기"
+              data-no-drag
+              onclick={() => {
+                widgetDisplayOpen = false;
+                void flushDisplayPatch();
+              }}
+            ></button>
+            <WidgetDisplayPopover
+              {displayPrefs}
+              compactSheet={(mainW || winW || 340) < 320 || (mainH || winH || 240) < 280}
+              onchange={changeDisplayPrefs}
+              onreset={() => changeDisplayPrefs({ ...DISPLAY_PRESET_RESET })}
+              onopenfull={() => {
+                widgetDisplayOpen = false;
+                void windowAction(() => toggleWidgetMode({ openSettings: true }));
+              }}
+              onclose={() => {
+                widgetDisplayOpen = false;
+                void flushDisplayPatch();
+              }}
+            />
+          {/if}
+
+          {#if noteFocused}
+            <label class="widget-note-editor" data-no-drag>
+              <textarea
+                bind:this={noteInputEl}
+                class="timer-note-input widget-note-textarea"
+                aria-label="활동 설명"
+                placeholder="활동 내용을 적어 주세요."
+                rows="2"
+                maxlength="1000"
+                spellcheck="false"
+                bind:value={note}
+                onblur={leaveNote}
+                onkeydown={noteKeys}
+              ></textarea>
+            </label>
+          {:else if hasNote}
+            <button
+              type="button"
+              class="widget-note-preview"
+              data-no-drag
+              title="클릭하여 설명 수정"
+              onclick={() => void beginNoteEdit()}
+            >
+              {widgetNoteBody}
+            </button>
           {/if}
         {:else}
           <header class="timer-panel-heading">
@@ -1174,6 +1307,7 @@
           class:digital={timerKind === 'digital' || stopwatch}
           class:analog={timerKind === 'analog'}
           class:hourglass={timerKind === 'hourglass'}
+          class:row-stage={surface.compactRowStage}
         >
           {#if timerKind === 'analog'}
             <AnalogTimer
@@ -1201,6 +1335,7 @@
               time={shownTime}
               variant={surface.stopwatchVariant}
               lapCount={model.laps.length}
+              dark={scheme === 'dark'}
             />
           {:else}
             <div class="digital-board" style:--num-run-dynamic={mainRunUnits}>
@@ -1221,7 +1356,7 @@
             </div>
           {/if}
 
-          {#if view.phase === 'completed' && surface.form !== 'strip' && surface.form !== 'tile'}
+          {#if !surface.snugWidget && view.phase === 'completed'}
             <div class="completion-message" aria-live="polite">
               <Check size={17} /><span>시간이 끝났어요</span>
             </div>
@@ -1233,9 +1368,10 @@
             {#if !stopwatch && (surface.form === 'card' || surface.form === 'tall')}
               <button
                 class="widget-step-chip"
-                aria-label="1분 줄이기"
+                aria-label="1분 줄이기 (Shift 클릭 시 10초)"
+                title="클릭: −1분 · Shift+클릭: −10초"
                 disabled={!loaded || busy || view.remainingMs === 0}
-                onclick={() => act('adjust', -60000)}>−1분</button
+                onclick={(e) => act('adjust', e.shiftKey ? -10000 : -60000)}>−1분</button
               >
             {/if}
             <button
@@ -1287,9 +1423,10 @@
             {:else if surface.form === 'card' || surface.form === 'tall'}
               <button
                 class="widget-step-chip"
-                aria-label="1분 늘리기"
+                aria-label="1분 늘리기 (Shift 클릭 시 10초)"
+                title="클릭: +1분 · Shift+클릭: +10초"
                 disabled={!loaded || busy || view.remainingMs >= 3600000}
-                onclick={() => act('adjust', 60000)}>+1분</button
+                onclick={(e) => act('adjust', e.shiftKey ? 10000 : 60000)}>+1분</button
               >
             {/if}
           </div>
@@ -1371,7 +1508,32 @@
         {/if}
       </section>
 
-      {#if stopwatch && lapsOpen && !surface.snugWidget}<LapTimeline laps={model.laps} />{/if}
+      {#if hasDrawerBackdrop}
+        <button
+          type="button"
+          class="timer-drawer-backdrop"
+          tabindex="-1"
+          aria-label="열린 패널 닫기"
+          onclick={() => {
+            if (settingsAsDrawer) settingsOpen = false;
+            else if (lapsAsDrawer) {
+              lapsOpen = false;
+              lapsManuallyClosed = true;
+            }
+          }}
+        ></button>
+      {/if}
+
+      {#if stopwatch && lapsOpen && !surface.snugWidget}
+        <LapTimeline
+          laps={model.laps}
+          overlay={lapsAsDrawer}
+          onclose={() => {
+            lapsOpen = false;
+            lapsManuallyClosed = true;
+          }}
+        />
+      {/if}
       {#if settingsOpen && loaded && !surface.snugWidget}
         <TimerSettingsPanel
           id="timer-settings-panel"
@@ -1381,11 +1543,13 @@
           phase={view.phase}
           remaining={view.remainingMs}
           {dialRange}
+          overlay={settingsAsDrawer}
           onchange={changePreferences}
           ondisplaychange={changeDisplayPrefs}
           onset={(ms) => act('set', ms)}
           onpreview={preview}
           onsound={chooseSound}
+          onclose={() => (settingsOpen = false)}
         />
       {/if}
     </div>

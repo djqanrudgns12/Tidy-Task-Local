@@ -175,3 +175,23 @@ test('persistent schema excludes all session data and refuses future versions', 
   // 스톱워치는 시계음 켜기/끄기와 시계음 종류만 저장합니다(경고음·종료음 없음).
   assert.deepEqual(Object.keys(defaults().preferences.stopwatch), ['tickEnabled', 'tickSound']);
 });
+test('long 40m countdown survives 15m sleep jump without drift and completes once at 0ms', () => {
+  const prefs = { ...defaultPreferences('digital'), warningEnabled: true, warningLeadSeconds: 5 };
+  const tracker = createAlarmTracker();
+  let s = step(createTimer('digital', 40 * 60000), { type: 'start' }, 1000);
+  // 15분(900,000ms) 백그라운드/절전 점프 후 정확히 25분(1,500,000ms) 잔여
+  const mid = sampleTimer(s, 1000 + 15 * 60000);
+  assert.equal(mid.phase, 'running');
+  assert.equal(mid.remainingMs, 25 * 60000);
+  // 종료 5초 전 구간 진입 확인
+  const warn = sampleTimer(s, 1000 + 39 * 60000 + 56000);
+  assert.equal(warn.remainingMs, 4000);
+  assert.equal(alarmPlan(warn, prefs, tracker)?.warningFor, 4);
+  // 정확히 종료 및 이후 추가 샘플 시 중복 전이 없음
+  const done = step(s, { type: 'sample' }, 1000 + 40 * 60000 + 250);
+  assert.equal(done.phase, 'completed');
+  assert.equal(done.remainingMs, 0);
+  const doneAgain = step(done, { type: 'sample' }, 1000 + 41 * 60000);
+  assert.equal(doneAgain.phase, 'completed');
+  assert.equal(doneAgain.remainingMs, 0);
+});

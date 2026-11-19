@@ -133,18 +133,42 @@ test('위젯 4대 폼팩터 분류와 경계 히스테리시스가 정확히 동
   assert.equal(classifyTimerSurface({ width: 380, height: 120, widgetMode: true }).compactConfirm, true);
   assert.equal(classifyTimerSurface({ width: 220, height: 200, widgetMode: true }).analogDensity, 'minimal');
   assert.equal(classifyTimerSurface({ width: 380, height: 120, widgetMode: true }).stopwatchVariant, 'minimal');
+
+  assert.equal(classifyTimerSurface({ width: 380, height: 120, widgetMode: true }).maxNoteLines, 1);
+  assert.ok(classifyTimerSurface({ width: 220, height: 200, widgetMode: true }).maxNoteLines >= 1);
+
+  const cardWithNote = classifyTimerSurface({
+    width: 340,
+    height: 240,
+    widgetMode: true,
+    hasVisibleNote: true,
+  });
+  assert.equal(cardWithNote.form, 'card');
+  assert.equal(cardWithNote.compactRowStage, true);
+  assert.equal(cardWithNote.analogDensity, 'minimal');
+  assert.equal(cardWithNote.stopwatchVariant, 'minimal');
+
+  const tileWithNote = classifyTimerSurface({
+    width: 210,
+    height: 195,
+    widgetMode: true,
+    hasVisibleNote: true,
+  });
+  assert.equal(tileWithNote.form, 'tile');
+  assert.equal(tileWithNote.compactRowStage, true);
+  assert.equal(tileWithNote.maxNoteLines, 1);
 });
 
-test('제목이 비었을 때는 설명 첫 줄을 위젯 헤드라인으로 승격한다', () => {
+test('제목과 설명은 완전히 독립되며, 대형 위젯에서도 배율 전 구간이 단조 증가한다', () => {
   assert.deepEqual(resolveWidgetHeadline('모둠 발표', '설명 내용', '전광판 타이머'), {
     text: '모둠 발표',
     promotedFromNote: false,
     isPlaceholder: false,
   });
   assert.deepEqual(resolveWidgetHeadline('   ', '\n1. 조용히 자습하기\n2. 다 하면 책 읽기', '모래시계'), {
-    text: '1. 조용히 자습하기',
-    promotedFromNote: true,
-    isPlaceholder: false,
+    text: '모래시계',
+    promotedFromNote: false,
+    isPlaceholder: true,
   });
   assert.deepEqual(resolveWidgetHeadline('', '  ', '모래시계'), {
     text: '모래시계',
@@ -154,20 +178,81 @@ test('제목이 비었을 때는 설명 첫 줄을 위젯 헤드라인으로 승
   assert.equal(resolveNoteAlign('1. 준비물 꺼내기', 'auto'), 'left');
   assert.equal(resolveNoteAlign('한 줄 안내', 'auto'), 'center');
   assert.ok(visualUnits('한글AB') === 2 + 2 * 0.56);
+
+  const smallCard = computeSmartTypography({
+    width: 340,
+    height: 240,
+    form: 'card',
+    title: '발표 준비',
+    note: '모둠별 정리하기',
+    placeholderTitle: '전광판 타이머',
+  });
+  const largeCard = computeSmartTypography({
+    width: 1024,
+    height: 750,
+    form: 'card',
+    title: '발표 준비',
+    note: '모둠별 정리하기',
+    placeholderTitle: '전광판 타이머',
+  });
+  assert.ok(largeCard.titlePx >= 40, `대형 위젯 제목 크기 ${largeCard.titlePx}`);
+  assert.ok(largeCard.notePx >= 36, `대형 위젯 설명 크기 ${largeCard.notePx}`);
+  assert.ok(largeCard.titlePx > smallCard.titlePx && largeCard.notePx > smallCard.notePx);
+
+  // 위젯에서 titleScale(80~160) · noteScale(85~180)가 클램핑 벽 없이 전 구간 단조 증가해야 합니다.
+  const titleSizes = [80, 100, 115, 135, 160].map(
+    (titleScale) =>
+      computeSmartTypography({
+        width: 1024,
+        height: 750,
+        form: 'card',
+        title: '활동 제목',
+        note: '안내 문구',
+        placeholderTitle: '전광판 타이머',
+        displayPrefs: { titleScale },
+      }).titlePx,
+  );
+  for (let i = 1; i < titleSizes.length; i++) {
+    assert.ok(titleSizes[i] > titleSizes[i - 1], `titleScale 단조 증가 실패: ${titleSizes.join(' -> ')}`);
+  }
+
+  for (const [w, h] of [
+    [340, 240],
+    [1024, 750],
+  ]) {
+    const noteSizes = [85, 100, 120, 145, 180].map(
+      (noteScale) =>
+        computeSmartTypography({
+          width: w,
+          height: h,
+          form: 'card',
+          title: '활동 제목',
+          note: '한 줄 안내 문구',
+          placeholderTitle: '전광판 타이머',
+          displayPrefs: { noteScale },
+        }).notePx,
+    );
+    for (let i = 1; i < noteSizes.length; i++) {
+      assert.ok(
+        noteSizes[i] > noteSizes[i - 1],
+        `${w}x${h} noteScale 단조 증가 실패: ${noteSizes.join(' -> ')}`,
+      );
+    }
+  }
 });
 
 test('자석 도킹은 4K 200%와 FHD 100%에서 가장자리 16논리px 이내를 깔끔하게 맞춘다', () => {
   const fhd = [{ bounds: { x: 0, y: 0, width: 1920, height: 1080 }, work: { x: 0, y: 0, width: 1920, height: 1032 }, scale: 1 }];
   const snappedFhd = snapWidgetToMonitorEdges({ x: 1572, y: 12, width: 340, height: 236 }, fhd);
   assert.equal(snappedFhd.snapped, true);
-  assert.equal(snappedFhd.x, 1920 - 340 - 2);
-  assert.equal(snappedFhd.y, 2);
+  assert.equal(snappedFhd.x, 1920 - 340 - 8);
+  assert.equal(snappedFhd.y, 8);
 
   const uhd = [{ bounds: { x: 0, y: 0, width: 3840, height: 2160 }, work: { x: 0, y: 0, width: 3840, height: 2064 }, scale: 2 }];
   const snappedUhd = snapWidgetToMonitorEdges({ x: 20, y: 1560, width: 680, height: 472 }, uhd);
   assert.equal(snappedUhd.snapped, true);
-  assert.equal(snappedUhd.x, 4);
-  assert.equal(snappedUhd.y, 2064 - 472 - 4);
+  assert.equal(snappedUhd.x, 16);
+  assert.equal(snappedUhd.y, 2064 - 472 - 16);
 });
 
 test('다중 타이머 위젯이 겹칠 때는 작업영역 안에서 계단식으로 비켜 준다', () => {

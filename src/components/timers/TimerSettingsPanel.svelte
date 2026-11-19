@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { AlarmClock, BellRing, Check, Clock3, Eye, Minus, Plus, RotateCcw, Type, Volume2 } from 'lucide-svelte';
+  import { AlarmClock, BellRing, Check, Clock3, Eye, Minus, Plus, RotateCcw, Type, Volume2, X } from 'lucide-svelte';
   import ToolkitSwitch from '../toolkit/ToolkitSwitch.svelte';
   import ToolkitSelect from '../toolkit/ToolkitSelect.svelte';
   import { PRESETS, WARNING_LEADS, WARNING_DURATIONS } from '../../lib/toolkit/preferences.js';
@@ -10,6 +10,9 @@
     NOTE_SCALE_MAX,
     NOTE_SCALE_MIN,
     NOTE_SCALE_PRESETS,
+    DISPLAY_PRESET_RESET,
+    displayPresetLabel,
+    stepDisplayScale,
     defaultTimerDisplayPreferences,
     type TimerDisplayPreferences,
   } from '../../lib/timers/timerDisplayPreferences.js';
@@ -28,11 +31,13 @@
     phase,
     remaining,
     dialRange,
+    overlay = false,
     onchange,
     ondisplaychange,
     onset,
     onpreview,
     onsound,
+    onclose,
   } = $props<{
     id?: string;
     kind: string;
@@ -41,11 +46,13 @@
     phase: string;
     remaining: number;
     dialRange: number;
+    overlay?: boolean;
     onchange: (patch: Record<string, unknown>) => void;
     ondisplaychange?: (patch: Partial<TimerDisplayPreferences>) => void;
     onset: (ms: number) => void;
     onpreview: (name: string) => void;
     onsound: (role: SoundRole, id: string) => void;
+    onclose?: () => void;
   }>();
   // 선택 상자 항목: 같은 성격끼리 묶고, 이 타이머에 원래 있던 소리에는 "기본"을 붙여 되돌아가기 쉽게 합니다.
   const soundOptions = $derived(
@@ -103,21 +110,13 @@
       displayPrefs.layoutFocus !== 'balanced',
   );
   function stepScale(key: 'titleScale' | 'noteScale', delta: number) {
-    const min = key === 'titleScale' ? TITLE_SCALE_MIN : NOTE_SCALE_MIN;
-    const max = key === 'titleScale' ? TITLE_SCALE_MAX : NOTE_SCALE_MAX;
-    const next = Math.max(min, Math.min(max, Math.round((displayPrefs[key] + delta) / 5) * 5));
+    const next = stepDisplayScale(key, displayPrefs[key], delta);
     if (next !== displayPrefs[key]) ondisplaychange?.({ [key]: next });
   }
   function resetDisplayPrefs() {
-    ondisplaychange?.({
-      titleScale: 100,
-      noteScale: 100,
-      noteAlign: 'auto',
-      layoutFocus: 'balanced',
-    });
+    ondisplaychange?.({ ...DISPLAY_PRESET_RESET });
   }
-  const presetLabel = (val: number) =>
-    val === 100 ? '자동' : val < 100 ? '작게' : val <= 125 ? '크게' : '더 크게';
+  const presetLabel = displayPresetLabel;
   const soundRows = $derived<SoundRow[]>(
     kind === 'stopwatch'
       ? [
@@ -158,6 +157,18 @@
   class:stopwatch-settings={kind === 'stopwatch'}
   aria-label="타이머 설정"
 >
+  {#if overlay && onclose}
+    <div class="drawer-close-bar">
+      <strong>타이머 설정</strong>
+      <button
+        type="button"
+        class="drawer-close-btn"
+        aria-label="설정 닫기"
+        title="설정 닫기 (Esc)"
+        onclick={onclose}><X size={16} /></button
+      >
+    </div>
+  {/if}
   {#if kind !== 'stopwatch'}<section class="settings-section time-settings-section">
       <header class="settings-section-heading">
         <span class="settings-section-icon" aria-hidden="true"><Clock3 size={18} /></span>

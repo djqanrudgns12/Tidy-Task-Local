@@ -1,9 +1,15 @@
 <script lang="ts">
   import { tick } from 'svelte';
-  import { Flag, ArrowUp } from 'lucide-svelte';
+  import { Flag, ArrowUp, X } from 'lucide-svelte';
   import { formatTime } from '../../lib/timers/engine.js';
-  let { laps } = $props<{
+  let {
+    laps,
+    overlay = false,
+    onclose,
+  } = $props<{
     laps: { id: string; sequence: number; elapsedMs: number; splitMs: number }[];
+    overlay?: boolean;
+    onclose?: () => void;
   }>();
   let list: HTMLDivElement;
   let unread = $state(0);
@@ -30,7 +36,18 @@
 <aside class="lap-panel">
   <header>
     <h2><Flag size={17} />기록</h2>
-    <span>{laps.length}</span>
+    <div class="lap-header-right">
+      <span>{laps.length}</span>
+      {#if overlay && onclose}
+        <button
+          type="button"
+          class="drawer-close-btn"
+          aria-label="기록 닫기"
+          title="기록 닫기 (Esc)"
+          onclick={onclose}><X size={15} /></button
+        >
+      {/if}
+    </div>
   </header>
   {#if unread}<button
       class="lap-new"

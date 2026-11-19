@@ -3,10 +3,12 @@
     time,
     variant = 'illustrated',
     lapCount = 0,
+    dark = false,
   }: {
     time: string;
     variant?: 'illustrated' | 'minimal';
     lapCount?: number;
+    dark?: boolean;
   } = $props();
   const main = $derived(time.split('.')[0]);
   const centi = $derived(time.split('.')[1] ?? '00');
@@ -14,7 +16,7 @@
 
 {#if variant === 'minimal'}
   <div class="stopwatch-minimal" aria-label={time}>
-    <div class="sw-minimal-meta">
+    <div class="sw-minimal-meta" class:has-lap={lapCount > 0}>
       <span class="sw-minimal-label">경과</span>
       {#if lapCount > 0}<span class="sw-minimal-lap">#{String(lapCount).padStart(2, '0')}</span>{/if}
     </div>
@@ -23,8 +25,55 @@
     </div>
   </div>
 {:else}
-  <div class="stopwatch-face">
-    <img src="/images/toolkit/stopwatch-face.png" alt="" width="1536" height="1024" />
+  <div class="stopwatch-face" class:dark>
+    {#if dark}
+      <!-- 다크 모드에서는 흰 배경 PNG 대신 어두운 패널과 어우러지는 전용 크로노그래프 베젤을 그립니다. -->
+      <svg class="stopwatch-dark-svg" viewBox="0 0 480 320" width="1536" height="1024" aria-hidden="true">
+        <g stroke="var(--tk-line)" stroke-width="2" fill="color-mix(in srgb, var(--tk-soft) 88%, #64748b)">
+          <g transform="rotate(-17 118 44)">
+            <rect x="92" y="25" width="52" height="26" rx="10" />
+          </g>
+          <g transform="rotate(17 362 44)">
+            <rect x="336" y="25" width="52" height="26" rx="10" />
+          </g>
+          <rect x="210" y="13" width="60" height="32" rx="10" />
+        </g>
+        <rect
+          x="26"
+          y="42"
+          width="428"
+          height="260"
+          rx="130"
+          fill="color-mix(in srgb, var(--tk-soft) 92%, black)"
+          stroke="var(--tk-line)"
+          stroke-width="2.5"
+        />
+        <rect
+          x="44"
+          y="58"
+          width="392"
+          height="228"
+          rx="114"
+          fill="#171d25"
+          stroke="rgba(255, 255, 255, 0.12)"
+          stroke-width="1.5"
+        />
+        <rect
+          class="sw-dark-track"
+          x="56"
+          y="70"
+          width="368"
+          height="204"
+          rx="102"
+          fill="none"
+          stroke="rgba(255, 255, 255, 0.18)"
+          stroke-width="2"
+          stroke-dasharray="2 14"
+        />
+      </svg>
+    {:else}
+      <img src="/images/toolkit/stopwatch-face.png" alt="" width="1536" height="1024" />
+    {/if}
     <div class="stopwatch-readout">
       <span class="elapsed-label">경과 시간</span>
       <div class="elapsed-time" class:long={main.length > 5} aria-label={time}>
@@ -45,7 +94,8 @@
     flex: none;
     container-type: inline-size;
   }
-  img {
+  img,
+  .stopwatch-dark-svg {
     display: block;
     width: 100%;
     height: auto;
@@ -58,11 +108,21 @@
     align-items: center;
     justify-content: center;
     gap: 2.5cqw;
+    /* 라이트 일러스트(#fcfaf2 크림 문자판) 위 글씨는 테마에 휩쓸리지 않도록 어두운 잉크로 고정합니다. */
+    color: #1f332c;
+  }
+  .stopwatch-face.dark .stopwatch-readout {
+    inset: 27% 14% 19%;
     color: var(--tk-ink);
   }
   .elapsed-label {
     font-size: clamp(10px, 2.5cqw, 18px);
     font-weight: 650;
+    color: #52685e;
+  }
+  .stopwatch-face.dark .elapsed-label,
+  .stopwatch-face.dark .elapsed-time small,
+  .stopwatch-face.dark .elapsed-unit {
     color: var(--tk-muted);
   }
   .elapsed-time {
@@ -83,12 +143,13 @@
   .elapsed-time small {
     margin-left: 0.12em;
     font-size: 0.38em;
-    color: var(--tk-muted);
+    color: #52685e;
     letter-spacing: 0;
   }
   .elapsed-unit {
     font-size: clamp(9px, 1.9cqw, 13px);
-    color: var(--tk-muted);
+    color: #52685e;
+    white-space: nowrap;
   }
   .elapsed-unit span {
     margin-left: 0.25em;

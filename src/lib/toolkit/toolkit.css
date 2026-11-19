@@ -877,6 +877,8 @@
 }
 /* The time is the dominant object; controls are grouped by task. */
 .timer-frame {
+  --analog-face-bg: #ffffff;
+  --analog-sector-fill: var(--tk-peach);
   position: relative;
   display: flex;
   flex-direction: column;
@@ -886,14 +888,23 @@
   border-radius: 19px;
   overflow: hidden;
 }
+.timer-frame[data-scheme='dark'] {
+  --analog-face-bg: color-mix(in srgb, var(--tk-bg) 88%, black);
+  --analog-sector-fill: color-mix(in srgb, var(--tk-peach) 56%, transparent);
+}
+.timer-frame.is-running .stopwatch-dark-svg .sw-dark-track {
+  stroke: color-mix(in srgb, var(--tk-accent) 42%, rgba(255, 255, 255, 0.34));
+  transition: stroke 0.25s ease;
+}
 .timer-frame.fullscreen {
   border: 0;
   border-radius: 0;
 }
-/* 전체화면에서 3초간 움직임이 없으면 창 틀·도구 버튼·조작 독을 부드럽게 숨깁니다. */
+/* 전체화면에서 3초간 움직임이 없으면 창 틀·도구 버튼·조작 독·빈 설명 알약을 부드럽게 숨깁니다. */
 .timer-frame:not(.clk-frame) .timer-titlebar,
 .timer-frame:not(.clk-frame) .timer-heading-tools,
-.timer-frame:not(.clk-frame) .timer-control-area {
+.timer-frame:not(.clk-frame) .timer-control-area,
+.timer-frame:not(.clk-frame) .timer-note.compact {
   transition: opacity 0.35s ease;
 }
 .timer-frame:not(.clk-frame).idle {
@@ -901,7 +912,8 @@
 }
 .timer-frame:not(.clk-frame).idle .timer-titlebar,
 .timer-frame:not(.clk-frame).idle .timer-heading-tools,
-.timer-frame:not(.clk-frame).idle .timer-control-area {
+.timer-frame:not(.clk-frame).idle .timer-control-area,
+.timer-frame:not(.clk-frame).idle .timer-note.compact {
   opacity: 0;
   pointer-events: none;
 }
@@ -941,18 +953,18 @@
   width: 7px;
   cursor: ew-resize;
 }
-/* 위젯 6px 바깥 그림자 여백을 넘어 카드 테두리까지 넉넉히 잡히게 합니다. */
+/* 무여백 일체형 위젯은 카드 경계 = 창 경계(0px)이므로 리사이즈 손잡이를 모서리 곡률(18px)에 딱 맞춥니다. */
 .timer-resize-edge.snug.edge-north,
 .timer-resize-edge.snug.edge-south {
-  height: 10px;
-  left: 20px;
-  right: 20px;
+  height: 6px;
+  left: 18px;
+  right: 18px;
 }
 .timer-resize-edge.snug.edge-west,
 .timer-resize-edge.snug.edge-east {
-  width: 10px;
-  top: 20px;
-  bottom: 20px;
+  width: 6px;
+  top: 18px;
+  bottom: 18px;
 }
 
 .timer-resize-corner {
@@ -973,8 +985,8 @@
   z-index: 50;
 }
 .timer-resize-corner.snug {
-  width: 20px;
-  height: 20px;
+  width: 18px;
+  height: 18px;
 }
 .timer-resize-corner.fullscreen {
   width: 24px;
@@ -1010,61 +1022,69 @@
 .timer-resize-corner.inactive {
   pointer-events: none;
 }
+/* 동심원 모서리 가이드 아크: 바깥 곡률(R=19/18)에서 d=5px 안쪽에 정확히 R-d(14px/13px)를 써서 바깥 돌출을 원천 차단합니다. */
 .timer-resize-corner .corner-arc {
   position: absolute;
-  width: 9px;
-  height: 9px;
-  border: 2px solid color-mix(in srgb, var(--tk-accent) 70%, transparent);
+  width: 11px;
+  height: 11px;
+  border: 2px solid color-mix(in srgb, var(--tk-accent) 72%, transparent);
   opacity: 0;
   transition: opacity 0.16s ease;
   pointer-events: none;
+}
+.timer-frame.snug-widget[data-kind='digital'] .timer-resize-corner .corner-arc {
+  border-color: color-mix(in srgb, var(--tk-gold) 85%, white);
 }
 .timer-resize-corner:hover .corner-arc {
   opacity: 0.85;
 }
 .timer-resize-corner.north-west .corner-arc {
-  top: 4px;
-  left: 4px;
+  top: 5px;
+  left: 5px;
   border-right: 0;
   border-bottom: 0;
-  border-top-left-radius: 5px;
+  border-top-left-radius: 14px;
 }
 .timer-resize-corner.north-east .corner-arc {
-  top: 4px;
-  right: 4px;
+  top: 5px;
+  right: 5px;
   border-left: 0;
   border-bottom: 0;
-  border-top-right-radius: 5px;
+  border-top-right-radius: 14px;
 }
 .timer-resize-corner.south-west .corner-arc {
-  bottom: 4px;
-  left: 4px;
+  bottom: 5px;
+  left: 5px;
   border-right: 0;
   border-top: 0;
-  border-bottom-left-radius: 5px;
+  border-bottom-left-radius: 14px;
 }
 .timer-resize-corner.south-east .corner-arc {
-  bottom: 4px;
-  right: 4px;
+  bottom: 5px;
+  right: 5px;
   border-left: 0;
   border-top: 0;
-  border-bottom-right-radius: 5px;
+  border-bottom-right-radius: 14px;
 }
 .timer-resize-corner.snug.north-west .corner-arc {
-  top: 8px;
-  left: 8px;
+  top: 5px;
+  left: 5px;
+  border-top-left-radius: 13px;
 }
 .timer-resize-corner.snug.north-east .corner-arc {
-  top: 8px;
-  right: 8px;
+  top: 5px;
+  right: 5px;
+  border-top-right-radius: 13px;
 }
 .timer-resize-corner.snug.south-west .corner-arc {
-  bottom: 8px;
-  left: 8px;
+  bottom: 5px;
+  left: 5px;
+  border-bottom-left-radius: 13px;
 }
 .timer-resize-corner.snug.south-east .corner-arc {
-  bottom: 8px;
-  right: 8px;
+  bottom: 5px;
+  right: 5px;
+  border-bottom-right-radius: 13px;
 }
 
 .timer-titlebar {
@@ -1281,6 +1301,7 @@
 }
 .timer-title-input:hover {
   background: color-mix(in srgb, var(--tk-soft) 55%, transparent);
+  border-bottom-color: color-mix(in srgb, var(--tk-line) 72%, transparent);
 }
 .timer-title-input:focus {
   outline: none;
@@ -1708,8 +1729,9 @@
 .is-complete .timer-stage {
   padding-bottom: 34px;
 }
-.is-complete .digital-time {
-  animation: finish-pop 0.45s ease-out;
+.timer-frame.is-complete .digital-time,
+.timer-frame.is-complete .secondary-time {
+  animation: timer-complete-settle 0.9s ease-out 1;
 }
 @keyframes finish-in {
   from {
@@ -1721,9 +1743,15 @@
     transform: translateY(0);
   }
 }
-@keyframes finish-pop {
-  40% {
-    transform: scale(1.02);
+@keyframes timer-complete-settle {
+  0% {
+    transform: scale(1);
+  }
+  35% {
+    transform: scale(1.035);
+  }
+  100% {
+    transform: scale(1);
   }
 }
 
@@ -1815,17 +1843,23 @@
   width: 26px;
   height: 26px;
   padding: 0;
-  border: 1px solid transparent;
+  border: 1px solid color-mix(in srgb, var(--tk-line) 55%, transparent);
   border-radius: 7px;
+  background: var(--tk-bg);
+  transition: background-color 0.14s ease, border-color 0.14s ease, box-shadow 0.14s ease;
 }
-/* light-dark()를 쓰지 않아 Vite LightningCSS 프로덕션 빌드에서도 색상이 소실되지 않습니다. */
+/* 평소에는 차분한 중립 톤으로 시계·설명 집중도를 높이고, 호버 시에만 은은한 컬러 피드백을 줍니다. */
 .dock-step .decrease {
   color: var(--tk-danger);
-  background: var(--tk-danger-soft);
 }
 .dock-step .increase {
   color: var(--tk-accent);
-  background: color-mix(in srgb, var(--tk-accent) 15%, var(--tk-panel));
+}
+.dock-step .decrease:hover:not(:disabled) {
+  background: var(--tk-danger-soft);
+}
+.dock-step .increase:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--tk-accent) 16%, var(--tk-panel));
 }
 .dock-step button:hover:not(:disabled) {
   border-color: currentColor;
@@ -1866,17 +1900,17 @@
   padding: 0 3px;
 }
 
-/* ── 착 달라붙은 플로팅 위젯 모드 (학급 온도계 ThermometerDisplay 설계 차용) ── */
+/* ── 무여백 일체형 플로팅 위젯 모드 (Zero-Halo Flush Edge: 카드 경계 = 창 경계) ── */
 .timer-frame.snug-widget {
-  padding: 6px;
+  padding: 0;
   background: transparent;
   border: 0;
-  border-radius: 0;
-  overflow: visible;
+  border-radius: 18px;
+  overflow: hidden;
 }
 .timer-frame.snug-widget .timer-workspace {
   padding: 0;
-  overflow: visible;
+  overflow: hidden;
 }
 .timer-frame.snug-widget .timer-layout {
   display: flex;
@@ -1888,34 +1922,60 @@
   flex: 1;
   width: 100%;
   height: 100%;
+  border: 0;
   border-radius: 18px;
+  background-clip: padding-box;
   padding: 11px 13px 11px;
   gap: 5px;
   justify-content: space-between;
   container: widget-card / size;
   cursor: grab;
+  transition: box-shadow 0.2s ease;
   box-shadow:
-    0 4px 16px rgba(24, 34, 28, 0.14),
-    0 1px 3px rgba(24, 34, 28, 0.08);
+    inset 0 0 0 1px color-mix(in srgb, var(--tk-line) 92%, black 8%),
+    inset 0 1px 0 rgba(255, 255, 255, 0.78);
 }
 .timer-frame.snug-widget .timer-main:active {
   cursor: grabbing;
 }
 .timer-frame.snug-widget[data-scheme='dark'] .timer-main {
   box-shadow:
-    0 6px 20px rgba(0, 0, 0, 0.4),
-    0 0 0 1px rgba(255, 255, 255, 0.06);
+    inset 0 0 0 1px rgba(255, 255, 255, 0.15),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
 }
 
-/* 전광판 위젯은 칠판 자체를 단일 위젯 표면으로 융합해 박스 안 박스 중첩을 없앱니다. */
+/* 전광판 위젯은 칠판 자체를 단일 위젯 표면으로 융합해 박스 안 박스 중첩·외곽 번짐을 없앱니다. */
 .timer-frame.snug-widget[data-kind='digital'] .timer-main {
+  border: 0;
+  background-clip: padding-box;
   background: linear-gradient(
     180deg,
     var(--tk-display-bg),
     color-mix(in srgb, var(--tk-display-bg) 82%, black)
   );
-  border-color: color-mix(in srgb, var(--tk-display-ink) 18%, var(--tk-line));
   color: var(--tk-display-ink);
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.2),
+    inset 0 1px 0 rgba(255, 255, 255, 0.28);
+}
+.timer-frame.snug-widget.is-warning .timer-main {
+  box-shadow:
+    inset 0 0 0 2px color-mix(in srgb, var(--tk-gold) 74%, var(--tk-danger) 26%),
+    inset 0 1px 0 rgba(255, 255, 255, 0.24);
+}
+.timer-frame.snug-widget:not([data-kind='digital']):not([data-scheme='dark']).is-warning .timer-main {
+  box-shadow:
+    inset 0 0 0 2px color-mix(in srgb, var(--tk-danger) 48%, var(--tk-gold) 52%),
+    inset 0 1px 0 rgba(255, 255, 255, 0.42);
+}
+.timer-frame.is-warning .widget-status-dot.running {
+  background: var(--tk-gold);
+  animation-duration: 0.9s;
+}
+.timer-frame.snug-widget.is-complete .timer-main {
+  box-shadow:
+    inset 0 0 0 2px color-mix(in srgb, var(--tk-danger) 55%, var(--tk-gold)),
+    inset 0 1px 0 rgba(255, 255, 255, 0.24);
 }
 .timer-frame.snug-widget[data-kind='digital'] .digital-board {
   width: 100%;
@@ -1931,15 +1991,52 @@
 .timer-frame.snug-widget[data-kind='digital'] .digital-board::after {
   display: none;
 }
+.timer-frame.snug-widget:not([data-kind='digital']) .widget-title-input:focus {
+  background: var(--tk-bg);
+  border-bottom-color: var(--tk-accent);
+}
+.timer-frame.snug-widget[data-scheme='dark']:not([data-kind='digital']) .widget-title-input:focus {
+  background: color-mix(in srgb, var(--tk-bg) 88%, black);
+}
 .timer-frame.snug-widget[data-kind='digital'] .widget-title-input,
-.timer-frame.snug-widget[data-kind='digital'] .widget-title-input::placeholder,
-.timer-frame.snug-widget[data-kind='digital'] .widget-note-preview,
 .timer-frame.snug-widget[data-kind='digital'] .widget-note-textarea {
   color: var(--tk-display-ink);
+}
+.timer-frame.snug-widget[data-kind='digital'] .widget-title-input::placeholder {
+  color: rgba(255, 255, 255, 0.86);
+  opacity: 1;
+}
+.timer-frame.snug-widget[data-kind='digital'] .widget-title-input:hover {
+  background: rgba(255, 255, 255, 0.12);
+  border-bottom-color: rgba(255, 255, 255, 0.35);
+  color: var(--tk-display-ink);
+}
+.timer-frame.snug-widget[data-kind='digital'] .widget-title-input:focus {
+  outline: none;
+  background: rgba(0, 0, 0, 0.24);
+  color: var(--tk-display-ink);
+  border-bottom-color: var(--tk-gold);
+  caret-color: var(--tk-gold);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.12);
+}
+.timer-frame.snug-widget[data-kind='digital'] .widget-title-input:focus::placeholder {
+  color: rgba(255, 255, 255, 0.5);
+}
+.timer-frame.snug-widget[data-kind='digital'] .widget-status-dot {
+  background: rgba(255, 255, 255, 0.45);
+}
+.timer-frame.snug-widget[data-kind='digital'] .widget-note-preview {
+  background: rgba(0, 0, 0, 0.16);
+  color: rgba(255, 255, 255, 0.88);
 }
 .timer-frame.snug-widget[data-kind='digital'] .widget-note-textarea {
   background: rgba(0, 0, 0, 0.22);
   border-color: var(--tk-gold);
+  scrollbar-color: rgba(255, 255, 255, 0.32) transparent;
+}
+.timer-frame.snug-widget[data-kind='digital'] .widget-note-textarea:focus {
+  border-color: var(--tk-gold);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--tk-gold) 30%, transparent);
 }
 .timer-frame.snug-widget[data-kind='digital'] .widget-note-add {
   color: rgba(255, 255, 255, 0.78);
@@ -1977,6 +2074,10 @@
 .timer-frame.snug-widget[data-kind='digital'] .widget-status-dot.running {
   background: var(--tk-gold);
 }
+.timer-frame.snug-widget[data-kind='digital'] .widget-complete-pill {
+  background: var(--tk-gold);
+  color: #1a2421;
+}
 
 .widget-ribbon {
   display: flex;
@@ -1985,6 +2086,33 @@
   min-width: 0;
   width: 100%;
   flex: none;
+}
+.widget-complete-pill {
+  flex: none;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: var(--tk-danger-soft);
+  color: var(--tk-danger);
+  font-size: 11px;
+  font-weight: 750;
+  line-height: 1.35;
+  white-space: nowrap;
+  animation: widget-pill-in 0.2s ease-out;
+  transition: opacity 0.14s ease;
+}
+@keyframes widget-pill-in {
+  from {
+    opacity: 0;
+    transform: translateY(-2px) scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+.timer-frame.snug-widget .timer-main:is(:hover, :focus-within) .widget-complete-pill {
+  opacity: 0;
+  pointer-events: none;
 }
 .widget-status-dot {
   width: 7px;
@@ -2023,9 +2151,17 @@
   font-weight: 750;
   line-height: 1.2;
 }
-.timer-frame.snug-widget .widget-title-input.promoted::placeholder {
-  opacity: 0.92;
-  font-weight: 700;
+.timer-frame.snug-widget .timer-main {
+  --widget-actions-pad: 134px;
+}
+.timer-frame.snug-widget .timer-main.has-widget-note {
+  --widget-actions-pad: 108px;
+}
+.timer-frame.snug-widget[data-form='tile'] .timer-main {
+  --widget-actions-pad: 114px;
+}
+.timer-frame.snug-widget[data-form='tile'] .timer-main.has-widget-note {
+  --widget-actions-pad: 92px;
 }
 
 .widget-micro-actions {
@@ -2045,9 +2181,40 @@
   pointer-events: none;
   transition: opacity 0.16s ease;
 }
-.timer-frame.snug-widget .timer-main:is(:hover, :focus-within) .widget-micro-actions {
+.timer-frame.snug-widget .timer-main:is(:hover, :focus-within, .display-popover-open) .widget-micro-actions {
   opacity: 1;
   pointer-events: auto;
+}
+.timer-frame.snug-widget .timer-main.display-popover-open .widget-micro-actions {
+  z-index: 35;
+}
+.timer-frame.snug-widget .timer-main:is(:hover, :focus-within, .display-popover-open) .widget-ribbon {
+  padding-right: var(--widget-actions-pad, 134px);
+}
+.timer-frame.snug-widget[data-form='tile'] .widget-micro-actions button {
+  width: 20px;
+  height: 20px;
+}
+/* 전자칠판·터치 기기에서는 호버 없이도 1탭으로 상단 마이크로 액션을 바로 누를 수 있게 합니다. */
+@media (hover: none), (pointer: coarse) {
+  .timer-frame.snug-widget .widget-micro-actions {
+    opacity: 0.78;
+    pointer-events: auto;
+  }
+  .timer-frame.snug-widget .timer-main:is(:focus-within, .display-popover-open) .widget-micro-actions,
+  .timer-frame.snug-widget .widget-micro-actions:active {
+    opacity: 1;
+  }
+  .timer-frame.snug-widget .widget-ribbon {
+    padding-right: var(--widget-actions-pad, 134px);
+  }
+  .timer-frame.snug-widget[data-form='tile'] .widget-micro-actions button {
+    width: 20px;
+    height: 20px;
+  }
+  .timer-frame.snug-widget .timer-main:is(:hover, :focus-within) .widget-complete-pill {
+    opacity: 1;
+  }
 }
 .widget-micro-actions button {
   display: grid;
@@ -2065,7 +2232,12 @@
   color: var(--tk-ink);
 }
 .widget-micro-actions button.active {
+  background: color-mix(in srgb, var(--tk-accent) 16%, transparent);
   color: var(--tk-accent);
+}
+.timer-frame.snug-widget[data-kind='digital'] .widget-micro-actions button.active {
+  background: rgba(255, 255, 255, 0.22);
+  color: #ffffff;
 }
 .widget-micro-actions button.close:hover {
   color: var(--tk-danger);
@@ -2076,15 +2248,16 @@
   -webkit-box-orient: vertical;
   -webkit-line-clamp: var(--widget-note-lines, 2);
   overflow: hidden;
+  max-height: var(--timer-note-max-h, 84px);
   width: 100%;
   margin: 0;
-  padding: 2px 5px;
+  padding: 4px 8px;
   border: 0;
-  border-radius: 7px;
-  background: transparent;
-  color: var(--tk-ink);
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--tk-soft) 52%, transparent);
+  color: color-mix(in srgb, var(--tk-ink) 80%, var(--tk-muted));
   font-size: var(--timer-note-px, 14px);
-  font-weight: 600;
+  font-weight: 560;
   line-height: 1.45;
   text-align: var(--timer-note-align, left);
   white-space: pre-line;
@@ -2093,11 +2266,14 @@
   cursor: text;
   flex: none;
 }
+.timer-frame.snug-widget[data-scheme='dark']:not([data-kind='digital']) .widget-note-preview {
+  background: color-mix(in srgb, var(--tk-soft) 58%, transparent);
+}
 .timer-frame.snug-widget .widget-note-preview:hover {
-  background: color-mix(in srgb, var(--tk-soft) 55%, transparent);
+  background: color-mix(in srgb, var(--tk-soft) 72%, transparent);
 }
 .timer-frame.snug-widget[data-kind='digital'] .widget-note-preview:hover {
-  background: rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.12);
 }
 .widget-note-editor {
   display: block;
@@ -2106,21 +2282,29 @@
 }
 .timer-frame.snug-widget .widget-note-textarea {
   width: 100%;
-  min-height: 2.9em;
-  max-height: calc(var(--timer-note-max-h, 84px));
+  min-height: 2.3em;
+  max-height: min(var(--timer-note-max-h, 84px), calc(100cqh - 130px));
   padding: 4px 7px;
   font-size: var(--timer-note-px, 14px);
   font-weight: 600;
   line-height: 1.45;
   text-align: left;
   background: color-mix(in srgb, var(--tk-bg) 82%, transparent);
-  border: 1px solid var(--tk-accent);
+  border: 1.5px solid var(--tk-accent);
   border-radius: 8px;
   color: var(--tk-ink);
+  outline: none;
   resize: none;
   overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--tk-line) transparent;
   word-break: keep-all;
   overflow-wrap: break-word;
+}
+.timer-frame.snug-widget .widget-note-textarea:focus {
+  outline: none;
+  border-color: var(--tk-accent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--tk-accent) 22%, transparent);
 }
 .timer-frame.snug-widget .widget-note-add {
   align-self: flex-start;
@@ -2216,9 +2400,27 @@
   row-gap: 2px;
   padding: 7px 11px 9px;
 }
+.timer-frame.snug-widget[data-form='strip'] .timer-main.has-widget-note {
+  grid-template-rows: auto auto minmax(0, 1fr);
+  padding: 5px 11px 7px;
+  row-gap: 2px;
+}
 .timer-frame.snug-widget[data-form='strip'] .widget-ribbon {
   grid-column: 1 / -1;
   grid-row: 1;
+}
+.timer-frame.snug-widget[data-form='strip'] .widget-note-preview,
+.timer-frame.snug-widget[data-form='strip'] .widget-note-editor {
+  grid-column: 1 / -1;
+  grid-row: 2;
+  padding: 1px 7px;
+  line-height: 1.3;
+  -webkit-line-clamp: 1;
+}
+.timer-frame.snug-widget[data-form='strip'] .widget-note-textarea {
+  min-height: 1.8em;
+  padding: 2px 6px;
+  line-height: 1.3;
 }
 .timer-frame.snug-widget[data-form='strip'] .timer-stage {
   grid-column: 1;
@@ -2234,6 +2436,22 @@
 .timer-frame.snug-widget[data-form='strip'] .widget-controls {
   grid-column: 2;
   grid-row: 2;
+}
+.timer-frame.snug-widget[data-form='strip'] .timer-main.has-widget-note .timer-stage,
+.timer-frame.snug-widget[data-form='strip'] .timer-main.has-widget-note .widget-controls {
+  grid-row: 3;
+}
+.timer-frame.snug-widget[data-form='strip'] .timer-main.has-widget-note .analog-clock {
+  height: min(92cqh, 46px);
+  width: min(92cqh, 46px);
+}
+.timer-frame.snug-widget[data-form='strip'] .timer-main.has-widget-note .hourglass-visual {
+  height: min(92cqh, 44px);
+  width: calc(min(92cqh, 44px) * 0.889);
+}
+.timer-frame.snug-widget[data-form='strip'] .timer-main.has-widget-note .secondary-time,
+.timer-frame.snug-widget[data-form='strip'] .timer-main.has-widget-note .sw-minimal-time {
+  font-size: clamp(16px, min(18cqw, 60cqh), 32px);
 }
 .timer-frame.snug-widget[data-form='strip'] .digital-board {
   align-items: flex-start;
@@ -2302,22 +2520,62 @@
   padding: 8px 10px 9px;
   gap: 3px;
 }
+.timer-frame.snug-widget[data-form='tile'] .widget-note-preview {
+  padding: 2px 6px;
+  line-height: 1.35;
+}
+.timer-frame.snug-widget[data-form='tile'] .timer-stage.row-stage {
+  flex-direction: row;
+  justify-content: center;
+  align-items: center;
+  gap: 8px;
+  padding: 1px 0;
+}
+.timer-frame.snug-widget[data-form='tile'] .timer-stage.row-stage .analog-clock {
+  height: min(90cqh, 46px);
+  width: min(90cqh, 46px);
+}
+.timer-frame.snug-widget[data-form='tile'] .timer-stage.row-stage .analog-caption {
+  margin-top: 0;
+}
+.timer-frame.snug-widget[data-form='tile'] .timer-stage.row-stage .hourglass-visual {
+  height: min(90cqh, 44px);
+  width: calc(min(90cqh, 44px) * 0.889);
+}
+.timer-frame.snug-widget[data-form='tile'] .timer-stage.row-stage .secondary-time {
+  margin-top: 0;
+  font-size: clamp(16px, min(14cqw, 56cqh), 24px);
+}
+.timer-frame.snug-widget[data-form='tile'] .timer-stage.row-stage .stopwatch-minimal {
+  flex-direction: row;
+  justify-content: center;
+  align-items: baseline;
+  gap: 5px;
+}
+.timer-frame.snug-widget[data-form='tile'] .timer-stage.row-stage .sw-minimal-time {
+  order: -1;
+  font-size: clamp(17px, min(17cqw, 62cqh), 26px);
+}
+.timer-frame.snug-widget[data-form='tile'] .timer-stage.row-stage .sw-minimal-label,
+.timer-frame.snug-widget[data-form='tile'] .timer-stage.row-stage .sw-minimal-meta:not(.has-lap) {
+  display: none;
+}
 .timer-frame.snug-widget[data-form='tile'] .timer-stage {
   min-height: 0;
   padding: 1px 0;
 }
-.timer-frame.snug-widget[data-form='tile'] .analog-clock {
+.timer-frame.snug-widget[data-form='tile'] .timer-stage:not(.row-stage) .analog-clock {
   height: min(calc(100cqh - 24px), 86cqw);
   width: min(calc(100cqh - 24px), 86cqw);
 }
-.timer-frame.snug-widget[data-form='tile'] .analog-caption {
+.timer-frame.snug-widget[data-form='tile'] .timer-stage:not(.row-stage) .analog-caption {
   margin-top: 2px;
 }
-.timer-frame.snug-widget[data-form='tile'] .hourglass-visual {
+.timer-frame.snug-widget[data-form='tile'] .timer-stage:not(.row-stage) .hourglass-visual {
   height: min(calc(100cqh - 22px), 86cqw);
   width: calc(min(calc(100cqh - 22px), 86cqw) * 0.889);
 }
-.timer-frame.snug-widget[data-form='tile'] .secondary-time {
+.timer-frame.snug-widget[data-form='tile'] .timer-stage:not(.row-stage) .secondary-time {
   margin-top: 2px;
   font-size: clamp(15px, min(14cqw, 20cqh), 24px);
 }
@@ -2338,26 +2596,64 @@
   border-width: 2px;
 }
 
+/* 설명이 포함된 card 위젯에서는 시계·모래시계·숫자를 가로 한 줄로 배치해 빈 여백 없이 시인성을 키웁니다. */
+.timer-frame.snug-widget[data-form='card'] .timer-stage.row-stage {
+  flex-direction: row;
+  justify-content: center;
+  align-items: center;
+  gap: 12px;
+  padding: 2px 0;
+}
+.timer-frame.snug-widget[data-form='card'] .timer-stage.row-stage .analog-clock {
+  height: min(92cqh, 62px);
+  width: min(92cqh, 62px);
+}
+.timer-frame.snug-widget[data-form='card'] .timer-stage.row-stage .analog-caption {
+  margin-top: 0;
+}
+.timer-frame.snug-widget[data-form='card'] .timer-stage.row-stage .hourglass-visual {
+  height: min(92cqh, 60px);
+  width: calc(min(92cqh, 60px) * 0.889);
+}
+.timer-frame.snug-widget[data-form='card'] .timer-stage.row-stage .secondary-time {
+  margin-top: 0;
+  font-size: clamp(22px, min(14cqw, 62cqh), 36px);
+}
+.timer-frame.snug-widget[data-form='card'] .timer-stage.row-stage .stopwatch-minimal {
+  flex-direction: row;
+  justify-content: center;
+  align-items: baseline;
+  gap: 8px;
+}
+.timer-frame.snug-widget[data-form='card'] .timer-stage.row-stage .sw-minimal-time {
+  order: -1;
+  font-size: clamp(22px, min(18cqw, 68cqh), 38px);
+}
+.timer-frame.snug-widget[data-form='card'] .timer-stage.row-stage .sw-minimal-label,
+.timer-frame.snug-widget[data-form='card'] .timer-stage.row-stage .sw-minimal-meta:not(.has-lap) {
+  display: none;
+}
+
 .timer-frame.snug-widget[data-form='card'] .timer-stage,
 .timer-frame.snug-widget[data-form='tall'] .timer-stage {
   min-height: 0;
   padding: 2px 0;
 }
-.timer-frame.snug-widget[data-form='card'] .analog-clock,
+.timer-frame.snug-widget[data-form='card'] .timer-stage:not(.row-stage) .analog-clock,
 .timer-frame.snug-widget[data-form='tall'] .analog-clock {
   height: min(calc(100cqh - 28px), 88cqw);
   width: min(calc(100cqh - 28px), 88cqw);
 }
-.timer-frame.snug-widget[data-form='card'] .analog-caption,
+.timer-frame.snug-widget[data-form='card'] .timer-stage:not(.row-stage) .analog-caption,
 .timer-frame.snug-widget[data-form='tall'] .analog-caption {
   margin-top: 3px;
 }
-.timer-frame.snug-widget[data-form='card'] .hourglass-visual,
+.timer-frame.snug-widget[data-form='card'] .timer-stage:not(.row-stage) .hourglass-visual,
 .timer-frame.snug-widget[data-form='tall'] .hourglass-visual {
   height: min(calc(100cqh - 26px), 88cqw);
   width: calc(min(calc(100cqh - 26px), 88cqw) * 0.889);
 }
-.timer-frame.snug-widget[data-form='card'] .secondary-time,
+.timer-frame.snug-widget[data-form='card'] .timer-stage:not(.row-stage) .secondary-time,
 .timer-frame.snug-widget[data-form='tall'] .secondary-time {
   margin-top: 2px;
   font-size: clamp(18px, min(12cqw, 16cqh), 30px);
@@ -2395,6 +2691,83 @@
   }
 }
 
+/* 중형(560×380+)·대형(800×540+) 위젯에서는 여백·설명 알약·하단 조작 버튼을 창 크기에 맞게 비례 확대합니다. */
+@media (min-width: 560px) and (min-height: 380px) {
+  .timer-frame.snug-widget .timer-main {
+    padding: 16px 22px;
+    gap: 10px;
+  }
+}
+@media (min-width: 800px) and (min-height: 540px) {
+  .timer-frame.snug-widget .timer-main {
+    padding: 20px 28px;
+    gap: 12px;
+  }
+}
+@container widget-card (width >= 560px) and (height >= 380px) {
+  .timer-frame.snug-widget .widget-status-dot {
+    width: 9px;
+    height: 9px;
+  }
+  .timer-frame.snug-widget .widget-note-preview {
+    padding: 6px 14px;
+    border-radius: 12px;
+  }
+  .timer-frame.snug-widget .widget-controls {
+    gap: 8px;
+  }
+  .timer-frame.snug-widget .widget-primary-btn {
+    height: 38px;
+    padding: 0 18px;
+    border-radius: 12px;
+    font-size: 14px;
+    gap: 6px;
+  }
+  .timer-frame.snug-widget .widget-secondary-btn {
+    height: 36px;
+    min-width: 36px;
+    padding: 0 12px;
+    border-radius: 11px;
+    font-size: 13px;
+  }
+  .timer-frame.snug-widget .widget-step-chip {
+    height: 34px;
+    padding: 0 11px;
+    border-radius: 10px;
+    font-size: 13px;
+  }
+  .timer-frame.snug-widget[data-form='card'] .timer-stage.row-stage .analog-clock {
+    height: min(92cqh, 112px);
+    width: min(92cqh, 112px);
+  }
+  .timer-frame.snug-widget[data-form='card'] .timer-stage.row-stage .secondary-time {
+    font-size: clamp(32px, min(14cqw, 62cqh), 64px);
+  }
+}
+@container widget-card (width >= 800px) and (height >= 540px) {
+  .timer-frame.snug-widget .widget-note-preview {
+    padding: 8px 18px;
+    border-radius: 14px;
+  }
+  .timer-frame.snug-widget .widget-primary-btn {
+    height: 42px;
+    padding: 0 22px;
+    border-radius: 13px;
+    font-size: 15px;
+  }
+  .timer-frame.snug-widget .widget-secondary-btn {
+    height: 40px;
+    min-width: 40px;
+    padding: 0 14px;
+    font-size: 13.5px;
+  }
+  .timer-frame.snug-widget .widget-step-chip {
+    height: 38px;
+    padding: 0 13px;
+    font-size: 13.5px;
+  }
+}
+
 .widget-mini-laps {
   display: flex;
   flex-direction: column;
@@ -2416,15 +2789,16 @@
   font-weight: 650;
 }
 
-/* 작은 위젯창 안에서도 대화상자가 잘리지 않도록 인라인 확인 시트를 띄웁니다. */
+/* 작은 위젯창 안에서도 대화상자가 잘리지 않도록 카드 전체(inset 0)에 인라인 확인 시트를 띄웁니다. */
 .timer-compact-confirm {
   position: absolute;
-  inset: 6px;
+  inset: 0;
   z-index: 80;
   border-radius: 18px;
   background: color-mix(in srgb, var(--tk-panel) 95%, transparent);
   backdrop-filter: blur(10px);
-  border: 1px solid var(--tk-line);
+  border: 0;
+  box-shadow: inset 0 0 0 1px var(--tk-line);
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -2451,6 +2825,159 @@
   padding: 0 12px;
   font-size: 12px;
   border-radius: 9px;
+}
+
+/* 위젯 내장 빠른 글자·화면 조절 팝오버 (우측 상단 플로팅 + 소형 위젯용 전체 시트) */
+.widget-popover-backdrop {
+  position: absolute;
+  inset: 0;
+  z-index: 34;
+  border: 0;
+  border-radius: 18px;
+  background: rgba(15, 23, 42, 0.14);
+  cursor: default;
+}
+.widget-display-popover {
+  container-name: widget-popover;
+  container-type: inline-size;
+  position: absolute;
+  top: 38px;
+  right: 8px;
+  z-index: 36;
+  width: min(312px, calc(100% - 16px));
+  max-height: calc(100% - 44px);
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--tk-line) transparent;
+  padding: 9px 11px 10px;
+  border-radius: 15px;
+  background: color-mix(in srgb, var(--tk-panel) 96%, transparent);
+  backdrop-filter: blur(12px);
+  border: 1px solid var(--tk-line);
+  box-shadow:
+    0 14px 32px rgba(15, 23, 42, 0.22),
+    0 2px 6px rgba(15, 23, 42, 0.1);
+  color: var(--tk-ink);
+  text-align: left;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  animation: widget-popover-in 0.16s ease-out;
+}
+.widget-display-popover.compact-sheet {
+  inset: 0;
+  width: 100%;
+  max-height: 100%;
+  border-radius: 18px;
+  border: 0;
+  box-shadow: inset 0 0 0 1px var(--tk-line);
+  padding: 9px 11px 10px;
+}
+@keyframes widget-popover-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+.widget-popover-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid color-mix(in srgb, var(--tk-line) 70%, transparent);
+}
+.widget-display-popover.compact-sheet .widget-popover-head {
+  position: sticky;
+  top: -9px;
+  z-index: 3;
+  margin: -9px -11px 0;
+  padding: 8px 11px 6px;
+  background: var(--tk-panel);
+}
+.widget-popover-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  color: var(--tk-ink);
+}
+.widget-popover-title strong {
+  font-size: 13px;
+  font-weight: 750;
+  white-space: nowrap;
+}
+.widget-popover-head-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex: none;
+}
+.widget-popover-close {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: 7px;
+  background: var(--tk-bg);
+  color: var(--tk-muted);
+}
+.widget-popover-close:hover {
+  background: var(--tk-soft);
+  color: var(--tk-ink);
+}
+.widget-popover-body {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+.widget-display-popover .display-scale-card {
+  padding: 8px 10px;
+  gap: 6px;
+  border-radius: 11px;
+}
+.widget-display-popover .display-option-row {
+  padding: 7px 10px;
+  border-radius: 11px;
+}
+.widget-popover-foot {
+  padding-top: 2px;
+}
+.widget-popover-full-btn {
+  width: 100%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 31px;
+  padding: 0 10px;
+  border: 1px solid var(--tk-line);
+  border-radius: 10px;
+  background: var(--tk-bg);
+  color: var(--tk-ink);
+  font-size: 12px;
+  font-weight: 650;
+}
+.widget-popover-full-btn:hover {
+  background: var(--tk-soft);
+  border-color: var(--tk-accent);
+  color: var(--tk-accent);
+}
+@container widget-popover (max-width: 268px) {
+  .display-option-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .display-segmented {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
 }
 /* 타이머 설정 패널
    - 글자는 12px 이상: 교실 화면·배율이 낮은 모니터에서도 읽히게 합니다.
@@ -2528,7 +3055,7 @@
   line-height: 1.5;
   white-space: nowrap;
 }
-.timer-settings-panel .display-reset-btn {
+:is(.timer-settings-panel, .widget-display-popover) .display-reset-btn {
   display: inline-flex;
   align-items: center;
   gap: 4px;
@@ -2543,7 +3070,7 @@
   flex: none;
   white-space: nowrap;
 }
-.timer-settings-panel .display-reset-btn:hover {
+:is(.timer-settings-panel, .widget-display-popover) .display-reset-btn:hover {
   background: var(--tk-soft);
   color: var(--tk-ink);
 }
@@ -2577,7 +3104,7 @@
   align-items: center;
   gap: 4px;
 }
-.timer-settings-panel .display-stepper button {
+:is(.timer-settings-panel, .widget-display-popover) .display-stepper button {
   display: grid;
   place-items: center;
   width: 24px;
@@ -2588,7 +3115,7 @@
   background: var(--tk-panel);
   color: var(--tk-ink);
 }
-.timer-settings-panel .display-stepper button:hover:not(:disabled) {
+:is(.timer-settings-panel, .widget-display-popover) .display-stepper button:hover:not(:disabled) {
   background: var(--tk-soft);
   border-color: var(--tk-accent);
 }
@@ -2608,7 +3135,7 @@
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 5px;
 }
-.timer-settings-panel .display-chip-row button {
+:is(.timer-settings-panel, .widget-display-popover) .display-chip-row button {
   height: 29px;
   padding: 0 4px;
   border: 1px solid var(--tk-line);
@@ -2619,11 +3146,11 @@
   font-weight: 650;
   white-space: nowrap;
 }
-.timer-settings-panel .display-chip-row button:hover {
+:is(.timer-settings-panel, .widget-display-popover) .display-chip-row button:hover {
   background: var(--tk-soft);
   color: var(--tk-ink);
 }
-.timer-settings-panel .display-chip-row button.selected {
+:is(.timer-settings-panel, .widget-display-popover) .display-chip-row button.selected {
   background: var(--tk-action);
   border-color: var(--tk-action);
   color: var(--tk-on-action);
@@ -2654,7 +3181,7 @@
   background: var(--tk-panel);
   border: 1px solid color-mix(in srgb, var(--tk-line) 75%, transparent);
 }
-.timer-settings-panel .display-segmented button {
+:is(.timer-settings-panel, .widget-display-popover) .display-segmented button {
   height: 27px;
   padding: 0 9px;
   border: 0;
@@ -2665,11 +3192,11 @@
   font-weight: 650;
   white-space: nowrap;
 }
-.timer-settings-panel .display-segmented button:hover {
+:is(.timer-settings-panel, .widget-display-popover) .display-segmented button:hover {
   color: var(--tk-ink);
   background: var(--tk-soft);
 }
-.timer-settings-panel .display-segmented button.selected {
+:is(.timer-settings-panel, .widget-display-popover) .display-segmented button.selected {
   background: var(--tk-soft);
   color: var(--tk-accent);
   font-weight: 700;
@@ -3306,6 +3833,59 @@
 }
 
 /* 창 너비가 좁거나 낮을 때(overlayPanels)는 시계·설명을 압축하지 않고 설정/기록 패널을 우측 서랍으로 띄웁니다. */
+.timer-drawer-backdrop {
+  position: absolute;
+  inset: 0;
+  z-index: 18;
+  border: 0;
+  border-radius: 22px;
+  background: rgba(15, 23, 42, 0.16);
+  cursor: default;
+}
+.drawer-close-bar {
+  position: sticky;
+  top: -18px;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin: -18px -18px 12px;
+  padding: 14px 18px 10px;
+  background: var(--tk-panel);
+  border-bottom: 1px solid color-mix(in srgb, var(--tk-line) 70%, transparent);
+}
+.drawer-close-bar strong {
+  font-size: 13.5px;
+  font-weight: 750;
+  color: var(--tk-ink);
+}
+.timer-layout .drawer-close-btn {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  background: var(--tk-bg);
+  color: var(--tk-muted);
+}
+.timer-layout .drawer-close-btn:hover {
+  background: var(--tk-soft);
+  color: var(--tk-ink);
+}
+.lap-header-right {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.lap-header-right > span {
+  padding: 3px 9px;
+  border-radius: 20px;
+  background: var(--tk-soft);
+  color: var(--tk-muted);
+  font: 600 12px var(--tk-font);
+}
 .timer-layout.overlay-panels {
   grid-template-columns: minmax(0, 1fr) !important;
 }
@@ -3359,6 +3939,11 @@
 @media (min-width: 900px) and (max-height: 720px) {
   .timer-settings-panel {
     padding: 14px 16px 12px;
+  }
+  .timer-settings-panel .drawer-close-bar {
+    top: -14px;
+    margin: -14px -16px 10px;
+    padding: 12px 16px 8px;
   }
   .timer-settings-panel .settings-section + .settings-section {
     margin-top: 10px;
