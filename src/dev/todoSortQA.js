@@ -42,7 +42,7 @@ export function observeTodoSort(root, getIds, getSaves, report) {
   /** @param {Event} event */
   function start(event) {
     const target = /** @type {Element} */ (event.target);
-    if (!target.closest('.todo-drag-handle') || run) return;
+    if (!target.closest('[data-sort-activator]') || run) return;
     const row = target.closest('.todo-row');
     if (!row) return;
     const rect = row.getBoundingClientRect();

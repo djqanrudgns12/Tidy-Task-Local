@@ -17,6 +17,8 @@ import {
   syncTodosCompletedToDdays,
   syncTodosDeletedToDdays,
 } from './dday/ddayActions.js';
+import { captureDeletion, previewTitle, restoreDeletions } from './todos/deletionUndo.js';
+import { createUndoToastModel } from './todos/undoToastModel.js';
 import {
   DDAY_EVENTS,
   applyDdayCommandToState,
@@ -302,6 +304,20 @@ export class AppState {
   /** @type {string | null} */
   pendingPinTodoId = $state(null);
   showDdayKeptToast = $state(false);
+
+  // ✨ [되돌리기 알림] 단건 삭제 직후 목록 아래에 뜨는 알림 (docs/PRD-todo-row-gestures.md §7)
+  // 상태 기계는 undoToastModel.js가 맡고, 여기에는 화면이 읽을 마지막 상태만 둡니다.
+  // 삭제 기록은 메모리 전용입니다 — 삭제는 이미 저장되었고, 기록은 알림이 떠 있는 동안만 필요합니다.
+  /** @type {import('./todos/undoToastModel.js').ToastState} */
+  deletionToast = $state.raw({
+    phase: 'hidden', group: 0, bump: 0, entries: [], result: null, paused: false, remainingMs: 0, startedAt: 0,
+  });
+  /** 방금 되돌린 할 일 id — 그 줄을 잠깐 반짝여 "여기로 돌아왔어요"를 보여 줍니다. @type {string[]} */
+  recentlyRestoredIds = $state.raw([]);
+  /** @type {ReturnType<typeof createUndoToastModel> | null} */
+  _undoToast = null;
+  /** @type {TimerHandle | null} */
+  _restoredFlashTimer = null;
   /** @type {any} */
   _ddaySection = null;
   /** @type {string | null} */
@@ -1185,6 +1201,8 @@ async init() {
 
     this._updatePrepare = { id, result: null };
     this.isUpdateFrozen = true;
+    // 쓰기를 멈추면 되돌리기도 저장할 수 없으므로 삭제 알림을 닫습니다.
+    this.dismissDeletionToast();
     // 편집기에 남은 커서를 빼서, 덮개 뒤에서 글자가 입력되지 않게 합니다.
     try { /** @type {HTMLElement | null} */ (document.activeElement)?.blur?.(); } catch (e) {}
     if (this._updateFreezeWatchdog) clearTimeout(this._updateFreezeWatchdog);
@@ -1518,6 +1536,8 @@ async init() {
 
   // ✨ [엔진 코어 3] 이전으로 되돌리기 (Undo)
   async undo() {
+    // 전역 되돌리기를 쓰면 기록이 갈라져, 떠 있는 삭제 알림의 결과를 예측할 수 없게 됩니다.
+    this.dismissDeletionToast();
     if (this.canUndo) {
       this.currentIndex--;
       await this.applySnapshot(this.historyStack[this.currentIndex]);
@@ -1526,6 +1546,7 @@ async init() {
 
   // ✨ [엔진 코어 4] 다시 실행하기 (Redo)
   async redo() {
+    this.dismissDeletionToast();
     if (this.canRedo) {
       this.currentIndex++;
       await this.applySnapshot(this.historyStack[this.currentIndex]);
@@ -1741,6 +1762,7 @@ async init() {
 
   // 👇 [수정 적용] 이제 사용자의 명확한 행동(버튼 클릭 등)은 즉시 타임머신에 기록됩니다 (save -> saveNow)
   async resetContent() {
+    this.dismissDeletionToast();
     this.todos = [];
     this.archivedTodos = [];
     this.notes = '';
@@ -1862,8 +1884,15 @@ async init() {
   }
 
   /** @param {string} id */
+  // 할 일 한 개 삭제 (말랑 X · 오른쪽 클릭 메뉴). 지운 직후 되돌리기 알림을 띄웁니다.
+  // D-Day 안내는 가운데 알림 대신 되돌리기 알림의 둘째 줄로 보여 줍니다(두 알림이 동시에 뜨지 않게).
+  /** @param {string} id */
   deleteTodo(id) {
-    if (this.todos.some(t => t.id === id)) track('todo_deleted');
+    const todo = this.todos.find(t => t.id === id);
+    if (!todo) return;
+    track('todo_deleted');
+    const before = this._listsSnapshot();
+    const title = previewTitle(todo.text);
     this.todos = this.todos.filter(t => t.id !== id);
     const synced = syncTodosDeletedToDdays(
       this._ddayWindowState(),
@@ -1872,29 +1901,123 @@ async init() {
     );
     this.ddayItems = synced.state.ddayItems;
     if (synced.deletedCount > 0) track('dday_deleted', { count: synced.deletedCount });
-    if (synced.keptCount > 0) this.triggerToast('dday-kept');
+    const ddayEffect = synced.deletedCount > 0 ? 'deleted' : synced.keptCount > 0 ? 'kept' : null;
+    this._offerDeletionUndo({ before, kind: 'todo', ids: [id], toastKind: 'todo', title, ddayEffect });
     this.saveNow();
   }
 
   /** @param {string} id */
   deleteArchivedTodo(id) {
+    const todo = this.archivedTodos.find(t => t.id === id);
+    if (!todo) return;
+    const before = this._listsSnapshot();
+    const title = previewTitle(todo.text);
     this.archivedTodos = this.archivedTodos.filter(t => t.id !== id);
     const synced = syncArchivedTodosDeletedToDdays(
       this._ddayWindowState(),
       [id],
     );
     this.ddayItems = synced.ddayItems;
+    this._offerDeletionUndo({ before, kind: 'archived', ids: [id], toastKind: 'archived', title, ddayEffect: null });
     this.saveNow();
   }
 
+  // 마감된 일 전체 비우기. 확인 창이 없는 대신 되돌리기 알림이 안전장치입니다.
   deleteAllArchivedTodos() {
+    if (this.archivedTodos.length === 0) return;
+    const before = this._listsSnapshot();
+    const ids = this.archivedTodos.map(t => t.id);
     this.archivedTodos = [];
     const synced = syncArchivedTodosDeletedToDdays(
       this._ddayWindowState(),
       null,
     );
     this.ddayItems = synced.ddayItems;
+    this._offerDeletionUndo({ before, kind: 'archived', ids, toastKind: 'archived-all', title: '', ddayEffect: null });
     this.saveNow();
+  }
+
+  // ── 되돌리기 알림 (docs/PRD-todo-row-gestures.md §7) ──
+
+  /** 삭제 기록용 사본. 프록시가 아닌 순수 객체여야 기록이 이후 변경에 오염되지 않습니다. */
+  _listsSnapshot() {
+    return {
+      todos: $state.snapshot(this.todos),
+      archivedTodos: $state.snapshot(this.archivedTodos),
+      ddayItems: $state.snapshot(this.ddayItems),
+    };
+  }
+
+  _ensureUndoToast() {
+    if (!this._undoToast) {
+      this._undoToast = createUndoToastModel({
+        now: () => performance.now(),
+        setTimer: (fn, ms) => setTimeout(fn, ms),
+        clearTimer: (handle) => clearTimeout(handle),
+        onChange: (state) => { this.deletionToast = state; },
+      });
+    }
+    return this._undoToast;
+  }
+
+  /**
+   * 방금 지운 것을 기록하고 알림에 넘깁니다. 지운 "뒤" 상태는 여기서 읽습니다(호출 전에 목록·D-Day를 이미 바꿈).
+   * @param {{ before: any, kind: 'todo' | 'archived', ids: string[],
+   *   toastKind: 'todo' | 'archived' | 'archived-all', title: string, ddayEffect: 'deleted' | 'kept' | null }} input
+   */
+  _offerDeletionUndo({ before, kind, ids, toastKind, title, ddayEffect }) {
+    // 업데이트 설치 직전(쓰기 정지)에는 되돌릴 수 없으므로 알림을 띄우지 않습니다.
+    if (this.isUpdateFrozen) return;
+    const record = captureDeletion({ before, after: this._listsSnapshot(), kind, ids });
+    if (!record) return;
+    this._ensureUndoToast().offer({ record, kind: toastKind, count: record.items.length, title, ddayEffect });
+  }
+
+  /** @param {'hover' | 'focus' | 'hidden'} reason */
+  pauseDeletionToast(reason) { this._ensureUndoToast().pause(reason); }
+
+  /** @param {'hover' | 'focus' | 'hidden'} reason */
+  resumeDeletionToast(reason) { this._ensureUndoToast().resume(reason); }
+
+  dismissDeletionToast() { this._undoToast?.dismiss(); }
+
+  /**
+   * 알림의 [되돌리기]. 전역 되돌리기가 아니라 삭제 기록으로 "지운 것만" 원래 자리에 돌려놓습니다.
+   * @returns {{ restored: number, skipped: number } | null}
+   */
+  undoRecentDeletions() {
+    const toast = this._undoToast;
+    if (!toast || toast.state.phase !== 'shown') return null;
+    if (this.isUpdateFrozen) {
+      toast.dismiss();
+      return null;
+    }
+    // 남아 있는 항목은 같은 객체(프록시)를 그대로 쓰고, 돌아오는 항목만 새로 넣습니다.
+    const { state, restoredIds, skippedIds } = restoreDeletions(
+      // D-Day 목록은 바뀔 때만 새 배열이 오도록 원본을 넘깁니다(restoreDeletions는 입력을 바꾸지 않음).
+      { todos: this.todos, archivedTodos: this.archivedTodos, ddayItems: this.ddayItems },
+      toast.records(),
+    );
+    if (restoredIds.length > 0) {
+      this.todos = state.todos;
+      this.archivedTodos = state.archivedTodos;
+      if (state.ddayItems !== this.ddayItems) this.ddayItems = state.ddayItems;
+      this._flashRestored(restoredIds);
+      this.saveNow();
+    }
+    const result = { restored: restoredIds.length, skipped: skippedIds.length };
+    toast.markRestored(result);
+    return result;
+  }
+
+  /** @param {string[]} ids */
+  _flashRestored(ids) {
+    if (this._restoredFlashTimer) clearTimeout(this._restoredFlashTimer);
+    this.recentlyRestoredIds = ids;
+    this._restoredFlashTimer = setTimeout(() => {
+      this._restoredFlashTimer = null;
+      this.recentlyRestoredIds = [];
+    }, 1000);
   }
 
   /** @param {any[]} newList */

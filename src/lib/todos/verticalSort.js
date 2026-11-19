@@ -4,6 +4,7 @@ import { Sortable, SortableKeyboardPlugin, isSortable } from '@dnd-kit/dom/sorta
 import { RestrictToVerticalAxis } from '@dnd-kit/abstract/modifiers';
 import { DOMRectangle, computeTranslate, prefersReducedMotion } from '@dnd-kit/dom/utilities';
 import { moveTodoOrder, sameTodoOrder } from './order.js';
+import { createClickGuard, findSortActivator, sortActivationFor } from './rowGestures.js';
 
 const transition = { duration: 180, easing: 'cubic-bezier(0.2, 0, 0, 1)' };
 
@@ -53,11 +54,29 @@ class TodoKeyboardSensor extends KeyboardSensor {
 }
 
 /**
+ * 입력 종류별 시작 기준(rowGestures.js의 평범한 값)을 라이브러리 제약 객체로 옮깁니다.
+ * 마우스·펜은 "세로" 거리만 셉니다(가로로 흔들려도 끌기가 시작되지 않음 — @dnd-kit/geometry exceedsDistance의 축별 거리).
+ * @param {PointerEvent} event
+ */
+function pointerConstraints(event) {
+  const rule = sortActivationFor(event.pointerType);
+  if (rule.kind === 'delay') {
+    return [new PointerActivationConstraints.Delay({ value: rule.ms, tolerance: rule.tolerance })];
+  }
+  // 타입 선언은 숫자만 적혀 있지만, 0.5.0 실행 코드(DistanceConstraint → exceedsDistance)는 {x}/{y}/{x,y} 축별 거리를 받습니다.
+  // 라이브러리를 올리면 docs/PRD-todo-row-gestures.md §14 검수(가로 흔들림으로 끌기가 시작되지 않는지)를 다시 돌립니다.
+  return [new PointerActivationConstraints.Distance({ value: /** @type {any} */ ({ y: rule.y }) })];
+}
+
+/**
  * DOM 엔진은 좌표·충돌·스크롤·애니메이션을, Svelte는 임시 순서와 행 DOM을 맡습니다.
  * 왜: 엔진이 직접 DOM을 재배열하면 Svelte의 keyed 목록과 다음 추가·삭제 때 충돌할 수 있습니다.
+ * 끌기는 줄의 잡기 버튼(완료·날짜 알약, data-sort-activator)에서만 포인터로 시작하고,
+ * 키보드는 줄마다 하나 있는 보이지 않는 손잡이(.todo-kbd-handle)에서 시작합니다.
  * @param {{getIds: () => string[], isDisabled: () => boolean,
  * onpreview: (ids: readonly string[] | null) => void,
- * oncommit: (initial: readonly string[], next: readonly string[]) => void}} options
+ * oncommit: (initial: readonly string[], next: readonly string[]) => void,
+ * onpointerdragstart?: (element: HTMLElement | undefined) => void}} options
  */
 export function createVerticalTodoSort(options) {
   /** @type {DragDropManager | undefined} */
@@ -71,6 +90,11 @@ export function createVerticalTodoSort(options) {
   const cleanup = [];
   /** @type {Map<string, Sortable>} */
   const rows = new Map();
+  // 끌기가 시작된 누름의 클릭은 어떻게 끝나든 버립니다(rowGestures.js 설명 참고).
+  const clickGuard = createClickGuard({
+    setTimer: (fn, ms) => setTimeout(fn, ms),
+    clearTimer: (handle) => clearTimeout(handle),
+  });
 
   /** @param {readonly string[] | null} ids */
   function preview(ids) {
@@ -99,7 +123,11 @@ export function createVerticalTodoSort(options) {
       modifiers: [RestrictToVerticalAxis],
       sensors: [
         { plugin: TodoPointerSensor, options: {
-            activationConstraints: [new PointerActivationConstraints.Distance({ value: 4 })],
+            // 줄 전체에서 누름을 받고, 실제로 시작할지는 preventActivation에서 거릅니다.
+            // 왜 버튼에 직접 묶지 않는가: 버튼이 다시 그려지면 묶어 둔 리스너가 빠집니다.
+            activatorElements: (/** @type {any} */ source) => [source.element],
+            preventActivation: (/** @type {PointerEvent} */ event, /** @type {any} */ source) => !findSortActivator(event.target, source.element),
+            activationConstraints: pointerConstraints,
           },
         },
         { plugin: TodoKeyboardSensor, options: {
@@ -142,6 +170,11 @@ export function createVerticalTodoSort(options) {
         initial = options.getIds();
         order = [...initial];
         preview(order);
+        // 포인터로 시작한 끌기만: 이 누름의 클릭을 버리고(완료·달력 오작동 방지), 편집 확정·달력 닫기를 맡깁니다.
+        if (kit.dragOperation.activatorEvent instanceof PointerEvent) {
+          clickGuard.arm();
+          options.onpointerdragstart?.(element);
+        }
       }),
       kit.monitor.addEventListener('dragover', event => {
         const { source, target } = event.operation;
@@ -187,12 +220,34 @@ export function createVerticalTodoSort(options) {
         cancel();
       }
     };
+    // 클릭 가드: 창(window) 캡처 단계라 라이브러리(document 캡처)·버튼 처리기보다 먼저 봅니다.
+    // 주 포인터만 셉니다 — 두 번째 손가락의 누름이 첫 손가락 끌기의 가드를 풀면 안 됩니다.
+    const guardDown = (/** @type {PointerEvent} */ event) => { if (event.isPrimary) clickGuard.onPointerDown(); };
+    const guardEnd = (/** @type {PointerEvent} */ event) => { if (event.isPrimary) clickGuard.onPointerEnd(); };
+    const guardKey = () => clickGuard.onKeyDown();
+    const guardClick = (/** @type {MouseEvent} */ event) => {
+      if (!clickGuard.takeClick()) return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+    };
+    window.addEventListener('pointerdown', guardDown, true);
+    window.addEventListener('pointerup', guardEnd, true);
+    window.addEventListener('pointercancel', guardEnd, true);
+    window.addEventListener('keydown', guardKey, true);
+    window.addEventListener('click', guardClick, true);
+
     window.addEventListener('blur', cancel);
     window.addEventListener('resize', cancel);
     document.addEventListener('visibilitychange', onVisibility);
     document.addEventListener('lostpointercapture', onLostCapture, true);
     document.addEventListener('keydown', onKey, true);
     cleanup.push(() => {
+      window.removeEventListener('pointerdown', guardDown, true);
+      window.removeEventListener('pointerup', guardEnd, true);
+      window.removeEventListener('pointercancel', guardEnd, true);
+      window.removeEventListener('keydown', guardKey, true);
+      window.removeEventListener('click', guardClick, true);
+      clickGuard.destroy();
       window.removeEventListener('blur', cancel);
       window.removeEventListener('resize', cancel);
       document.removeEventListener('visibilitychange', onVisibility);
@@ -208,7 +263,8 @@ export function createVerticalTodoSort(options) {
       const sortable = new Sortable({
         ...input,
         element: node,
-        handle: node.querySelector('.todo-drag-handle') ?? undefined,
+        // 키보드 끌기와 접근성 속성은 보이지 않는 손잡이에 붙습니다. 포인터는 위 센서 설정에서 잡기 버튼으로만 시작합니다.
+        handle: node.querySelector('.todo-kbd-handle') ?? undefined,
         transition,
         // 순서 변경은 Svelte가 맡고 검증된 키보드·좌표 이동은 그대로 사용합니다.
         plugins: [SortableKeyboardPlugin],

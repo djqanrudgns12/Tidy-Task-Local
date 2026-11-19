@@ -330,13 +330,19 @@ class DatePickerClient {
    * 요청 창 쪽에서 달력을 닫습니다. (바깥 클릭·할 일 삭제·업데이트 잠금 등)
    * 요청 기록은 달력 창의 closed 대답을 받을 때까지 남겨 둡니다 — 닫히기 직전에 고른 날짜가 오고 있을 수 있습니다.
    * @param {string} [reason]
+   * @param {{ toggleGrace?: boolean }} [options]
+   *   toggleGrace=false: "방금 닫힘" 유예를 남기지 않습니다. 할 일 줄을 끌기 시작할 때 씁니다.
+   *   왜: 달력이 열린 알약을 끌면(또는 그 직전에 달력이 초점을 잃고 스스로 닫혔으면) 유예가 남아,
+   *   놓자마자 그 알약을 다시 누를 때 "다시 누름 = 닫기"로 오인해 달력이 한 번 열리지 않았습니다.
    */
-  close(reason = 'requester') {
+  close(reason = 'requester', { toggleGrace = true } = {}) {
     const id = this.#currentId;
-    if (!id) return;
-    const request = this.#requests.get(id);
-    this.#markClosedLocally(request?.key || '');
-    void emitTo(DATE_PICKER_LABEL, EV.close, { requestId: id, requester: this.#label, reason }).catch(() => {});
+    if (id) {
+      const request = this.#requests.get(id);
+      this.#markClosedLocally(request?.key || '');
+      void emitTo(DATE_PICKER_LABEL, EV.close, { requestId: id, requester: this.#label, reason }).catch(() => {});
+    }
+    if (!toggleGrace) this.#lastClosed = { key: '', at: 0 };
   }
 
   #pruneRequests() {

@@ -554,3 +554,60 @@ export function syncArchivedTodosDeletedToDdays(state, deletedTodoIds) {
   });
   return changed ? { ...state, ddayItems: next } : state;
 }
+
+/** 키 순서와 상관없이 같은 값인지 봅니다(저장·정규화를 거치며 키 순서가 바뀌어도 "그대로"로 판단). */
+function stableJson(/** @type {unknown} */ value) {
+  return JSON.stringify(value, (_key, v) => (
+    v && typeof v === 'object' && !Array.isArray(v)
+      ? Object.fromEntries(Object.keys(v).sort().map((k) => [k, v[k]]))
+      : v
+  ));
+}
+
+/**
+ * 할 일 삭제를 되돌릴 때, 그 삭제로 사라지거나 바뀐 D-Day를 "삭제 직전" 모습으로 되돌립니다.
+ *
+ * 왜 "직후 모습과 같을 때만" 바꾸는가:
+ *   삭제 뒤에 사용자가 그 D-Day를 직접 고쳤다면(다른 할 일에 연결, 이름 변경, 삭제) 사용자의 변경이 우선입니다.
+ *   되돌리기가 사용자가 방금 한 일을 덮으면 "되돌렸더니 다른 게 망가지는" 사고가 됩니다.
+ *
+ * @param {DdayItem[]} currentItems 지금 D-Day 목록
+ * @param {{ before: DdayItem, after: DdayItem | null, index: number }[]} changes 삭제가 바꾼 D-Day들
+ * @returns {{ items: DdayItem[], changed: boolean, restoredIds: string[] }}
+ */
+export function restoreDdaysForTodos(currentItems, changes) {
+  const items = [...(currentItems || [])];
+  /** @type {Set<string>} */
+  const restoredIds = new Set();
+  // 원래 자리에 다시 넣을 때 앞 항목부터 넣어야 번호가 어긋나지 않습니다.
+  const ordered = [...(changes || [])].sort((a, b) => a.index - b.index);
+  for (const { before, after, index } of ordered) {
+    if (!before || typeof before.id !== 'string') continue;
+    const at = items.findIndex((d) => d.id === before.id);
+    if (at === -1) {
+      // 삭제 직후에도 있었는데 지금 없다 = 사용자가 나중에 지웠다 → 건너뜀
+      if (after) continue;
+      items.splice(Math.min(Math.max(0, index), items.length), 0, structuredClone(before));
+      restoredIds.add(before.id);
+      continue;
+    }
+    // 삭제로 사라졌던 id가 지금 있다 = 다른 경로로 이미 돌아왔다 → 건너뜀
+    if (!after) continue;
+    if (stableJson(items[at]) !== stableJson(after)) continue;
+    items[at] = structuredClone(before);
+    restoredIds.add(before.id);
+  }
+  if (restoredIds.size === 0) return { items: currentItems, changed: false, restoredIds: [] };
+
+  // 진행 중 D-Day의 순서를 원래 order 기준으로 다시 매깁니다. 같은 값이면 되돌린 항목이 앞입니다.
+  const active = items
+    .filter((d) => d.status === 'active')
+    .sort((a, b) => (a.order - b.order) || (Number(restoredIds.has(b.id)) - Number(restoredIds.has(a.id))));
+  const orderOf = new Map(active.map((d, i) => [d.id, i]));
+  const next = items.map((d) => {
+    if (d.status !== 'active') return d;
+    const order = /** @type {number} */ (orderOf.get(d.id));
+    return d.order === order ? d : { ...d, order };
+  });
+  return { items: next, changed: true, restoredIds: [...restoredIds] };
+}

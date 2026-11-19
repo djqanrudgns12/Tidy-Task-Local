@@ -48,7 +48,8 @@
 | `src/lib/layout/memoLayout.js` | **메모 창 세로 배치 규칙**(할 일·마감된 일·중요한 일 메모 높이, 테두리 판별, 창 최소 높이, 스플리터)의 단일 원천 — 순수 함수 + 불변식 테스트 |
 | `src/lib/layout/memoLayoutController.js`, `src/components/MemoBody.svelte` | 위 규칙을 DOM·Tauri 창 이벤트에 잇는 컨트롤러와, 그 짝인 몸통 마크업(할 일·스플리터·마감된 일·메모) |
 | `src/lib/datePicker/` | 마감일 달력 — 날짜 계산(`calendarModel`), 창 사이 약속·검증(`protocol`), 테마 색(`palette`), 요청 창 쪽 창구(`datePickerClient.svelte.js`) |
-| `src/lib/todos/` | 할 일 세로 재정렬 — dnd kit 좌표·충돌·애니메이션 연결(`verticalSort`), 전체 ID 순열과 변경 충돌 검증(`order`). 이동 중 순서는 컴포넌트의 임시 상태로만 관리하고 확정할 때 한 번 저장합니다 |
+| `src/lib/todos/` | 할 일 세로 재정렬 — dnd kit 좌표·충돌·애니메이션 연결(`verticalSort`), 전체 ID 순열과 변경 충돌 검증(`order`). 이동 중 순서는 컴포넌트의 임시 상태로만 관리하고 확정할 때 한 번 저장합니다. 줄 조작 규칙(잡기 버튼·클릭 가드·연타 보호·X 무장, `rowGestures`), 삭제 기록·되돌리기(`deletionUndo`), 되돌리기 알림 상태(`undoToastModel`) |
+| `src/components/todo/` | 말랑 X 단추(`SoftX`), 되돌리기 알림(`UndoToast`)과 휴지통 친구(`TrashBuddy`) — 할 일·마감된 일 목록 공용 |
 | `src-tauri/src/app_update.rs` | 앱 안 자동 업데이트 — latest.json·서명 확인, 모든 창 저장 확인(응답), 업데이트 직전 사본, 설치 프로그램 실행 |
 | `scripts/release-build.mjs`, `release-verify.mjs` | `npm run release`(점검·빌드·서명 확인·올릴 파일 준비), `npm run release:verify`(게시 후 앱과 같은 순서로 확인) |
 | `src/lib/scores/` | 점수판·학급 온도계 공용 — 구역 저장(`section.js`: 바로 반영·충돌 시 다시 읽고 재적용·되돌리기), 저장소 창구(`store.js`), 효과음(`audio.js`), 스프링 움직임(`motion.js`) |
@@ -116,6 +117,15 @@
   - 예전 `notesHeight`는 읽기만 합니다(`notesPaneHeight`가 없을 때 140~240으로 옮겨 씀). `isNotesLocked`·`todoHeight`도 옛 파일 호환용일 뿐 배치에 쓰지 않습니다.
   - 규칙을 바꾸면 `memoLayout.test.js`의 무작위 불변식 테스트("끌기가 끝나 hold로 돌아가도 배치가 한 픽셀도 바뀌지 않는다")가 통과해야 합니다.
 - 개발 시 `?memo-layout-preview`로 실제 몸통을 창 흉내 상자에 넣고 위·아래 테두리·스플리터 끌기를 확인합니다. 콘솔 `__memoPreview.scenario('bottom-shrink' | 'bottom-roundtrip' | 'top' | 'splitter')`, `.setEventFirst(true)`(창 알림이 화면보다 먼저 오는 순서).
+
+### 할 일 줄 조작 (끌기 · 말랑 X · 되돌리기 알림, 2026-11-19)
+- 설계 `docs/PRD-todo-row-gestures.md`, 검수 `docs/QA-todo-row-gestures-20261119.md`. 줄 오른쪽에 손잡이·휴지통 자리가 없습니다(예전엔 투명한 채 약 42px를 차지해 빈 띠가 생겼음).
+- **끌기는 잡기 버튼(완료 버튼·날짜 알약, `data-sort-activator`)에서만** 시작합니다. 마우스·펜은 세로 6px 초과, 터치는 0.4초 길게 누르기(`rowGestures.js` 상수). 키보드는 Tab으로 닿는 보이지 않는 손잡이(`.todo-kbd-handle`)가 맡습니다. 새 버튼을 줄에 넣을 때 이 표시를 함부로 붙이지 마세요.
+- **끌기로 시작된 누름의 클릭은 클릭 가드가 버립니다**(창 캡처 단계). 라이브러리는 클릭 처리기를 막지 않아, 끌다 Esc로 취소하고 버튼 위에서 떼면 마감되던 사고를 막는 장치입니다. 지우지 마세요.
+- 줄 안 단추(X·손잡이)를 보이고 숨길 때 폭·높이·`display`를 바꾸지 않습니다(투명도·변형·pointer-events만). 바꾸면 편집 중 줄바꿈이 흔들립니다. X 뒤 흐림 받침은 그 순간의 줄 배경(`--row-surface`)과 같은 색이어야 합니다.
+- 줄을 없애는 클릭(완료·X·마감된 일 복원) 뒤 0.5초·4px 안의 누름은 목록 어디서든 버립니다(연타 보호). X는 줄에 들어온 뒤 0.15초부터 눌립니다(마우스만).
+- **단건 삭제는 되돌리기 알림을 거칩니다.** 알림의 [되돌리기]는 전역 Ctrl+Z가 아니라 `deletionUndo.js` 기록으로 "지운 것만" 원래 이웃 옆에 돌려놓고, D-Day는 삭제 직후 모습 그대로일 때만 되돌립니다. 기록은 메모리 전용이라 `WINDOW_FIELDS`에 넣지 않습니다(삭제 자체는 즉시 저장 — 업데이트 설치 흐름에 새 저장 경로 없음). 전역 되돌리기·내용 초기화·업데이트 잠금 때 알림을 닫습니다.
+- 개발 시 `?memo-layout-preview&sort-qa&sort-motion=full`. 가려진 검수 창에서는 rAF·WAAPI가 멈추므로 `document.getAnimations().forEach(a => a.finish())`로 착지를 끝내고 상태를 봅니다.
 
 ### 마감일 달력 (날짜 선택 창, `date-picker`)
 - 할 일 뱃지와 새 할 일 입력줄의 달력은 **메모 창 안이 아니라 별도 창**으로 뜹니다. 왜: 메모 창 최소 높이는 210px인데 달력은 약 240~270px이라, 창 안에서는 어디에 놓아도 잘렸습니다.

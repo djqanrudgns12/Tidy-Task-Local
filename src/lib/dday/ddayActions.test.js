@@ -14,6 +14,7 @@ import {
   syncTodoRestoredToDdays,
   syncTodosCompletedToDdays,
   syncTodosDeletedToDdays,
+  restoreDdaysForTodos,
   updateDdayItem,
 } from './ddayActions.js';
 
@@ -184,4 +185,46 @@ test('todo restore, deadline removal, reorder, deleteDdayItem, and clearArchived
   const removed = deleteDdayItem(restByTodo.state, restByTodo.state.ddayItems[0].id, { deleteLinkedTodo: false });
   assert.equal(removed.ddayItems.length, 0);
   assert.equal(removed.todos.length, 1);
+});
+
+// ── 삭제 되돌리기용 D-Day 복원 (docs/PRD-todo-row-gestures.md §7.8) ──
+// 복원 규칙만 보는 테스트라 D-Day의 나머지 필드는 생략합니다(any).
+/** @param {string} id @param {number} order @param {Record<string, any>} [extra] @returns {any} */
+const dd = (id, order, extra = {}) => ({ id, title: id, status: 'active', order, linkedTodoId: null, showInTodo: false, ...extra });
+
+test('restoreDdaysForTodos: 함께 지워진 D-Day를 원래 자리·순서로 다시 넣는다', () => {
+  const before = [dd('a', 0), dd('b', 1, { linkedTodoId: 't' }), dd('c', 2)];
+  const after = [dd('a', 0), dd('c', 1)];
+  const changes = [
+    { before: before[1], after: null, index: 1 },
+    { before: before[2], after: after[1], index: 2 },
+  ];
+  const result = restoreDdaysForTodos(after, changes);
+  assert.equal(result.changed, true);
+  assert.deepEqual(result.items, before);
+});
+
+test('restoreDdaysForTodos: 남겨 둔 뒤 사용자가 지웠거나 고쳤으면 건너뛴다', () => {
+  const before = dd('b', 0, { linkedTodoId: 't', showInTodo: true });
+  const after = dd('b', 0);
+  assert.equal(restoreDdaysForTodos([], [{ before, after, index: 0 }]).changed, false);
+  const edited = { ...after, title: '바꾼 이름' };
+  const result = restoreDdaysForTodos([edited], [{ before, after, index: 0 }]);
+  assert.equal(result.changed, false);
+  assert.equal(result.items[0], edited);
+});
+
+test('restoreDdaysForTodos: 키 순서만 다른 것은 그대로로 본다', () => {
+  const before = dd('b', 0, { linkedTodoId: 't', showInTodo: true });
+  const after = dd('b', 0);
+  const reordered = /** @type {any} */ (Object.fromEntries(Object.entries(after).reverse()));
+  const result = restoreDdaysForTodos([reordered], [{ before, after, index: 0 }]);
+  assert.deepEqual(result.items, [before]);
+});
+
+test('restoreDdaysForTodos: 그사이 새 D-Day가 생겨 순서가 겹치면 되돌린 것이 앞', () => {
+  const before = dd('old', 0, { linkedTodoId: 't' });
+  const current = [dd('new', 0)];
+  const result = restoreDdaysForTodos(current, [{ before, after: null, index: 0 }]);
+  assert.deepEqual(result.items.map((d) => [d.id, d.order]), [['old', 0], ['new', 1]]);
 });

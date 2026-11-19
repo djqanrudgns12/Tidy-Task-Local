@@ -4,9 +4,12 @@
   import { applyTodoOrder } from "../lib/todos/order.js";
   import { appState } from "../lib/appState.svelte.js";
   import { editable } from "../lib/editable.js";
-  import { Check, Plus, Trash2, GripVertical, Flag } from "lucide-svelte";
+  import { Check, Plus, Flag, ArrowUpDown } from "lucide-svelte";
   import clsx from "clsx";
-  import { onMount } from "svelte";
+  import { onMount, tick } from "svelte";
+  import SoftX from "./todo/SoftX.svelte";
+  import UndoToast from "./todo/UndoToast.svelte";
+  import { REMOVAL_GUARD_MS, createRemovalGuard, isXArmed } from "../lib/todos/rowGestures.js";
   import Icon from "@iconify/svelte";
   import { CALENDAR_BOLD_DUOTONE } from "../lib/icons.js";
   import { daysUntil } from "../lib/dateUtils.js";
@@ -149,8 +152,113 @@
       const reordered = applyTodoOrder(appState.todos, initial, next);
       if (reordered) appState.reorderTodos(reordered);
     },
+    // 완료 버튼·날짜 알약으로 끌기가 시작된 순간(포인터만).
+    onpointerdragstart: () => {
+      // 목록 안에서 편집 중이던 글을 먼저 확정합니다. 완료 버튼은 누를 때 초점을 가져가지 않으므로
+      // (예전 손잡이와 달리) 저절로 확정되지 않고, 줄이 옮겨지는 중에 편집이 끊길 수 있습니다.
+      const active = document.activeElement;
+      if (active instanceof HTMLElement && active.isContentEditable && listContentEl?.contains(active)) active.blur();
+      // 떠 있는 달력은 닫습니다. 같은 알약을 끌면 달력은 "같은 버튼"이라 스스로 닫지 않고 엉뚱한 자리를 가리킵니다.
+      datePicker.close("drag", { toggleGrace: false });
+    },
   });
   $effect(() => todoSorter.sync());
+
+  // ── 말랑 X 무장 · 연타 보호 (docs/PRD-todo-row-gestures.md §6.6, §9) ──
+  // 포인터가 "다른 줄로 들어온 시각". X는 그 뒤 0.15초가 지나야 눌립니다.
+  let hoverRowId = null;
+  let hoverSince = 0;
+  /** @param {PointerEvent} e */
+  function trackHoverRow(e) {
+    const row = e.target instanceof Element ? e.target.closest(".todo-row[data-todo-id]") : null;
+    const id = row?.getAttribute("data-todo-id") || null;
+    if (id === hoverRowId) return;
+    hoverRowId = id;
+    hoverSince = performance.now();
+  }
+
+  // 줄이 사라진 직후 같은 자리로 올라온 다음 줄을 실수로 누르지 않게 합니다(더블클릭 한 번에 두 개 마감·삭제 방지).
+  const removalGuard = createRemovalGuard({ now: () => performance.now() });
+  let settling = $state(false);
+  let settleTimer = null;
+  /** @param {MouseEvent} e */
+  function startSettling(e) {
+    removalGuard.start(e.clientX, e.clientY);
+    settling = true;
+    clearTimeout(settleTimer);
+    const { clientX, clientY } = e;
+    settleTimer = setTimeout(() => {
+      settling = removalGuard.active();
+      // 포인터를 움직이지 않은 채 보호가 끝났으면, 지금 포인터 밑에 올라와 있는 줄에 "방금 들어온" 것으로 기록합니다.
+      // 왜: 줄이 밀려 올라오면 pointerover가 오지 않아 기록이 지워진 줄에 머물고,
+      //   그 줄의 X가 보이는데도 마우스를 움직이기 전까지 눌리지 않았습니다.
+      if (!settling) {
+        const row = document.elementFromPoint(clientX, clientY)?.closest(".todo-row[data-todo-id]");
+        hoverRowId = row?.getAttribute("data-todo-id") || null;
+        hoverSince = performance.now();
+      }
+    }, REMOVAL_GUARD_MS + 16);
+  }
+  /** @param {PointerEvent} e */
+  function onListPointerMove(e) {
+    if (settling && removalGuard.onPointerMove(e.clientX, e.clientY)) {
+      settling = false;
+      clearTimeout(settleTimer);
+    }
+  }
+  /** 포인터 클릭인데 연타 보호 중이면 true @param {MouseEvent} e */
+  function blockedByRemovalGuard(e) {
+    return e.detail !== 0 && removalGuard.active(e.clientX, e.clientY);
+  }
+  /**
+   * 연타 보호 중 같은 자리의 누름은 줄 어디에서든 통째로 버립니다(캡처 단계).
+   * 왜: X를 더블클릭하면 둘째 클릭이 올라온 다음 줄의 글에 떨어져 편집이 시작되고 단어까지 선택됐습니다.
+   * pointerdown을 막으면 이어지는 mousedown(초점·커서)도 오지 않고, click·dblclick은 따로 버립니다.
+   * @param {MouseEvent} e
+   */
+  function swallowWhileSettling(e) {
+    if (!settling || e.button !== 0 || !removalGuard.active(e.clientX, e.clientY)) return;
+    e.preventDefault();
+    e.stopPropagation();
+  }
+
+  /** @param {MouseEvent} e @param {string} id */
+  function handleComplete(e, id) {
+    if (blockedByRemovalGuard(e)) return;
+    appState.toggleTodo(id);
+    if (e.detail !== 0) startSettling(e);
+  }
+
+  /** X를 누른 순간 무장되어 있는가 @param {PointerEvent} e @param {string} id */
+  function canPressX(e, id) {
+    if (removalGuard.active(e.clientX, e.clientY)) return false;
+    // 무장은 마우스에만: 터치·펜은 "올림 → 누름"이 한순간이라 늘 0초가 되어 X를 영영 못 누릅니다.
+    if (e.pointerType !== "mouse") return true;
+    // 포인터가 이 줄에 들어온 기록이 없으면(줄이 밀려 올라와 포인터 밑에 놓인 경우) 방금 들어온 것으로 봅니다.
+    const since = hoverRowId === id ? hoverSince : performance.now();
+    return isXArmed(since, performance.now());
+  }
+
+  /** @param {MouseEvent} e @param {string} id */
+  function handleRemove(e, id) {
+    if (blockedByRemovalGuard(e)) return;
+    appState.deleteTodo(id);
+    if (e.detail !== 0) startSettling(e);
+  }
+
+  // 알림에서 되돌린 할 일이 목록 밖(스크롤 아래)에 있으면 보이는 곳으로 데려옵니다.
+  $effect(() => {
+    const ids = appState.recentlyRestoredIds;
+    if (!ids.length) return;
+    void tick().then(() => {
+      const row = ids
+        .map((id) => listContentEl?.querySelector(`[data-todo-id="${CSS.escape(id)}"]`))
+        .find(Boolean);
+      row?.scrollIntoView({ block: "nearest" });
+    });
+  });
+
+  onMount(() => () => clearTimeout(settleTimer));
 
   let currentFontFamily = $derived(
     appState.allFonts.find((f) => f.name === appState.fontFamily)?.family || '"Gulim", sans-serif'
@@ -183,9 +291,22 @@
     class="flex-1 overflow-y-auto overflow-x-hidden min-h-0 border-t"
     style="border-color: {appState.isDarkMode ? 'rgba(255,255,255,0.06)' : 'rgba(120,80,20,0.1)'};"
   >
+    <!-- 줄 배경·강조색을 변수로 둬서, X 뒤 흐림 받침이 그 순간의 줄 배경과 정확히 같은 색이 되게 합니다.
+         포인터 리스너는 조작이 아니라 "어느 줄 위에 있는지" 기록(X 무장·연타 보호)만 합니다. -->
+    <!-- svelte-ignore a11y_no_static_element_interactions -->
     <section
       bind:this={listContentEl}
       class="todo-rows min-h-[50px]"
+      class:is-dark={appState.isDarkMode}
+      class:is-settling={settling}
+      style="--todo-accent: {appState.getThemeAccentColor()};"
+      onpointerover={trackHoverRow}
+      onpointerleave={() => { hoverRowId = null; }}
+      onpointermove={onListPointerMove}
+      onpointerdowncapture={swallowWhileSettling}
+      onmousedowncapture={swallowWhileSettling}
+      onclickcapture={swallowWhileSettling}
+      ondblclickcapture={swallowWhileSettling}
     >
       {#each visibleTodos as todo, index (todo.id)}
         {@const dlInfo = getDeadlineInfo(todo.deadline)}
@@ -200,7 +321,8 @@
         <div
           use:todoSorter.row={{ id: todo.id, index, disabled: sortDisabled }}
           data-todo-id={todo.id}
-          class="todo-row w-full min-w-full group flex items-start gap-1 px-1 transition-colors duration-200 {appState.isDarkMode ? 'hover:bg-white/5' : 'hover:bg-black/5'}"
+          class="todo-row w-full min-w-full group flex items-start gap-1 px-1 transition-colors duration-200"
+          class:is-restored={appState.recentlyRestoredIds.includes(todo.id)}
           style="border-bottom-color: {appState.isDarkMode ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.06)'};"
         >
           <div class="todo-lead gap-1.5 ml-0.5">
@@ -220,14 +342,18 @@
               </button>
             {/if}
 
+            <!-- 완료 버튼 = 잡기 버튼: 짧게 누르면 마감, 위아래로 끌면 순서 변경(data-sort-activator) -->
             <button
-              onclick={() => appState.toggleTodo(todo.id)}
+              type="button"
+              data-sort-activator
+              onclick={(e) => handleComplete(e, todo.id)}
               onmousedown={(e) => e.preventDefault()}
               class={clsx(
-                "w-[18px] h-[18px] rounded-full border-2 flex-shrink-0 flex items-center justify-center transition-all duration-200 hover:scale-110 active:scale-90 shadow-sm cursor-pointer overflow-hidden group/done my-auto",
+                "todo-done w-[18px] h-[18px] rounded-full border-2 flex-shrink-0 flex items-center justify-center transition-all duration-200 hover:scale-110 active:scale-90 shadow-sm cursor-pointer overflow-hidden group/done my-auto",
                 appState.isDarkMode ? "border-gray-500 hover:border-emerald-500 hover:bg-emerald-500" : "border-gray-300 bg-white hover:border-emerald-500 hover:bg-emerald-500"
               )}
-              title="마감 처리 (보관함으로)"
+              title={sortDisabled ? "마감 처리" : "마감 처리 · 위아래로 끌면 순서 변경"}
+              aria-label="마감 처리"
             >
               <Check size={11} strokeWidth={4} class="opacity-0 group-hover/done:opacity-100 transition-opacity text-white" />
             </button>
@@ -243,7 +369,8 @@
                 appearance: pickerAppearance,
                 onSelect: (v) => appState.setTodoDeadline(todo.id, v),
               }}
-              class="px-[0.6em] py-[0.3em] font-bold border rounded-full transition-all hover:scale-105 active:scale-95 flex items-center justify-center whitespace-nowrap shrink-0"
+              data-sort-activator
+              class="todo-badge px-[0.6em] py-[0.3em] font-bold border rounded-full transition-all hover:scale-105 active:scale-95 flex items-center justify-center whitespace-nowrap shrink-0 cursor-pointer"
               style="
                 color: {dlInfo.color};
                 background-color: {dlInfo.bg};
@@ -254,7 +381,7 @@
                 outline: {datePicker.openKey === todoPickerKey(todo.id) ? `2px solid ${appState.getThemeAccentColor()}` : 'none'};
                 outline-offset: 1px;
               "
-              title="마감일 설정"
+              title={sortDisabled ? "마감일 설정" : "마감일 설정 · 위아래로 끌면 순서 변경"}
               data-todo-deadline-btn
               aria-expanded={datePicker.openKey === todoPickerKey(todo.id)}
             >
@@ -283,44 +410,54 @@
             tabindex="0"
           ></div>
 
-          {#if linkedDday}
-            <button
-              type="button"
-              onclick={() => appState.openDdayControl({ focusDdayId: linkedDday.id })}
-              onmousedown={(e) => e.preventDefault()}
-              class="todo-lead px-1 rounded transition-transform hover:scale-110 active:scale-95 shrink-0"
-              style="color: {appState.getThemeAccentColor()}; opacity: 0.85;"
-              title="D-Day 컨트롤에서 보기"
-              aria-label="D-Day 연결됨 · 컨트롤 열기"
-            >
-              <Flag size={11} strokeWidth={2.4} />
-            </button>
-          {/if}
+          <!--
+            줄 끝 꼬리: D-Day 깃발(있으면)만 자리를 차지하고, X·키보드 손잡이는 그 왼쪽에 "겹쳐" 뜹니다.
+            왜 겹치는가: 예전엔 손잡이·휴지통이 투명한 채로 약 42px를 늘 차지해 오른쪽에 빈 띠가 생겼습니다.
+            겹침 묶음은 투명도·변형만 바뀌므로 나타나고 사라져도 줄 폭·높이·줄바꿈이 한 픽셀도 바뀌지 않습니다.
+          -->
+          <div class="todo-tail" class:has-flag={!!linkedDday}>
+            {#if linkedDday}
+              <button
+                type="button"
+                onclick={() => appState.openDdayControl({ focusDdayId: linkedDday.id })}
+                onmousedown={(e) => e.preventDefault()}
+                class="todo-lead px-1 rounded transition-transform hover:scale-110 active:scale-95 shrink-0"
+                style="color: {appState.getThemeAccentColor()}; opacity: 0.85;"
+                title="D-Day 컨트롤에서 보기"
+                aria-label="D-Day 연결됨 · 컨트롤 열기"
+              >
+                <Flag size={11} strokeWidth={2.4} />
+              </button>
+            {/if}
 
-          <div class="todo-actions todo-lead">
-            <button
-              type="button"
-              disabled={sortDisabled}
-              class="todo-drag-handle todo-lead justify-center text-gray-400 rounded cursor-grab active:cursor-grabbing"
-              title={sortDisabled ? '검색·업데이트 중에는 순서를 변경할 수 없습니다' : '위아래로 끌어서 순서 변경 (키보드: 스페이스 → ↑↓ → 스페이스)'}
-              aria-label="끌어서 순서 변경"
-            >
-              <GripVertical size={13} strokeWidth={2.5} />
-            </button>
-
-            <button
-              type="button"
-              onclick={() => appState.deleteTodo(todo.id)}
-              class="todo-lead p-1 text-red-400 hover:text-red-500 hover:scale-110 active:scale-95 hover:bg-black/5 rounded transition-all"
-              title="삭제"
-            >
-              <Trash2 size={13} />
-            </button>
+            <div class="todo-float">
+              <span class="todo-veil" aria-hidden="true"></span>
+              <!-- 키보드 전용 손잡이: Tab으로 왔을 때만 보입니다(스페이스 → ↑↓ → 스페이스). 포인터는 완료 버튼·날짜 알약으로 끕니다. -->
+              <button
+                type="button"
+                class="todo-kbd-handle"
+                disabled={sortDisabled}
+                title={sortDisabled ? "검색·업데이트 중에는 순서를 바꿀 수 없어요" : "순서 변경 (스페이스 → ↑↓ → 스페이스)"}
+                aria-label="끌어서 순서 변경"
+              >
+                <ArrowUpDown size={11} strokeWidth={2.6} />
+              </button>
+              <span class="todo-x-pop">
+                <SoftX
+                  dark={appState.isDarkMode}
+                  canPress={(e) => canPressX(e, todo.id)}
+                  onremove={(e) => handleRemove(e, todo.id)}
+                />
+              </span>
+            </div>
           </div>
         </div>
       {/each}
     </section>
   </div>
+
+  <!-- 되돌리기 알림 자리: 새 할 일 입력줄 바로 위. 높이 0이라 배치(measureLayout)에 영향이 없습니다. -->
+  <UndoToast />
 
   <!-- ✨ 할 일 추가 폼 (캘린더 버튼 왼쪽 배치) -->
   <form onsubmit={handleAddSubmit} class="mt-2 flex gap-1 relative pb-1 shrink-0 items-center">
@@ -424,18 +561,121 @@
     flex-shrink: 0;
   }
 
-  /* 왼쪽 손잡이 칸을 오른쪽 버튼 묶음으로 옮깁니다. 손잡이 폭(18px)·삭제 여백은
-     그대로 두고 묶음 안 간격만 없애, 본문이 기존보다 좁아지지 않게 합니다.
-     표시할 때 폭·높이를 바꾸면 편집 중 줄바꿈이 흔들리므로 투명도만 바꿉니다. */
-  .todo-actions {
-    opacity: 0;
-    transition: opacity 150ms ease;
+  /* ── 줄 배경과 X 받침 색 ─────────────────────────────────────
+     X 뒤의 흐림 받침은 "그 순간의 줄 배경"과 같은 색이어야 글자가 잘린 듯 보이지 않고 부드럽게 사라집니다.
+     줄 배경 = 테마색 위에 마우스 올림 덧칠(라이트 검정 5%, 다크 흰색 5%)이므로, 같은 값을 color-mix로 만듭니다. */
+  .todo-rows {
+    --row-hover: rgba(0, 0, 0, 0.05);
+    --row-surface-rest: var(--global-theme-color);
+    --row-surface-hover: color-mix(in srgb, var(--global-theme-color) 95%, black);
+    --done-rest-bg: #ffffff;
+    --done-rest-border: #d1d5db;
+  }
+  .todo-rows.is-dark {
+    --row-hover: rgba(255, 255, 255, 0.05);
+    --row-surface-hover: color-mix(in srgb, var(--global-theme-color) 95%, white);
+    --done-rest-bg: transparent;
+    --done-rest-border: #6b7280;
+  }
+  .todo-row { --row-surface: var(--row-surface-rest); }
+  .todo-row:hover {
+    background-color: var(--row-hover);
+    --row-surface: var(--row-surface-hover);
   }
 
-  .todo-row:hover .todo-actions,
-  .todo-row:focus-within .todo-actions {
-    opacity: 1;
+  /* ── 줄 끝 꼬리와 겹침 묶음(X · 키보드 손잡이) ─────────────────
+     깃발이 없으면 꼬리 폭은 0이고, 줄의 간격(gap-1)만큼 되돌려 글이 줄 안쪽 여백 끝까지 닿게 합니다.
+     겹침 묶음은 꼬리의 왼쪽(right: 100%)에 붙어 첫 줄 높이 안에서 세로 가운데에 뜹니다.
+     보이고 숨기는 것은 투명도·변형·pointer-events만 씁니다 — 폭·높이를 바꾸면 편집 중 줄바꿈이 흔들립니다. */
+  .todo-tail {
+    position: relative;
+    display: flex;
+    align-items: center;
+    flex-shrink: 0;
+    min-height: var(--todo-first-line-h, 36px);
+    margin-left: calc(-1 * var(--spacing, 0.25rem));
   }
+  .todo-tail.has-flag { margin-left: 0; }
+
+  .todo-float {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    right: 100%;
+    display: flex;
+    align-items: center;
+    gap: 3px;
+    padding-left: 16px; /* 흐림 받침이 글을 덮기 시작하는 너비 */
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 140ms ease-out;
+    z-index: 1;
+  }
+  .todo-tail.has-flag .todo-float { margin-right: 1px; }
+
+  .todo-veil {
+    position: absolute;
+    inset: 0;
+    background-color: var(--row-surface);
+    -webkit-mask-image: linear-gradient(to right, transparent, #000 16px);
+    mask-image: linear-gradient(to right, transparent, #000 16px);
+    transition: background-color 200ms ease;
+  }
+
+  /* X는 나타날 때 0.6배에서 톡 튀어나옵니다(크기는 겉 상자, 올림·누름 효과는 SoftX 자신이 맡음). */
+  .todo-x-pop {
+    position: relative;
+    display: grid;
+    pointer-events: none;
+    transform: scale(0.6);
+    transition: transform 220ms cubic-bezier(0.34, 1.56, 0.64, 1), opacity 140ms ease-out;
+  }
+
+  /* 키보드 전용 손잡이: 평소 폭 0·투명, Tab으로 왔을 때만 작은 알약으로 나타납니다. */
+  .todo-kbd-handle {
+    position: relative;
+    display: grid;
+    place-items: center;
+    width: 0;
+    height: 18px;
+    padding: 0;
+    margin: 0;
+    border: 0;
+    overflow: hidden;
+    border-radius: 999px;
+    opacity: 0;
+    color: var(--todo-accent);
+    background-color: color-mix(in srgb, var(--todo-accent) 16%, var(--row-surface));
+  }
+  .todo-kbd-handle:focus-visible {
+    width: 24px;
+    opacity: 1;
+    outline: 2px solid var(--todo-accent);
+    outline-offset: 1px;
+  }
+
+  /* 보이기: 줄에 마우스를 올림 · 묶음 안 단추에 키보드 초점 */
+  .todo-row:hover .todo-float,
+  .todo-row:has(.todo-float :focus-visible) .todo-float { opacity: 1; }
+  .todo-row:hover .todo-x-pop,
+  .todo-row:has(.todo-float :focus-visible) .todo-x-pop {
+    transform: none;
+    pointer-events: auto;
+  }
+
+  /* 숨기기(위 규칙보다 우선): 그 줄 글을 편집 중 · 잡힌/착지 중인 줄 · 연타 보호 중 */
+  .todo-rows .todo-row:has(.todo-text:focus) .todo-float,
+  .todo-rows .todo-row:global([data-dnd-dropping]) .todo-float,
+  .todo-rows.is-settling .todo-row .todo-float { opacity: 0; }
+  .todo-rows .todo-row:has(.todo-text:focus) .todo-x-pop,
+  .todo-rows .todo-row:global(:is([data-dnd-dragging], [data-dnd-dropping])) .todo-x-pop,
+  .todo-rows.is-settling .todo-row .todo-x-pop {
+    opacity: 0;
+    transform: scale(0.6);
+    pointer-events: none;
+  }
+  /* 잡힌 줄: 마우스로 끄는 중이면 묶음을 숨기고, 키보드로 끄는 중이면 손잡이만 남깁니다. */
+  .todo-rows .todo-row:global([data-dnd-dragging]):not(:has(.todo-kbd-handle:focus-visible)) .todo-float { opacity: 0; }
 
   /* 잡은 행은 폭·줄바꿈을 유지하고 색과 그림자로만 구분합니다. */
   .todo-row:global([data-dnd-dragging]) {
@@ -445,28 +685,36 @@
     left: var(--todo-sort-left) !important;
     background-color: var(--global-theme-color);
     box-shadow: 0 4px 14px rgba(0, 0, 0, 0.13);
+    --row-surface: var(--row-surface-rest);
   }
 
-  .todo-row:global([data-dnd-dragging]) .todo-actions { opacity: 1; }
+  /* 끄는 동안 완료 버튼의 올림·누름 효과(초록 채움·체크·확대/축소)를 끕니다.
+     그대로 두면 끄는 내내 "마감될 것처럼" 보입니다. 날짜 알약의 확대/축소도 끕니다. */
+  .todo-rows .todo-row:global(:is([data-dnd-dragging], [data-dnd-dropping])) .todo-done {
+    transform: none !important;
+    background-color: var(--done-rest-bg) !important;
+    border-color: var(--done-rest-border) !important;
+  }
+  .todo-rows .todo-row:global(:is([data-dnd-dragging], [data-dnd-dropping])) .todo-done :global(svg) { opacity: 0 !important; }
+  .todo-rows .todo-row:global(:is([data-dnd-dragging], [data-dnd-dropping])) .todo-badge { transform: none !important; }
 
-  .todo-drag-handle {
-    width: 18px;
-    padding: 0;
-    touch-action: none;
-    opacity: 0.55;
-    transition: opacity 150ms ease;
+  /* 알림에서 되돌린 줄: 강조색으로 한 번 반짝여 "여기로 돌아왔어요"를 알립니다. */
+  .todo-row.is-restored { animation: todo-restored 900ms ease-out; }
+  @keyframes todo-restored {
+    from { background-color: color-mix(in srgb, var(--todo-accent) 22%, transparent); }
+    to { background-color: transparent; }
   }
 
-  .todo-drag-handle:disabled { cursor: default; opacity: 0.25; }
-
-  .todo-drag-handle:hover,
-  .todo-drag-handle:focus-visible {
-    opacity: 1;
-  }
-
-  /* 마우스를 올릴 수 없는 환경에서도 이동·삭제를 찾을 수 있게 합니다. */
+  /* 마우스를 올릴 수 없는 기기: X를 늘 보여 주고, 그 자리만큼 글 오른쪽을 비웁니다(기기마다 고정이라 흔들림 없음). */
   @media (hover: none) {
-    .todo-actions { opacity: 1; }
+    .todo-float { opacity: 1; }
+    .todo-x-pop { transform: none; pointer-events: auto; }
+    .todo-text { padding-right: 26px; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .todo-x-pop,
+    .todo-rows .todo-row .todo-x-pop { transform: none !important; transition: opacity 140ms ease-out; }
   }
 
   .todo-text {
