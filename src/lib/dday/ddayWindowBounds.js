@@ -2,7 +2,11 @@
 import { LogicalSize, PhysicalPosition } from '@tauri-apps/api/dpi';
 import { ensureWindowOnScreen, getMonitorGeometries } from '../windows/windowRegistry.js';
 import { isPlausibleCoordinate, pickPrimaryMonitor, resolveSavedPosition } from '../windows/windowPlacement.js';
-import { DDAY_CONTROL_BOUNDS, normalizeBoundedGeometry } from './ddayModel.js';
+import {
+  DDAY_CONTROL_BOUNDS,
+  normalizeBoundedGeometry,
+  normalizeControlGeometry,
+} from './ddayModel.js';
 import { clamp } from './ddayLayout.js';
 
 /**
@@ -24,24 +28,58 @@ export function findMonitorAtPoint(x, y, monitors) {
 }
 
 /**
- * 논리 창 크기를 대상 모니터 작업영역 이내로 안전하게 제한합니다.
+ * 대상 모니터의 논리 작업영역에 맞춰 실효 최소·최대 창 크기를 계산합니다.
+ * 왜 workMax가 bounds.min보다 작을 때 min을 낮추는가:
+ *   1280×720@150%(작업높이 448px) 등 작은 화면에서 setMinSize(460)를 강제하면
+ *   창이 작업영역보다 커져 작업표시줄 뒤로 가리고 사용자가 줄일 수도 없게 되기 때문입니다.
+ * @param {import('../windows/windowPlacement.js').MonitorGeometry | null | undefined} monitor
+ * @param {{ minWidth: number, minHeight: number, maxWidth: number, maxHeight: number }} [bounds]
+ * @param {number} [margin]
+ * @returns {{ minWidth: number, minHeight: number, maxWidth: number, maxHeight: number }}
+ */
+export function resolveControlSizeLimits(monitor, bounds = DDAY_CONTROL_BOUNDS, margin = 24) {
+  const scale = monitor && monitor.scale > 0 ? monitor.scale : 1;
+  const workMaxW = monitor
+    ? Math.max(260, Math.floor(monitor.work.width / scale - margin))
+    : bounds.maxWidth;
+  const workMaxH = monitor
+    ? Math.max(260, Math.floor(monitor.work.height / scale - margin))
+    : bounds.maxHeight;
+
+  const minWidth = Math.min(bounds.minWidth, workMaxW);
+  const minHeight = Math.min(bounds.minHeight, workMaxH);
+  const maxWidth = Math.max(minWidth, Math.min(bounds.maxWidth, workMaxW));
+  const maxHeight = Math.max(minHeight, Math.min(bounds.maxHeight, workMaxH));
+  return { minWidth, minHeight, maxWidth, maxHeight };
+}
+
+/**
+ * 논리 창 크기를 대상 모니터 작업영역과 실효 하네스 경계 이내로 안전하게 제한합니다.
  * @param {{ width: number, height: number }} size
  * @param {{ minWidth: number, minHeight: number, maxWidth: number, maxHeight: number }} bounds
  * @param {import('../windows/windowPlacement.js').MonitorGeometry | null} monitor
  * @param {number} [margin]
  */
 export function clampSizeToMonitor(size, bounds, monitor, margin = 16) {
-  const scale = monitor && monitor.scale > 0 ? monitor.scale : 1;
-  const workMaxW = monitor
-    ? Math.max(bounds.minWidth, Math.floor(monitor.work.width / scale - margin))
-    : bounds.maxWidth;
-  const workMaxH = monitor
-    ? Math.max(bounds.minHeight, Math.floor(monitor.work.height / scale - margin))
-    : bounds.maxHeight;
-
-  const width = Math.round(clamp(size.width, bounds.minWidth, Math.min(bounds.maxWidth, workMaxW)));
-  const height = Math.round(clamp(size.height, bounds.minHeight, Math.min(bounds.maxHeight, workMaxH)));
+  const limits = resolveControlSizeLimits(monitor, bounds, margin);
+  const width = Math.round(clamp(size.width, limits.minWidth, limits.maxWidth));
+  const height = Math.round(clamp(size.height, limits.minHeight, limits.maxHeight));
   return { width, height };
+}
+
+/**
+ * 컨트롤 패널 창에 대상 모니터 기준 실효 min/max 크기 제한과 최대화 금지를 적용합니다.
+ * @param {Pick<import('@tauri-apps/api/window').Window, 'setMinSize' | 'setMaxSize' | 'setMaximizable'>} win
+ * @param {import('../windows/windowPlacement.js').MonitorGeometry | null | undefined} monitor
+ * @param {{ minWidth: number, minHeight: number, maxWidth: number, maxHeight: number }} [bounds]
+ * @param {number} [margin]
+ */
+export async function applyControlWindowLimits(win, monitor, bounds = DDAY_CONTROL_BOUNDS, margin = 24) {
+  const limits = resolveControlSizeLimits(monitor, bounds, margin);
+  await win.setMinSize(new LogicalSize(limits.minWidth, limits.minHeight)).catch(() => {});
+  await win.setMaxSize?.(new LogicalSize(limits.maxWidth, limits.maxHeight)).catch?.(() => {});
+  await win.setMaximizable?.(false).catch?.(() => {});
+  return limits;
 }
 
 /**
@@ -202,16 +240,15 @@ export function computeWidgetSidePlacement({ controlPos, controlSize, widgetSize
 }
 
 /**
- * 저장된 기하학(물리·논리 듀얼 좌표)을 최소 크기 → 모니터 작업영역 클램프 → 2-pass 순서로 적용합니다.
+ * 저장된 기하학(물리·논리 듀얼 좌표)을 최소/최대 크기 → 모니터 작업영역 클램프 → 2-pass 순서로 적용합니다.
  * 왜 2회 적용하는가: 배율이 다른 모니터(4K 200% ↔ FHD 100%)로 이동 시 OS가 첫 이동 직후 창 크기를 재계산하기 때문입니다.
  * @param {import('@tauri-apps/api/window').Window} win
  * @param {import('./ddayModel.js').DdayGeometry | { physicalX?: number | null, physicalY?: number | null, logicalX?: number | null, logicalY?: number | null, width: number, height: number }} target
  * @param {{ minWidth: number, minHeight: number, maxWidth: number, maxHeight: number }} bounds
+ * @param {{ enforceMaxSize?: boolean, disableMaximize?: boolean }} [options]
  */
-export async function applyDdayWindowBounds(win, target, bounds) {
+export async function applyDdayWindowBounds(win, target, bounds, options = {}) {
   const monitors = await getMonitorGeometries();
-  await win.setMinSize(new LogicalSize(bounds.minWidth, bounds.minHeight)).catch(() => {});
-
   const resolvedPos = resolveSavedPosition(
     {
       physicalX: target.physicalX ?? /** @type {any} */ (target).x,
@@ -225,6 +262,15 @@ export async function applyDdayWindowBounds(win, target, bounds) {
   );
 
   const monitor = resolvedPos ? findMonitorAtPoint(resolvedPos.x, resolvedPos.y, monitors) : pickPrimaryMonitor(monitors);
+  const limits = resolveControlSizeLimits(monitor, bounds);
+  await win.setMinSize(new LogicalSize(limits.minWidth, limits.minHeight)).catch(() => {});
+  if (options.enforceMaxSize) {
+    await win.setMaxSize?.(new LogicalSize(limits.maxWidth, limits.maxHeight)).catch?.(() => {});
+  }
+  if (options.disableMaximize) {
+    await win.setMaximizable?.(false).catch?.(() => {});
+  }
+
   const clamped = clampSizeToMonitor({ width: target.width, height: target.height }, bounds, monitor);
 
   for (let pass = 0; pass < 2; pass++) {
@@ -240,9 +286,10 @@ export async function applyDdayWindowBounds(win, target, bounds) {
  * 최소화·최대화·전체화면 상태가 아닐 때만 현재 창 기하학을 안전하게 캡처합니다.
  * @param {import('@tauri-apps/api/window').Window} win
  * @param {{ minWidth: number, minHeight: number, maxWidth: number, maxHeight: number }} bounds
+ * @param {{ clampSize?: boolean }} [options]
  * @returns {Promise<import('./ddayModel.js').DdayGeometry | null>}
  */
-export async function captureWindowGeometry(win, bounds) {
+export async function captureWindowGeometry(win, bounds, options = {}) {
   const [minimized, maximized, fullscreen] = await Promise.all([
     win.isMinimized().catch(() => false),
     win.isMaximized().catch(() => false),
@@ -257,18 +304,18 @@ export async function captureWindowGeometry(win, bounds) {
   ]);
   if (!isPlausibleCoordinate(pos.x) || !isPlausibleCoordinate(pos.y)) return null;
   const factor = Number(scale) > 0 ? Number(scale) : 1;
+  const rawGeometry = {
+    x: pos.x,
+    y: pos.y,
+    physicalX: pos.x,
+    physicalY: pos.y,
+    logicalX: Math.round(pos.x / factor),
+    logicalY: Math.round(pos.y / factor),
+    width: Math.round(size.width / factor),
+    height: Math.round(size.height / factor),
+  };
 
-  return normalizeBoundedGeometry(
-    {
-      x: pos.x,
-      y: pos.y,
-      physicalX: pos.x,
-      physicalY: pos.y,
-      logicalX: Math.round(pos.x / factor),
-      logicalY: Math.round(pos.y / factor),
-      width: Math.round(size.width / factor),
-      height: Math.round(size.height / factor),
-    },
-    bounds,
-  );
+  return options.clampSize
+    ? normalizeControlGeometry(rawGeometry, bounds)
+    : normalizeBoundedGeometry(rawGeometry, bounds);
 }

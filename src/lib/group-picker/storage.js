@@ -43,6 +43,7 @@ export const defaultPrefs = () => ({
   sortOrder: /** @type {'number'|'order'} */ ('order'),
   alwaysShowNumber: false,
   keepTotal: false,
+  setupPanelOpen: true,
 });
 
 /** @param {any} raw */
@@ -60,6 +61,7 @@ export function normalizePrefs(raw) {
     sortOrder: /** @type {'number'|'order'} */ (sortOrder),
     alwaysShowNumber: bool(raw?.alwaysShowNumber, d.alwaysShowNumber),
     keepTotal: bool(raw?.keepTotal, d.keepTotal),
+    setupPanelOpen: bool(raw?.setupPanelOpen, d.setupPanelOpen),
   };
 }
 

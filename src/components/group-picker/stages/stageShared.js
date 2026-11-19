@@ -1,9 +1,15 @@
+/** 3대 무대 공용 대기 타이틀 단일 생성자(담백·일관 규격).
+ * @param {string} modeLabel @param {number} studentCount @param {number} groupCount */
+export function idleTitle(modeLabel, studentCount, groupCount) {
+  return `${modeLabel} · ${studentCount}명 · ${groupCount}모둠`;
+}
+
 /** 3대 무대 공용 호명 배너 체류/병합/물결 요약 및 OKLab 리컬러 조회 헬퍼(PRD §2.3, §4.1). */
 import { fitFontSize } from '../../../lib/scoreboard/fitText.js';
 
 /** 호명 배너 최소 체류(600ms)·최대 2명 병합·빙하 900ms 섬 요약 규칙 적용 상태기 생성. */
 export function createBannerTracker() {
-  /** @type {{ key:string, groupIndex:number, groupName:string, groupColorHex:string, groupSymbol:string, names:string[], shownAtMs:number, minUntilMs:number, customSummary:string|null } | null} */
+  /** @type {{ key:string, groupIndex:number, groupName:string, groupColorId?:string, groupColorHex:string, groupSymbol:string, names:string[], shownAtMs:number, minUntilMs:number, customSummary:string|null } | null} */
   let current = null;
   let lastSeenKey = '';
   let lastGlacierSummaryAt = -9999;
@@ -19,8 +25,8 @@ export function createBannerTracker() {
      * @param {'train'|'glacier'|'elevator'} opts.mode
      * @param {number} opts.elapsed
      * @param {string} opts.idleText
-     * @param {{ key:string, groupIndex:number, groupName:string, groupColorHex:string, groupSymbol:string, studentName:string } | null} [opts.candidate]
-     * @param {{ groupIndex:number, groupName:string, groupColorHex:string, groupSymbol:string, text:string, force?:boolean } | null} [opts.summaryCandidate] */
+     * @param {{ key:string, groupIndex:number, groupName:string, groupColorId?:string, groupColorHex:string, groupSymbol:string, studentName:string } | null} [opts.candidate]
+     * @param {{ groupIndex:number, groupName:string, groupColorId?:string, groupColorHex:string, groupSymbol:string, text:string, force?:boolean } | null} [opts.summaryCandidate] */
     update({ mode, elapsed, idleText, candidate, summaryCandidate }) {
       if (mode === 'glacier' && summaryCandidate) {
         if (!summaryCandidate.force && current && current.groupIndex === summaryCandidate.groupIndex) {
@@ -34,6 +40,7 @@ export function createBannerTracker() {
             key: `sum-${Math.floor(elapsed)}`,
             groupIndex: summaryCandidate.groupIndex,
             groupName: summaryCandidate.groupName,
+            groupColorId: summaryCandidate.groupColorId,
             groupColorHex: summaryCandidate.groupColorHex,
             groupSymbol: summaryCandidate.groupSymbol,
             names: [],
@@ -66,6 +73,7 @@ export function createBannerTracker() {
             key: candidate.key,
             groupIndex: candidate.groupIndex,
             groupName: candidate.groupName,
+            groupColorId: candidate.groupColorId,
             groupColorHex: candidate.groupColorHex,
             groupSymbol: candidate.groupSymbol,
             names: [candidate.studentName],
@@ -85,6 +93,7 @@ export function createBannerTracker() {
         key: 'idle-speech',
         groupIndex: -1,
         groupName: '',
+        groupColorId: '',
         groupColorHex: '',
         groupSymbol: '',
         names: [],

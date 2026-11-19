@@ -47,9 +47,74 @@
   }
   let fittedSize = '';
   let fitQueue = Promise.resolve();
+  let isDragging = $state(false);
+  let pendingFitAfterDrag = false;
+  let saveTimer: ReturnType<typeof setTimeout> | undefined;
+  // 왜 컴포넌트 최상위에 두는가(M4): onDragEnd와 onMoved가 같은 중복 제거 키를 공유해야
+  // 드래그 종료 직후 늦게 도착하는 tauri://move 이벤트가 중복 toolkit_patch를 부르지 않습니다.
+  let savedPosition = '';
+
+  async function savePositionFromGeometry(geometry: {
+    physicalX: number;
+    physicalY: number;
+    outerWidth: number;
+    outerHeight: number;
+    scaleFactor: number;
+  }) {
+    // 최소화 좌표(-32000)나 크기 0은 실제 위치가 아니므로 저장하지 않습니다(claude.md 3.2.2).
+    if (
+      !Number.isFinite(geometry.physicalX) ||
+      !Number.isFinite(geometry.physicalY) ||
+      geometry.physicalX <= -32000 ||
+      geometry.physicalY <= -32000 ||
+      !(geometry.outerWidth > 0) ||
+      !(geometry.outerHeight > 0) ||
+      !(geometry.scaleFactor > 0)
+    ) {
+      return;
+    }
+    const position = {
+      physicalX: geometry.physicalX,
+      physicalY: geometry.physicalY,
+      logicalX: geometry.physicalX / geometry.scaleFactor,
+      logicalY: geometry.physicalY / geometry.scaleFactor,
+      width: geometry.outerWidth / geometry.scaleFactor,
+      height: geometry.outerHeight / geometry.scaleFactor,
+    };
+    const key = JSON.stringify(position);
+    if (key === savedPosition) return;
+    await patchSettings('toolkit', { position });
+    savedPosition = key;
+  }
+
+  function handleDragStart() {
+    isDragging = true;
+    clearTimeout(saveTimer);
+  }
+
+  function handleDragEnd(payload: import('../../lib/toolkit/dragMachine.js').DragEndEvent) {
+    isDragging = false;
+    clearTimeout(saveTimer);
+    if (native && payload.moved && !payload.cancelled && payload.geometry) {
+      void savePositionFromGeometry(payload.geometry).catch(() => {});
+    }
+    if (pendingFitAfterDrag) {
+      pendingFitAfterDrag = false;
+      void fit().catch(() => (error = '툴바 크기를 맞추지 못했어요.'));
+    }
+  }
+
   async function fit() {
+    // 드래그 중에는 ResizeObserver(DPI 1px 반올림 등)나 설정 방송으로 resizeToolbar/setPosition이 끼어들지 못하게 미룹니다.
+    if (isDragging) {
+      pendingFitAfterDrag = true;
+      return fitQueue;
+    }
     await tick();
-    if (!bar) return;
+    if (!bar || isDragging) {
+      if (isDragging) pendingFitAfterDrag = true;
+      return fitQueue;
+    }
     const rect = bar.getBoundingClientRect();
     const width = Math.ceil(rect.width) + 14;
     const height = Math.ceil(rect.height) + 14;
@@ -113,6 +178,7 @@
   // 아이콘·패널 어디서 우클릭해도 WebView 기본 메뉴(뒤로·새로 고침·검사) 대신 툴킷 메뉴를 띄웁니다.
   async function contextMenu(e: MouseEvent) {
     e.preventDefault();
+    if (isDragging) return;
     // 키보드(Shift+F10·메뉴 키)로 열면 좌표가 0이므로, 초점 받은 요소 아래에 붙입니다.
     let x = e.clientX,
       y = e.clientY;
@@ -130,7 +196,6 @@
   onMount(() => {
     let disposed = false;
     const offs: (() => void)[] = [];
-    let saveTimer: ReturnType<typeof setTimeout>;
     void (async () => {
       try {
         const offPreview = await subscribeToolOrderPreview((ids) => {
@@ -173,28 +238,27 @@
           if (pos) await win.setPosition(new PhysicalPosition(pos.x, pos.y));
           // 왜 비교하는가: 저장은 디스크 쓰기와 모든 툴킷 창으로의 방송을 부르므로,
           // 같은 자리로 다시 놓였을 때(크기 맞춤 뒤 보정 등)는 건너뜁니다.
-          let savedPosition = JSON.stringify(config.position);
+          savedPosition = JSON.stringify(config.position);
           const moved = await win.onMoved(() => {
+            // 직접 드래그 중에는 종료 시점에 1회만 저장하므로 250ms 중도 저장을 막습니다.
+            // 외부 이동(트레이 좌표 초기화·우클릭 좌표 초기화·resizeToolbar)은 기존처럼 저장합니다.
+            if (isDragging) return;
             clearTimeout(saveTimer);
             saveTimer = setTimeout(async () => {
+              if (isDragging) return;
               try {
                 const [p, s, scale] = await Promise.all([
                   win.outerPosition(),
                   win.outerSize(),
                   win.scaleFactor(),
                 ]);
-                const position = {
+                await savePositionFromGeometry({
                   physicalX: p.x,
                   physicalY: p.y,
-                  logicalX: p.x / scale,
-                  logicalY: p.y / scale,
-                  width: s.width / scale,
-                  height: s.height / scale,
-                };
-                const key = JSON.stringify(position);
-                if (key === savedPosition) return;
-                await patchSettings('toolkit', { position });
-                savedPosition = key;
+                  outerWidth: s.width,
+                  outerHeight: s.height,
+                  scaleFactor: scale,
+                });
               } catch {}
             }, 250);
           });
@@ -234,11 +298,12 @@
     <div
       bind:this={bar}
       use:observeToolbar
-      use:toolkitDrag
+      use:toolkitDrag={{ onDragStart: handleDragStart, onDragEnd: handleDragEnd }}
       class="toolkit-bar"
       style:zoom={TOOLBAR_SIZES[config.toolbarSize].scale}
       class:vertical={config.orientation === 'vertical'}
       class:collapsed={config.collapsed}
+      class:is-dragging={isDragging}
       class:summoned
     >
       <button

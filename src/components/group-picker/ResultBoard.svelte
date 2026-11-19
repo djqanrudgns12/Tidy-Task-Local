@@ -2,6 +2,7 @@
   import { Lock, LockOpen, Undo2, Redo2, RotateCcw, Copy, Download, Save, ArrowLeft } from 'lucide-svelte';
   import GroupSymbol from '../scoreboard/GroupSymbol.svelte';
   import { PALETTE, cleanLabel } from '../../lib/scoreboard/model.js';
+  import { resolveDeepBadgeHex } from '../../lib/group-picker/recolor.js';
   import { fitGrid } from '../../lib/scoreboard/layout.js';
   import { fitFontSize } from '../../lib/scoreboard/fitText.js';
   import { formatStudentLabel, MAX_GROUP_NAME_CHARS } from '../../lib/group-picker/allocation.js';
@@ -81,9 +82,54 @@
     hoverGroupIdx: number | null;
   } | null>(null);
 
-  const grid = $derived(fitGrid(Math.max(1, groups.length), Math.max(240, gridW), Math.max(200, gridH), { gap: 12 }));
+  const grid = $derived(fitGrid(Math.max(1, groups.length), Math.max(240, gridW), Math.max(200, gridH), { gap: 14 }));
   const unlockedCount = $derived(groups.filter((g: any) => !g.locked).length);
-  const chipMaxW = $derived(Math.max(110, grid.cardW - 44));
+  const headBandH = $derived(gridW >= 1200 ? 60 : gridW >= 860 ? 52 : 44);
+  const headSymbolPx = $derived(gridW >= 1400 ? 30 : gridW >= 900 ? 26 : 21);
+
+  /** 카드별 가용 폭·높이와 멤버 수에 맞춘 균등 타일 cols × rows · 아바타 · 글꼴 크기 계산 */
+  function tileLayoutFor(ids: string[]) {
+    void fontEpoch;
+    const count = Math.max(1, ids.length);
+    const innerW = Math.max(120, grid.cardW - 26);
+    const innerH = Math.max(96, grid.cardH - headBandH - 22);
+    const gap = gridW < 860 ? 6 : 8;
+    const maxCols = innerW >= 340 ? Math.min(3, count) : innerW >= 200 ? Math.min(2, count) : 1;
+
+    let bestCols = 1;
+    let bestScore = -Infinity;
+    for (let c = 1; c <= maxCols; c++) {
+      const r = Math.ceil(count / c);
+      const cw = (innerW - (c - 1) * gap) / c;
+      const ch = (innerH - (r - 1) * gap) / r;
+      if (cw < 96) continue;
+      const effH = Math.max(32, Math.min(76, ch));
+      const sc = Math.min(cw / 145, effH / 48) * 100 + effH;
+      if (sc > bestScore) {
+        bestScore = sc;
+        bestCols = c;
+      }
+    }
+
+    const tRows = Math.max(1, Math.ceil(count / bestCols));
+    const cellW = Math.max(88, (innerW - (bestCols - 1) * gap) / bestCols);
+    const rawCellH = Math.floor((innerH - (tRows - 1) * gap) / tRows);
+    const chipH = Math.max(gridW < 860 ? 34 : 44, Math.min(76, rawCellH));
+    const avatarPx = Math.max(20, Math.min(50, Math.round(chipH * 0.68), Math.round(cellW * 0.24)));
+    const maxFontPx = Math.min(34, Math.max(15, Math.round(chipH * 0.50)));
+    const minFontPx = gridW < 860 ? 10.5 : 15;
+    const chromeW = gridW < 860 ? 25 : 32;
+    const textAvail = Math.max(28, cellW - avatarPx - chromeW);
+
+    return {
+      tCols: bestCols,
+      chipH,
+      avatarPx,
+      maxFontPx,
+      minFontPx,
+      textAvail,
+    };
+  }
 
   /** 카드 내 학생 정렬(뽑힌순 vs 번호순) */
   function orderedIds(ids: string[]) {
@@ -98,17 +144,13 @@
     });
   }
 
-  function fontSizeFor(label: string) {
-    void fontEpoch;
-    // 전자칠판 1080p+(큰 카드): 22~40px Bold, 기본창: 16~24px, 최소창 800×560: >= 12px (PRD §2.3)
-    const maxPx = grid.cardH > 320 ? 38 : grid.cardH > 240 ? 28 : grid.cardH > 180 ? 22 : 16;
-    const minPx = gridW < 760 ? 12 : 15;
+  function fontSizeFor(label: string, tl: ReturnType<typeof tileLayoutFor>) {
     return fitFontSize(label, {
       family: fontFamily,
       weight: 800,
-      avail: Math.max(72, chipMaxW / (grid.cardW > 380 ? 2.25 : 1.35) - 38),
-      max: maxPx,
-      min: minPx,
+      avail: tl.textAvail,
+      max: tl.maxFontPx,
+      min: Math.min(tl.minFontPx, tl.maxFontPx),
     }).size;
   }
 
@@ -267,9 +309,11 @@
     style:grid-template-columns={`repeat(${grid.cols}, minmax(0, 1fr))`}
     style:grid-auto-rows="minmax(0, 1fr)"
   >
-    {#each groups as grp (grp.index)}
+    {#each groups as grp, gi (grp.index)}
       {@const colorHex = COLOR_MAP[grp.color] ?? '#4FC2A0'}
+      {@const deepHex = resolveDeepBadgeHex(grp.color)}
       {@const displayIds = orderedIds(grp.studentIds)}
+      {@const tl = tileLayoutFor(displayIds)}
       {@const isDropHover = dragState?.active && dragState.hoverGroupIdx === grp.index && !grp.studentIds.includes(dragState.studentId)}
 
       <div
@@ -277,15 +321,17 @@
         class:locked={grp.locked}
         class:drop-target={isDropHover}
         style:--g-color={colorHex}
+        style:--g-deep={deepHex}
+        style:--card-idx={gi}
         data-gp-group={grp.index}
       >
-        <div class="gp-result-card-head">
+        <!-- 시안 1A: OKLab Deep 컬러 헤더 밴드 + 흰 심볼 + 확대 모둠명 + 반투명 인원 필 -->
+        <div class="gp-result-card-head" style:min-height={`${headBandH}px`}>
           <div class="gp-result-card-title">
-            <GroupSymbol symbol={grp.symbol} color={colorHex} size={gridW >= 1200 ? 25 : 22} />
+            <GroupSymbol symbol={grp.symbol} color="#ffffff" size={headSymbolPx} />
             {#if editingGroupIdx === grp.index}
               <input
-                class="gp-gname-input"
-                style="font-size:15px; height:28px"
+                class="gp-gname-input gp-result-head-input"
                 maxlength={MAX_GROUP_NAME_CHARS}
                 bind:value={editingName}
                 aria-label={`${grp.index + 1}모둠 이름 수정`}
@@ -310,11 +356,11 @@
             {/if}
           </div>
 
-          <div style="display:flex; align-items:center; gap:4px">
-            <span style="font-size:15.5px; font-weight:800; color:var(--gp-muted)">{grp.studentIds.length}명</span>
+          <div class="gp-result-head-actions">
+            <span class="gp-result-count-pill">{grp.studentIds.length}명</span>
             <button
               type="button"
-              class="gp-mini-icon-btn"
+              class="gp-mini-icon-btn gp-result-lock-btn"
               class:locked={grp.locked}
               title={grp.locked ? '이 모둠 잠금 풀기' : '이 모둠 구성 잠그기 (부분 재추첨 제외)'}
               aria-label={grp.locked ? `${grp.name} 잠금 풀기` : `${grp.name} 잠그기`}
@@ -323,12 +369,17 @@
                 onToggleLock(grp.index);
               }}
             >
-              {#if grp.locked}<Lock size={14} />{:else}<LockOpen size={14} />{/if}
+              {#if grp.locked}<Lock size={15} />{:else}<LockOpen size={15} />{/if}
             </button>
           </div>
         </div>
 
-        <div class="gp-members-wrap">
+        <div
+          class="gp-members-wrap"
+          style:--t-cols={tl.tCols}
+          style:--chip-h={`${tl.chipH}px`}
+          style:--avatar-px={`${tl.avatarPx}px`}
+        >
           {#each displayIds as sid (sid)}
             {@const st = studentMap[sid]}
             {#if st}
@@ -341,7 +392,8 @@
                 class:selected={selectedId === sid || dragState?.hoverStudentId === sid}
                 data-gp-student={sid}
                 style:--g-color={colorHex}
-                style:font-size={`${fontSizeFor(label)}px`}
+                style:--g-deep={deepHex}
+                style:font-size={`${fontSizeFor(label, tl).toFixed(1)}px`}
                 onpointerdown={(e) => handleChipPointerDown(e, sid)}
                 onclick={(e) => {
                   e.stopPropagation();

@@ -6,6 +6,7 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { isMealWindowLabel } from "./lib/windows/windowLabels.js";
 import { DATE_PICKER_LABEL } from "./lib/datePicker/protocol.js";
 import { FONT_PICKER_LABEL } from "./lib/fonts/fontPickerProtocol.js";
+import { DDAY_WIDGET_MENU_LABEL } from "./lib/dday/ddayWidgetMenuProtocol.js";
 
 // 급식 창은 App의 저장·매니저 효과 자체를 실행하지 않는 독립 진입점을 사용합니다.
 const label = isTauri()
@@ -51,6 +52,13 @@ async function start() {
   if (!isTauri() && import.meta.env.DEV && new URLSearchParams(location.search).has("font-picker-preview")) {
     const { default: FontPickerPreview } = await import("./dev/FontPickerPreview.svelte");
     return mount(FontPickerPreview, { target });
+  }
+  if (
+    label === DDAY_WIDGET_MENU_LABEL ||
+    (!isTauri() && import.meta.env.DEV && new URLSearchParams(location.search).has("dday-widget-menu-preview"))
+  ) {
+    const { default: DdayWidgetMenuWindow } = await import("./components/dday/DdayWidgetMenuWindow.svelte");
+    return mount(DdayWidgetMenuWindow, { target });
   }
   if (
     label === 'dday-control' ||

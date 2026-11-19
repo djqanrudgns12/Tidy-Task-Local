@@ -8,6 +8,7 @@
     formatDotDate,
     resolveToneColor,
   } from '../../lib/dday/ddayModel.js';
+  import { badgePaletteToStyle, resolveTodoBadgeModel } from '../../lib/dday/ddayBadge.js';
   import DdayIcon from './DdayIcon.svelte';
 
   /**
@@ -15,6 +16,7 @@
    *   items?: import('../../lib/dday/ddayModel.js').DdayItem[],
    *   mode?: import('../../lib/dday/ddayModel.js').DdayBannerMode,
    *   todayKey?: string,
+   *   themeColor?: string,
    *   accent?: string,
    *   dark?: boolean,
    *   compact?: boolean,
@@ -26,6 +28,7 @@
     items = undefined,
     mode = undefined,
     todayKey = undefined,
+    themeColor = undefined,
     accent = undefined,
     dark = undefined,
     compact = false,
@@ -34,6 +37,7 @@
   } = $props();
 
   const resolvedDark = $derived(dark ?? appState.isDarkMode);
+  const resolvedThemeColor = $derived(themeColor ?? appState.themeColor);
   const resolvedAccent = $derived(accent ?? appState.getThemeAccentColor());
   const resolvedToday = $derived(todayKey ?? appState.todayKey);
   const resolvedMode = $derived(mode ?? appState.ddayBannerMode);
@@ -114,6 +118,10 @@
       {@const toneColor = resolveToneColor(singleItem.tone, resolvedAccent)}
       {@const counter = computeDdayCounter(singleItem, resolvedToday)}
       {@const progress = computeProgressPercent(singleItem, resolvedToday)}
+      {@const badge = resolveTodoBadgeModel(singleItem, resolvedToday, {
+        themeColor: resolvedThemeColor,
+        dark: resolvedDark,
+      })}
       <div
         class="b3-card"
         data-scheme={resolvedDark ? 'dark' : 'light'}
@@ -124,12 +132,27 @@
         <div class="b3-main-row">
           <button
             type="button"
-            class="b3-pill-btn tnum"
-            class:overdue={counter.state === 'overdue'}
+            class="b3-chip-btn"
+            class:is-dashed={badge.dashed}
+            class:is-solid={badge.palette.solid}
+            class:is-today={badge.badgeKind === 'countdown-today'}
+            data-scheme={resolvedDark ? 'dark' : 'light'}
+            style={badgePaletteToStyle(badge.palette)}
             onclick={() => openItem(singleItem.id)}
-            title="클릭하여 D-Day 컨트롤 열기"
+            title={badge.title}
+            aria-label={`${singleItem.title}, ${badge.ariaLabel}`}
           >
-            {counter.label}
+            <span class="b3-chip-icon" aria-hidden="true">
+              <DdayIcon
+                icon={singleItem.icon}
+                tone={singleItem.tone}
+                accent={resolvedAccent}
+                size={13}
+                dark={resolvedDark}
+                variant="bare"
+              />
+            </span>
+            <span class="b3-chip-label tnum">{badge.label}</span>
           </button>
 
           <button
@@ -138,7 +161,6 @@
             onclick={() => openItem(singleItem.id)}
             title={`${singleItem.title} · ${formatDotDate(counter.effectiveDate)}`}
           >
-            <DdayIcon icon={singleItem.icon} tone={singleItem.tone} accent={resolvedAccent} size={20} dark={resolvedDark} />
             <span class="b3-title">{singleItem.title}</span>
             <span class="b3-date tnum">{formatDotDate(counter.effectiveDate)}</span>
           </button>
@@ -166,6 +188,10 @@
             {@const toneColor = resolveToneColor(item.tone, resolvedAccent)}
             {@const counter = computeDdayCounter(item, resolvedToday)}
             {@const progress = computeProgressPercent(item, resolvedToday)}
+            {@const badge = resolveTodoBadgeModel(item, resolvedToday, {
+              themeColor: resolvedThemeColor,
+              dark: resolvedDark,
+            })}
             <button
               type="button"
               class="b3-mini-card"
@@ -178,7 +204,13 @@
             >
               <span class="b3-mini-top">
                 <span class="b3-mini-ttl">{item.title}</span>
-                <span class="b3-mini-badge tnum">{counter.label}</span>
+                <span
+                  class="b3-mini-badge"
+                  class:is-dashed={badge.dashed}
+                  style={badgePaletteToStyle(badge.palette)}
+                >
+                  <span class="b3-mini-badge-label tnum">{badge.label}</span>
+                </span>
               </span>
               <span class="b3-track"><span class="b3-fill" style="width: {progress}%;"></span></span>
             </button>
@@ -225,8 +257,12 @@
 
   .b3-card {
     border-radius: 11px;
-    background: linear-gradient(155deg, color-mix(in srgb, var(--dd-tone) 7%, #ffffff) 0%, #ffffff 100%);
-    border: 1px solid color-mix(in srgb, var(--dd-tone) 22%, rgba(15, 23, 42, 0.08));
+    background: linear-gradient(
+      155deg,
+      color-mix(in srgb, var(--dd-tone) 7%, var(--dd-ctrl-surface, #ffffff)) 0%,
+      var(--dd-ctrl-surface, #ffffff) 100%
+    );
+    border: 1px solid color-mix(in srgb, var(--dd-tone) 22%, var(--dd-ctrl-line, rgba(15, 23, 42, 0.08)));
     box-shadow: 0 2px 8px color-mix(in srgb, var(--dd-tone) 9%, transparent);
     padding: 5px 8px 6px;
     display: flex;
@@ -235,8 +271,12 @@
     transition: border-color 140ms ease, box-shadow 140ms ease;
   }
   .b3-card[data-scheme='dark'] {
-    background: linear-gradient(155deg, color-mix(in srgb, var(--dd-tone) 14%, #252935) 0%, #20242e 100%);
-    border-color: color-mix(in srgb, var(--dd-tone) 28%, rgba(255, 255, 255, 0.1));
+    background: linear-gradient(
+      155deg,
+      color-mix(in srgb, var(--dd-tone) 14%, var(--dd-ctrl-surface, #252935)) 0%,
+      var(--dd-ctrl-surface, #20242e) 100%
+    );
+    border-color: color-mix(in srgb, var(--dd-tone) 28%, var(--dd-ctrl-line, rgba(255, 255, 255, 0.1)));
     box-shadow: 0 3px 10px rgba(0, 0, 0, 0.25);
   }
 
@@ -247,35 +287,75 @@
     min-width: 0;
   }
 
-  .b3-pill-btn {
+  .b3-chip-btn {
+    --dd-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    min-width: 44px;
-    height: 23px;
-    padding: 0 7px;
-    border-radius: 7px;
-    background: color-mix(in srgb, var(--dd-tone) 15%, #ffffff);
-    color: color-mix(in srgb, var(--dd-tone) 86%, #111827);
-    border: 1px solid color-mix(in srgb, var(--dd-tone) 28%, transparent);
+    gap: 3.5px;
+    height: 22px;
+    padding: 0 7px 0 4.5px;
+    border-radius: 999px;
+    border: 1px solid var(--dd-border);
+    background-color: var(--dd-bg);
+    color: var(--dd-ink);
+    /* 할 일 스마트 칩(DdayTodoChip)과 동일한 아래쪽 안쪽 딱지 받침으로 규격을 통일합니다. */
+    box-shadow: inset 0 -1.5px 0 var(--dd-rim);
+    font-family: var(--ui-font-family);
     font-size: 10.5px;
     font-weight: 800;
+    line-height: 1;
     flex-shrink: 0;
     cursor: pointer;
     white-space: nowrap;
-    transition: background-color 140ms ease, color 140ms ease, transform 120ms ease;
+    user-select: none;
+    box-sizing: border-box;
+    transition:
+      background-color 140ms ease,
+      border-color 140ms ease,
+      transform 200ms var(--dd-spring);
   }
-  .b3-card[data-scheme='dark'] .b3-pill-btn {
-    background: color-mix(in srgb, var(--dd-tone) 25%, #1e222c);
-    color: color-mix(in srgb, var(--dd-tone) 84%, #ffffff);
-    border-color: color-mix(in srgb, var(--dd-tone) 38%, transparent);
+  .b3-chip-btn.is-dashed {
+    border-style: dashed;
   }
-  .b3-pill-btn:hover {
-    background: var(--dd-tone);
-    color: #ffffff;
-    border-color: transparent;
+  .b3-chip-btn:hover {
+    background-color: var(--dd-hover-bg);
+    border-color: var(--dd-hover-border);
+    transform: translateY(-0.5px) scale(1.03);
   }
-  .b3-pill-btn:active { transform: scale(0.96); }
+  .b3-chip-btn:active {
+    transform: scale(1.02, 0.92);
+    transition-duration: 140ms, 140ms, 90ms;
+  }
+  .b3-chip-btn:focus-visible {
+    outline: 2px solid var(--dd-focus);
+    outline-offset: 1.5px;
+  }
+  .b3-chip-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 13px;
+    height: 13px;
+    flex: none;
+    /* 하단 1.5px 딱지 림을 제외한 칩 표면에 시각 중앙으로 놓습니다. */
+    transform: translateY(-0.5px);
+  }
+  /* 당일(D-Day) 솔리드 강조 칩 위에서도 21종 커스텀 스티커의 줄기·윤곽이 묻히지 않게 대비를 보정합니다. */
+  .b3-chip-btn.is-solid[data-scheme='light'] .b3-chip-icon :global(.dday-bare) {
+    --dd-stem: #fffdf8;
+    filter: drop-shadow(0 0.5px 0.8px rgba(0, 0, 0, 0.28));
+  }
+  .b3-chip-btn.is-solid[data-scheme='dark'] .b3-chip-icon :global(.dday-bare) {
+    --dd-stem: #3c3431;
+    filter: none;
+  }
+  .b3-chip-label {
+    display: inline-block;
+    line-height: 1;
+    /* 한글 폰트 em-box의 하단 descender 공백으로 글자가 위로 뜨는 현상을 실측 기준으로 광학 보정합니다. */
+    transform: translateY(var(--dd-label-nudge, 0.065em));
+  }
 
   .b3-body-btn {
     flex: 1;
@@ -295,21 +375,21 @@
     font-family: var(--global-font-family, var(--ui-font-family, 'Maplestory', sans-serif));
     font-size: min(12px, max(10.5px, 3.8cqi));
     font-weight: 700;
-    color: #1f2430;
+    color: var(--dd-ctrl-ink, #1f2430);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
   }
-  .b3-card[data-scheme='dark'] .b3-title { color: #e8edf5; }
+  .b3-card[data-scheme='dark'] .b3-title { color: var(--dd-ctrl-ink, #e8edf5); }
 
   .b3-date {
     font-size: 9.5px;
     font-weight: 600;
-    color: #646e7d;
+    color: var(--dd-ctrl-sub, #646e7d);
     white-space: nowrap;
     flex-shrink: 0;
   }
-  .b3-card[data-scheme='dark'] .b3-date { color: #9ca7b8; }
+  .b3-card[data-scheme='dark'] .b3-date { color: var(--dd-ctrl-sub, #9ca7b8); }
 
   .b3-nav {
     display: inline-flex;
@@ -367,8 +447,12 @@
   .b3-bento { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
   .b3-mini-card {
     border-radius: 10px;
-    background: linear-gradient(155deg, color-mix(in srgb, var(--dd-tone) 8%, #ffffff) 0%, #ffffff 100%);
-    border: 1px solid color-mix(in srgb, var(--dd-tone) 22%, rgba(15, 23, 42, 0.07));
+    background: linear-gradient(
+      155deg,
+      color-mix(in srgb, var(--dd-tone) 8%, var(--dd-ctrl-surface, #ffffff)) 0%,
+      var(--dd-ctrl-surface, #ffffff) 100%
+    );
+    border: 1px solid color-mix(in srgb, var(--dd-tone) 22%, var(--dd-ctrl-line, rgba(15, 23, 42, 0.07)));
     box-shadow: 0 2px 6px rgba(15, 23, 42, 0.04);
     padding: 5px 7px 6px;
     display: flex;
@@ -379,8 +463,12 @@
     text-align: left;
   }
   .b3-mini-card[data-scheme='dark'] {
-    background: linear-gradient(155deg, color-mix(in srgb, var(--dd-tone) 15%, #252935) 0%, #20242e 100%);
-    border-color: color-mix(in srgb, var(--dd-tone) 30%, rgba(255, 255, 255, 0.1));
+    background: linear-gradient(
+      155deg,
+      color-mix(in srgb, var(--dd-tone) 15%, var(--dd-ctrl-surface, #252935)) 0%,
+      var(--dd-ctrl-surface, #20242e) 100%
+    );
+    border-color: color-mix(in srgb, var(--dd-tone) 30%, var(--dd-ctrl-line, rgba(255, 255, 255, 0.1)));
   }
   .b3-mini-card:hover { border-color: var(--dd-tone); }
   .b3-mini-top {
@@ -396,25 +484,48 @@
     font-family: var(--global-font-family, var(--ui-font-family, 'Maplestory', sans-serif));
     font-size: 10.5px;
     font-weight: 700;
-    color: #1f2430;
+    color: var(--dd-ctrl-ink, #1f2430);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
   }
-  .b3-mini-card[data-scheme='dark'] .b3-mini-ttl { color: #e8edf5; }
+  .b3-mini-card[data-scheme='dark'] .b3-mini-ttl { color: var(--dd-ctrl-ink, #e8edf5); }
   .b3-mini-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    height: 18px;
+    padding: 0 5.5px;
+    border-radius: 999px;
+    border: 1px solid var(--dd-border);
+    background-color: var(--dd-bg);
+    color: var(--dd-ink);
+    box-shadow: inset 0 -1px 0 var(--dd-rim);
+    font-family: var(--ui-font-family);
     font-size: 9px;
     font-weight: 800;
-    padding: 1.5px 5.5px;
-    border-radius: 6px;
-    background: color-mix(in srgb, var(--dd-tone) 16%, #ffffff);
-    color: color-mix(in srgb, var(--dd-tone) 86%, #111827);
+    line-height: 1;
     flex-shrink: 0;
     white-space: nowrap;
+    box-sizing: border-box;
   }
-  .b3-mini-card[data-scheme='dark'] .b3-mini-badge {
-    background: color-mix(in srgb, var(--dd-tone) 26%, #1e222c);
-    color: color-mix(in srgb, var(--dd-tone) 84%, #ffffff);
+  .b3-mini-badge.is-dashed {
+    border-style: dashed;
+  }
+  .b3-mini-badge-label {
+    display: inline-block;
+    line-height: 1;
+    transform: translateY(var(--dd-label-nudge, 0.065em));
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .b3-chip-btn {
+      transition: background-color 140ms ease, border-color 140ms ease;
+    }
+    .b3-chip-btn:hover,
+    .b3-chip-btn:active {
+      transform: none;
+    }
   }
 
   .b3-bento-foot {

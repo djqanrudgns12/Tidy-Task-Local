@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Minus, Plus, Lock, LockOpen, Trash2, Sparkles } from 'lucide-svelte';
+  import { Minus, Plus, Lock, LockOpen, Trash2, Sparkles, PanelRightClose, ChevronDown, ChevronUp } from 'lucide-svelte';
   import GroupSymbol from '../scoreboard/GroupSymbol.svelte';
   import ToolkitSwitch from '../toolkit/ToolkitSwitch.svelte';
   import { PALETTE, cleanLabel } from '../../lib/scoreboard/model.js';
@@ -31,7 +31,12 @@
     rosterGroups = [],
     keepTotal,
     hasOnePersonDueToSmallN = false,
+    reducedMotion = false,
+    alwaysShowNumber = false,
+    compactHeight = false,
+    showCollapse = true,
     disabled = false,
+    onCollapse,
     onApplyRecommendation,
     onSwitchMode,
     onSetGroupCount,
@@ -44,6 +49,8 @@
     onRemoveGroup,
     onAutoBalance,
     onToggleKeepTotal,
+    onToggleReduced,
+    onToggleAlwaysNumber,
     onUpdateCustomLines,
   } = $props<{
     presentCount: number;
@@ -57,7 +64,12 @@
     rosterGroups?: { id: string; name: string }[];
     keepTotal: boolean;
     hasOnePersonDueToSmallN?: boolean;
+    reducedMotion?: boolean;
+    alwaysShowNumber?: boolean;
+    compactHeight?: boolean;
+    showCollapse?: boolean;
     disabled?: boolean;
+    onCollapse?: () => void;
     onApplyRecommendation: (groupCount: number) => void;
     onSwitchMode: (mode: 'byGroups' | 'bySize') => void;
     onSetGroupCount: (count: number) => void;
@@ -70,6 +82,8 @@
     onRemoveGroup: (index: number) => void;
     onAutoBalance: () => void;
     onToggleKeepTotal: (v: boolean) => void;
+    onToggleReduced?: (v: boolean) => void;
+    onToggleAlwaysNumber?: (v: boolean) => void;
     onUpdateCustomLines: (lines: string[]) => void;
   }>();
 
@@ -78,8 +92,19 @@
   let confirmOnePersonIdx = $state<number | null>(null);
   let customText = $state('');
   let editingCustom = $state(false);
+  let displayAccordionOpen = $state(false);
 
   const recs = $derived(recommendAllocations(presentCount));
+  const orderedRecs = $derived([...recs].sort((a, b) => a.groupCount - b.groupCount));
+  const recGridCols = $derived(
+    orderedRecs.length === 1
+      ? '1fr'
+      : orderedRecs.length === 2
+        ? 'repeat(2, minmax(0, 1fr))'
+        : orderedRecs.length === 3
+          ? 'repeat(3, minmax(0, 1fr))'
+          : 'repeat(2, minmax(0, 1fr))',
+  );
   const remInfo = $derived(
     baseIntent.mode === 'bySize' && presentCount >= 4
       ? computeRemainderOptions(presentCount, baseIntent.targetSize)
@@ -113,6 +138,13 @@
     if (cleaned) onRenameGroup(index, cleaned);
   }
 
+  /** 사이드바가 접히거나 서랍이 닫히기 전 편집 중이던 모둠 이름을 안전하게 커밋. */
+  export function flushPendingEdit() {
+    if (editingIdx != null) {
+      commitEditName(editingIdx);
+    }
+  }
+
   function tryStepMinus(index: number) {
     const res = onStepGroup(index, -1, false);
     if (res?.needsConfirm) confirmOnePersonIdx = index;
@@ -120,7 +152,25 @@
   }
 </script>
 
-<aside class="gp-sidebar" aria-label="모둠 인원 배정 설정">
+<aside class="gp-sidebar" aria-label="모둠 설정">
+  <div class="gp-sidebar-header">
+    <h2>모둠 설정</h2>
+    {#if showCollapse && onCollapse}
+      <button
+        type="button"
+        class="gp-collapse-btn"
+        aria-label="모둠 설정 접기"
+        title="모둠 설정 접기"
+        onclick={() => {
+          flushPendingEdit();
+          onCollapse?.();
+        }}
+      >
+        <span>접기</span>
+        <PanelRightClose size={16} />
+      </button>
+    {/if}
+  </div>
   {#if isCustomMode}
     <div class="gp-custom-editor">
       <div class="gp-rule-row">
@@ -158,19 +208,26 @@
     </div>
   {/if}
 
-  {#if recs.length > 0}
+  {#if orderedRecs.length > 0}
     <div>
       <p class="gp-section-title">스마트 추천 조합</p>
-      <div class="gp-rec-chips">
-        {#each recs as rec (rec.id)}
+      <div class="gp-rec-chips" style:grid-template-columns={recGridCols}>
+        {#each orderedRecs as rec (rec.id)}
           {@const active = baseIntent.mode === 'byGroups' && capacities.length === rec.groupCount && capacities.every((c: number, i: number) => c === rec.capacities[i])}
           <button
             type="button"
             class="gp-rec-chip"
             class:active
+            class:top-pick={rec.isTop}
             {disabled}
             onclick={() => onApplyRecommendation(rec.groupCount)}
-          >{rec.label}</button>
+          >
+            {#if rec.isTop}
+              <span class="gp-rec-top-pill">추천</span>
+            {/if}
+            <strong>{rec.groupCount}모둠</strong>
+            <small>{rec.shortSize}</small>
+          </button>
         {/each}
       </div>
     </div>
@@ -367,7 +424,7 @@
           disabled={disabled || !canAddGroup({ capacities, locks, pinnedFloors, n: presentCount })}
           onclick={onAddGroup}
         >+ 모둠 추가</button>
-        <div style="display:inline-flex; align-items:center; gap:6px; font-size:11.5px; font-weight:700; color:var(--gp-muted)">
+        <div class="gp-keep-total-row">
           <span>합계 유지</span>
           <ToolkitSwitch checked={keepTotal} label="한 모둠 인원을 바꿀 때 전체 합계 유지" {disabled} onchange={onToggleKeepTotal} />
         </div>
@@ -384,8 +441,8 @@
       <div class="gp-sum-quiet">
         <span>참여 {presentCount}명 · 배분 완료</span>
         {#if hasOnePersonDueToSmallN}
-          <span style="display:block; margin-top:2px; font-size:11px; color:var(--gp-accent)">
-            <Sparkles size={11} style="display:inline; vertical-align:-1px" /> 인원이 적어 1인 모둠이 포함돼요
+          <span class="gp-small-n-note">
+            <Sparkles size={12} style="display:inline; vertical-align:-1px" /> 인원이 적어 1인 모둠이 포함돼요
           </span>
         {/if}
       </div>
@@ -398,6 +455,45 @@
         <button type="button" class="gp-auto-fix-btn" {disabled} onclick={onAutoBalance}>
           {locks.some((l: number | null) => l != null) ? '잠금 제외 자동 맞추기' : '나머지 자동 맞추기'}
         </button>
+      </div>
+    {/if}
+  </div>
+
+  <!-- 학급별 정원과 구분선으로 분리된 전역 표시 옵션 구역 (<660px 에서는 접이식 아코디언) -->
+  <div class="gp-global-prefs-card" class:compact-height={compactHeight}>
+    {#if compactHeight}
+      <button
+        type="button"
+        class="gp-accordion-toggle"
+        aria-expanded={displayAccordionOpen}
+        onclick={() => (displayAccordionOpen = !displayAccordionOpen)}
+      >
+        <span>표시 옵션 (2)</span>
+        {#if displayAccordionOpen}<ChevronUp size={15} />{:else}<ChevronDown size={15} />{/if}
+      </button>
+    {:else}
+      <div class="gp-global-prefs-title">표시 옵션</div>
+    {/if}
+
+    {#if !compactHeight || displayAccordionOpen}
+      <div class="gp-global-prefs-list">
+        <div class="gp-global-pref-row">
+          <span>동작 감소 모드</span>
+          <ToolkitSwitch
+            checked={reducedMotion}
+            label="동작 감소 모드"
+            {disabled}
+            onchange={(v) => onToggleReduced?.(v)}
+          />
+        </div>
+        <div class="gp-global-pref-row">
+          <span>번호 항상 보기</span>
+          <ToolkitSwitch
+            checked={alwaysShowNumber}
+            label="번호 항상 보기"
+            onchange={(v) => onToggleAlwaysNumber?.(v)}
+          />
+        </div>
       </div>
     {/if}
   </div>

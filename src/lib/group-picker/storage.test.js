@@ -27,10 +27,12 @@ function assertScoresRsLimits(value, depth = 0) {
 }
 
 test('normalized group-picker stores respect Rust scores.rs depth, string, array and byte limits', () => {
-  const prefs = normalizePrefs({ lastMode: 'unknown', volume: 999, keepTotal: 'bad' });
+  const prefs = normalizePrefs({ lastMode: 'unknown', volume: 999, keepTotal: 'bad', setupPanelOpen: 'invalid' });
   assert.equal(prefs.lastMode, 'train');
   assert.equal(prefs.volume, 60);
   assert.equal(prefs.keepTotal, false);
+  assert.equal(prefs.setupPanelOpen, true);
+  assert.equal(normalizePrefs({ setupPanelOpen: false }).setupPanelOpen, false);
   assertScoresRsLimits(prefs);
 
   /** @type {Record<string, any>} */

@@ -11,6 +11,7 @@
    *
    * @type {{
    *   meta: import('../../lib/windows/contextMenuLayout.js').buildDdayBannerMeta extends (...args: any[]) => infer R ? NonNullable<R> : any,
+   *   widgetOpen?: boolean,
    *   canUndo?: boolean,
    *   canRedo?: boolean,
    *   onaction: (action: string) => void,
@@ -19,6 +20,7 @@
    */
   let {
     meta,
+    widgetOpen = false,
     canUndo = false,
     canRedo = false,
     onaction,
@@ -149,6 +151,21 @@
   {:else if showBentoHint}
     <p class="dday-hint" role="status">배너 항목 2건 이상일 때 2열로 표시돼요</p>
   {/if}
+  <div class="dday-card-divider" aria-hidden="true"></div>
+  <button
+    type="button"
+    role="menuitemcheckbox"
+    aria-checked={widgetOpen}
+    class="dday-switch-row"
+    title={widgetOpen ? '바탕화면 D-Day 위젯 닫기' : '바탕화면 D-Day 위젯 바로 띄우기'}
+    onclick={() => onliveaction({ kind: 'toggle', action: 'toggle-dday-widget' })}
+  >
+    <span class="dday-sw-ic" class:on={widgetOpen} aria-hidden="true">
+      <LayoutGrid size={11.5} strokeWidth={2} />
+    </span>
+    <span class="dday-sw-label">D-Day 위젯</span>
+    <span class="dday-sw-knob" class:on={widgetOpen} aria-hidden="true"><i></i></span>
+  </button>
 </div>
 
 <!-- ④ 하단 모노라인 아이콘 유틸 독 -->
@@ -157,22 +174,10 @@
     <button
       type="button"
       role="menuitem"
-      class="dock-btn ctx-tip tip-left"
-      data-tip="새 D-Day"
+      class="dock-pill"
       title="새 D-Day 추가"
-      aria-label="새 D-Day 추가"
       onclick={() => onaction('dday-create')}
-    ><Plus size={12.5} strokeWidth={2.05} /></button>
-
-    <button
-      type="button"
-      role="menuitem"
-      class="dock-btn ctx-tip"
-      data-tip="위젯 창"
-      title="바탕화면 D-Day 위젯 띄우기"
-      aria-label="바탕화면 D-Day 위젯 띄우기"
-      onclick={() => onaction('open-dday-widget')}
-    ><LayoutGrid size={12} strokeWidth={1.9} /></button>
+    ><Plus size={11.5} strokeWidth={2.2} /><span>새 D-Day</span></button>
   {/snippet}
 
   {#snippet right()}
@@ -221,5 +226,85 @@
     color: var(--ctx-muted);
     text-align: center;
     letter-spacing: -0.02em;
+  }
+
+  .dday-card-divider {
+    height: 1px;
+    margin: 1px 2px;
+    background: var(--ctx-line);
+  }
+
+  .dday-switch-row {
+    width: 100%;
+    height: 24px;
+    padding: 0 5px;
+    border: 0;
+    border-radius: var(--ctx-radius-ctrl, 6px);
+    background: transparent;
+    color: var(--ctx-ink);
+    font-family: inherit;
+    font-size: clamp(9.5px, 0.8em, 10.5px);
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    text-align: left;
+    cursor: pointer;
+    transition: background-color 110ms ease;
+  }
+  .dday-switch-row:hover {
+    background: var(--ctx-hover);
+  }
+  .dday-switch-row:focus {
+    outline: none;
+  }
+  .dday-switch-row:focus-visible {
+    outline: 1.5px solid var(--ctx-accent);
+    outline-offset: -1px;
+  }
+
+  .dday-sw-ic {
+    display: flex;
+    color: var(--ctx-muted);
+    transition: color 120ms ease;
+  }
+  .dday-sw-ic.on {
+    color: var(--ctx-accent);
+  }
+
+  .dday-sw-label {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .dday-sw-knob {
+    position: relative;
+    flex-shrink: 0;
+    width: 24px;
+    height: 14px;
+    border-radius: 999px;
+    background: var(--ctx-line-outer);
+    transition: background-color 140ms ease;
+  }
+  .dday-sw-knob i {
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: #ffffff;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+    transition: transform 140ms cubic-bezier(0.3, 1.3, 0.5, 1);
+  }
+  .dday-sw-knob.on {
+    background: var(--ctx-accent);
+  }
+  .dday-sw-knob.on i {
+    transform: translateX(10px);
   }
 </style>

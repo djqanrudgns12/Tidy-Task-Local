@@ -1,6 +1,9 @@
 <script>
   import ToolkitToggle from './toolkit/ToolkitToggle.svelte';
-  import { Plus, ChevronDown, Menu, StickyNote, CopyPlus, Archive, MousePointer2, Settings, CircleHelp, Trash2, Check, Flag } from 'lucide-svelte';
+  import DdayWidgetToggle from './dday/DdayWidgetToggle.svelte';
+  import { Plus, ChevronDown, Menu, StickyNote, CopyPlus, Archive, MousePointer2, Settings, CircleHelp, Trash2, Check } from 'lucide-svelte';
+  import DdayControlGlyph from './dday/DdayControlGlyph.svelte';
+  import { resolveControlGlyphState } from '../lib/dday/ddayBadge.js';
   import { getCurrentWindow } from '@tauri-apps/api/window';
   import { handleSettings } from '../lib/headerWindows.js';
   import { emitTo } from '@tauri-apps/api/event';
@@ -13,6 +16,12 @@
   let resetError = $state('');
   let resetting = $state(false);
   let actionError = $state('');
+  const controlGlyph = $derived(
+    resolveControlGlyphState(appState.activeDdays, appState.todayKey, {
+      themeColor: appState.themeColor,
+      dark: appState.isDarkMode,
+    }),
+  );
   /** @param {() => unknown} action */
   async function run(action) { try { actionError = ''; await action(); } catch { actionError = '열지 못했어요. 잠시 후 다시 시도해 주세요.'; } }
   async function confirmReset() {
@@ -42,7 +51,7 @@
     {#snippet children(close)}
       
       <button class="tidy-header-menuitem" onclick={() => { close(); run(() => appState.openDdayControl()); }}>
-        <Flag size={17}/>
+        <DdayControlGlyph state={controlGlyph} size={19} />
         <span>D-Day 컨트롤</span>
         {#if appState.activeDdays.length > 0}<small class="header-dday-count">{appState.activeDdays.length}</small>{/if}
       </button>
@@ -50,6 +59,7 @@
       <button class="tidy-header-menuitem" aria-pressed={appState.isEditMode} onclick={() => { appState.toggleEditMode(); close(); }}><MousePointer2 size={17}/><span>{appState.isEditMode ? '여러 항목 선택 종료' : '여러 항목 선택'}</span>{#if appState.isEditMode}<Check size={15}/>{/if}</button>
       <div class="tidy-header-divider"></div>
       <ToolkitToggle/>
+      <DdayWidgetToggle/>
       <label class="tidy-header-opacity"><span>창 불투명도</span><output>{Math.round(appState.opacity * 100)}%</output><input aria-label="창 불투명도" type="range" min="0.2" max="1" step="0.05" bind:value={appState.opacity} onchange={() => appState.save()}/></label>
       <div class="tidy-header-divider"></div>
       <button class="tidy-header-menuitem" onclick={() => { close(); run(handleSettings); }}><Settings size={17}/><span>설정</span></button>

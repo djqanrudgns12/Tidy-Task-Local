@@ -57,6 +57,7 @@
 }
 .tidy-header-menuitem:hover { background: var(--header-hover); }
 .tidy-header-menuitem > svg { flex-shrink:0; color:var(--header-muted); width:25px; height:25px; padding:5px; background:var(--header-tint); border-radius:7px; }
+.tidy-header-menuitem > svg.dday-ctrl-glyph { padding: 2.5px; }
 .tidy-header-menuitem > span { flex:1; font-size:11px; }
 .tidy-header-menuitem strong { display: block; font-size: 11px; font-weight: 600; }
 .tidy-header-menuitem small { display: block; color: var(--header-muted); font-size: 10px; margin-top: 2px; }

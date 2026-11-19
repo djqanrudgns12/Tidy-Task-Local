@@ -1,0 +1,12 @@
+{
+  "capturedAt": "2026-11-19T07:24:02.892Z",
+  "base": "http://localhost:5173",
+  "captures": [
+    {
+      "name": "font-picker",
+      "width": 512,
+      "height": 672,
+      "kb": 29
+    }
+  ]
+}

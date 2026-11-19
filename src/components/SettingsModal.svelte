@@ -27,6 +27,7 @@
   import { appState } from '../lib/appState.svelte.js';
   import { track } from '../lib/analytics.js';
   import { TIDY_THEMES, getTidyTheme } from '../lib/themes.js';
+  import { mixHex } from '../lib/dday/ddayBadge.js';
   import { openReleaseNews } from '../lib/releaseNewsWindow.js';
   import { readLaunchAtStartup, setLaunchAtStartup } from '../lib/autostart.js';
   import {
@@ -65,6 +66,13 @@
   // (getTidyTheme은 모르는 이름이면 기본 테마를 돌려주지만 타입으로는 드러나지 않아 한 번 더 받쳐 둡니다)
   const theme = $derived((getTidyTheme(form.themeColor) ?? TIDY_THEMES[0]).tidy);
   const accent = $derived(form.isDarkMode ? theme.accentDark : theme.accent);
+  const stBg = $derived(form.isDarkMode ? '#232530' : theme.bg);
+  // 반투명 rgba 외곽 보더 대신 불투명 6자리 Hex 내측 림을 계산해 고DPI 모서리 번짐을 0px로 막습니다.
+  const stEdgeSolid = $derived(
+    form.isDarkMode
+      ? mixHex('#ffffff', '#232530', 0.16)
+      : mixHex('#0f172a', theme.bg, 0.13),
+  );
 
   // 글꼴 이름(예: "맑은고딕")을 실제 font-family 값으로 바꿉니다.
   /** @param {string} name */
@@ -152,15 +160,11 @@
   /** @param {Element | null} anchor */
   function holdAnchorInPlace(anchor) {
     if (!scrollBox || !(anchor instanceof Element)) return;
-    // 같은 컨트롤을 연달아 움직이는 동안에는 처음 잡은 위치를 그대로 기준으로 씁니다.
-    // 왜: 매번 새로 재면 전환 중 조금씩 밀린 위치가 기준이 되어 오차가 쌓입니다.
-    // 이 시점은 값만 바뀌고 화면(DOM)은 아직 옛 글자 크기라 "바뀌기 전 위치"가 잡힙니다.
     if (!pin || pin.anchor !== anchor) {
       releasePin();
       pin = { anchor, top: anchor.getBoundingClientRect().top, until: 0, frame: 0 };
     }
     pin.until = performance.now() + PIN_HOLD_MS;
-    // 새 글자 크기가 DOM에 들어간 직후(그리기 전)에 한 번, 이후 전환 동안 매 프레임 맞춥니다.
     tick().then(correctDrift);
     if (!pin.frame) pin.frame = requestAnimationFrame(followPin);
   }
@@ -450,7 +454,7 @@
 
   onMount(async () => {
     // ✨ 1. 무전을 받으면 타겟 이름과 그 창의 최신 설정값으로 화면을 덮어씁니다!
-    unlistenTarget = await listen('set-settings-target', (event) => {
+    unlistenTarget = await listen('set-settings-target', async (event) => {
       const data = /** @type {{ targetLabel: string, settings: Record<string, any> }} */ (event.payload);
       targetLabel = data.targetLabel;
       // 나를 부른 메모장의 진짜 설정으로 화면을 맞춥니다.
@@ -458,6 +462,14 @@
       const received = readSettingsForm(data.settings, { globalMuteSound: appState.globalMuteSound });
       form = received;
       initial = { ...received };
+      await tick();
+      try {
+        const win = getCurrentWindow();
+        if (win.label === 'settings') {
+          await win.show();
+          await win.setFocus();
+        }
+      } catch {}
     });
 
     // ✨ 2. 수신기 세팅이 끝났으니, 메모장들에게 "나 준비됐어!" 라고 알립니다.
@@ -489,7 +501,7 @@
 <div
   class="st-root"
   class:st-dark={form.isDarkMode}
-  style="font-family:{uiFontStack}; font-size:{form.uiFontSize}pt; --st-bg:{form.isDarkMode ? '#232530' : theme.bg}; --st-accent:{accent};"
+  style="font-family:{uiFontStack}; font-size:{form.uiFontSize}pt; --st-bg:{stBg}; --st-edge-solid:{stEdgeSolid}; --st-accent:{accent};"
 >
   <!-- 확인 창이 떠 있는 동안 뒤 화면은 누르거나 Tab으로 들어갈 수 없습니다(inert). -->
   <div class="st-main" inert={dialog !== null}>
@@ -726,7 +738,7 @@
               <span class="st-news-icon" aria-hidden="true"><Sparkles size={15} strokeWidth={2.3} /></span>
               <span class="st-news-text">
                 <strong>새로운 소식</strong>
-                <small>5.6.3 업데이트 · 지난 소식 · 롤링 썬더</small>
+                <small>6.0.0 업데이트 · 툴킷 전체</small>
               </span>
               <ArrowUpRight size={16} aria-hidden="true" />
             </button>
@@ -955,9 +967,12 @@
     width: 100vw;
     height: 100vh;
     overflow: hidden;
-    border: 1px solid var(--st-edge);
+    border: 0;
     border-radius: 14px;
     background: var(--st-bg);
+    background-clip: padding-box;
+    box-shadow: none;
+    isolation: isolate;
     color: var(--st-ink);
     line-height: 1.5;
     letter-spacing: 0;
@@ -965,6 +980,15 @@
     word-break: keep-all;
     overflow-wrap: anywhere;
     transition: background-color 0.25s, color 0.25s;
+  }
+  .st-root::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: 60;
+    border-radius: inherit;
+    pointer-events: none;
+    box-shadow: inset 0 0 0 1px var(--st-edge-solid);
   }
   .st-root.st-dark {
     --st-ink: #e5e7eb;
@@ -992,7 +1016,14 @@
     --st-danger-soft: rgba(248, 113, 113, 0.13);
     --st-danger-line: rgba(248, 113, 113, 0.45);
   }
-  :global(body) { background: transparent !important; }
+  :global(html),
+  :global(body),
+  :global(#app) {
+    background: transparent !important;
+    margin: 0;
+    padding: 0;
+    overflow: hidden;
+  }
 
   .st-main {
     height: 100%;

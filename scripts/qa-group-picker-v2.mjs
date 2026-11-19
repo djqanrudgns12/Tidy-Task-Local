@@ -69,6 +69,24 @@ async function selectTheme(page, label) {
   await sleep(220);
 }
 
+/** 좁은 창 서랍 모드에서 모둠 설정 열기/닫기 */
+async function ensureSetupOpen(page, useClock = false) {
+  const reopen = page.locator('.gp-setup-reopen-tab');
+  if (await reopen.count()) {
+    await reopen.click();
+    await (useClock ? page.clock.runFor(320) : sleep(320));
+  }
+}
+
+async function ensureSetupClosed(page, useClock = false) {
+  if (await page.locator('.gp-setup-reopen-tab').count()) return;
+  const collapse = page.locator('.gp-sidebar-header .gp-collapse-btn');
+  if ((await collapse.count()) && (await collapse.isVisible())) {
+    await collapse.click();
+    await (useClock ? page.clock.runFor(320) : sleep(320));
+  }
+}
+
 /** 다크/라이트 스킴 토글 */
 async function setColorScheme(page, scheme) {
   await page.evaluate((s) => {
@@ -215,6 +233,35 @@ async function inspectDom(page, tag, expectRunning = false) {
       clippedSidebarFooter = sumFooter.getBoundingClientRect().bottom > sidebarAside.getBoundingClientRect().bottom + 2;
     }
 
+    // 3단 배치 좌->우 순서 검증 ([모둠 현황 | 무대 | 모둠 설정])
+    let threeColOrderOk = true;
+    const ws = document.querySelector('.gp-workspace');
+    const dock = document.querySelector('.gp-setup-dock');
+    const isDrawer = Boolean(document.querySelector('.gp-sidebar-slot.drawer'));
+    if (manifestEl && ws && !isDrawer && sidebarW > 20) {
+      const mr = manifestEl.getBoundingClientRect();
+      const wr = ws.getBoundingClientRect();
+      const sr = sidebar ? sidebar.getBoundingClientRect() : null;
+      threeColOrderOk = mr.right <= wr.left + 2 && (!sr || wr.right <= sr.left + 2);
+    }
+
+    const recChipCount = document.querySelectorAll('.gp-rec-chip').length;
+    const glacierDeepBadgeCount = document.querySelectorAll('.gp-glacier-deep-badge').length;
+    const mysteryPlates = [...document.querySelectorAll('.gp-mystery-plate')].map((el) => {
+      const r = el.getBoundingClientRect();
+      return { w: Number(r.width.toFixed(1)), h: Number(r.height.toFixed(1)) };
+    });
+    const fixedPlates = [...document.querySelectorAll('.gp-stage-nameplate.fixed-plate')].map((el) => {
+      const r = el.getBoundingClientRect();
+      return { w: Number(r.width.toFixed(1)), h: Number(r.height.toFixed(1)) };
+    });
+    const settlingVisible = Boolean(document.querySelector('.gp-settling-curtain .gp-settling-ribbon'));
+
+    let truncatedResultChipCount = 0;
+    for (const sp of document.querySelectorAll('.gp-member-chip span')) {
+      if (sp.scrollWidth > sp.clientWidth + 2) truncatedResultChipCount++;
+    }
+
     const manifestChips = [...document.querySelectorAll('.gp-slot-chip.filled')];
     const manifestFontPx = manifestChips.length
       ? Number.parseFloat(getComputedStyle(manifestChips[0]).fontSize)
@@ -222,6 +269,7 @@ async function inspectDom(page, tag, expectRunning = false) {
 
     const overflowControls = [];
     for (const el of document.querySelectorAll('.gp-primary-cta, .gp-pill-btn, .gp-skip-btn, .gp-hud-banner')) {
+      if (el.closest('[inert]')) continue;
       const r = el.getBoundingClientRect();
       if (r.width > 0 && (r.right > window.innerWidth + 1 || r.left < -1)) {
         overflowControls.push(el.textContent?.trim()?.slice(0, 24));
@@ -237,6 +285,16 @@ async function inspectDom(page, tag, expectRunning = false) {
       brokenImgs,
       hudOverlapPx: Number(hudOverlapPx.toFixed(2)),
       sidebarWidth: Number(sidebarW.toFixed(1)),
+      threeColOrderOk,
+      drawerMode: isDrawer,
+      recChipCount,
+      glacierDeepBadgeCount,
+      mysteryPlateCount: mysteryPlates.length,
+      mysteryPlates,
+      fixedPlateCount: fixedPlates.length,
+      fixedPlates,
+      settlingVisible,
+      truncatedResultChipCount,
       skipBtnSize: skipRect ? { w: Math.round(skipRect.width), h: Math.round(skipRect.height) } : null,
       bannerFontPx: Number(bannerFontPx.toFixed(1)),
       truncatedBannerCount,
@@ -252,6 +310,7 @@ async function inspectDom(page, tag, expectRunning = false) {
       clippedNameplates: clippedNameplates.slice(0, 5),
       overflowControls,
       expectRunning,
+      dockPresent: Boolean(dock),
     };
   }, { tag, expectRunning });
 }
@@ -356,16 +415,30 @@ async function main() {
       await page.screenshot({ path: path.join(OUT_DIR, '01-train-1440-light-idle.png') });
       checks.push(await inspectDom(page, 'train-1440-light-idle', false));
 
-      // T1 Running: 진입/탑승 (2.6s) + 포토피니시/후반 (~21s 전후 대신 2.6s & 건너뛰기)
+      // T1 Running: ??? 대기표 + 공개 플립 프레임 포착 -> 자연 settling (3A) -> settled
       await page.locator('.gp-primary-cta').click();
       await page.clock.runFor(900);
-      await page.clock.runFor(1800);
+      await page.clock.runFor(1600);
+      let foundFlip = false;
+      for (let st = 0; st < 28; st++) {
+        await page.clock.runFor(140);
+        const hasFlip = await page.evaluate(() => Boolean(document.querySelector('.gp-plate-flip-reveal')));
+        if (hasFlip) {
+          foundFlip = true;
+          break;
+        }
+      }
       await page.screenshot({ path: path.join(OUT_DIR, '02-train-1440-light-run-boarding.png') });
-      checks.push(await inspectDom(page, 'train-1440-light-run', true));
+      checks.push(await inspectDom(page, `train-1440-light-run-flip-${foundFlip}`, true));
 
-      // 건너뛰기 -> ResultBoard Light + PNG Export 검수
-      await page.locator('.gp-skip-btn').click();
-      await page.clock.runFor(250);
+      // 자연 종료 -> settling 전환 막(1.4s) 포착 후 자동 ResultBoard 진입 검증
+      await page.clock.fastForward(60000);
+      await page.clock.runFor(360);
+      await page.screenshot({ path: path.join(OUT_DIR, '02b-train-1440-light-settling.png') });
+      checks.push(await inspectDom(page, 'train-1440-light-settling', true));
+
+      await page.clock.runFor(2100);
+      await sleep(420);
       await page.screenshot({ path: path.join(OUT_DIR, '03-result-1440-light.png') });
       checks.push(await inspectDom(page, 'result-1440-light', false));
 
@@ -384,8 +457,8 @@ async function main() {
       await page.getByRole('button', { name: '설정 바꾸기' }).click();
       await page.clock.runFor(200);
 
-      // G1 Glacier (Dark idle + Act 2 Crack 6.2s + Act 3 Bridge 13.5s + Act 3 Hero Jump 18.4s)
-      await selectTheme(page, '빙하 갈라지기');
+      // G1 북극 분열 (Dark idle + Act 2 Crack 6.2s + Act 3 Bridge 13.5s + Act 3 Hero Jump 18.4s)
+      await selectTheme(page, '북극 분열');
       await page.clock.runFor(350);
       await page.screenshot({ path: path.join(OUT_DIR, '06-glacier-1440-dark-idle.png') });
       checks.push(await inspectDom(page, 'glacier-1440-dark-idle', false));
@@ -426,8 +499,8 @@ async function main() {
       // Act 3 문틈 손(Z3.5 e1-peek-fingers) 실측 탐색 후 정확한 프레임 캡처
       await page.clock.runFor(18200);
       let foundPeek = false;
-      for (let step = 0; step < 36; step++) {
-        await page.clock.runFor(130);
+      for (let step = 0; step < 96; step++) {
+        await page.clock.runFor(220);
         const hasFingers = await page.evaluate(() => Boolean(document.querySelector('img[src*="e1-peek-fingers"]')));
         if (hasFingers) {
           foundPeek = true;
@@ -457,18 +530,27 @@ async function main() {
       await ctx.close();
     }
 
-    // ── 2) 800×560 최소 창: 레이아웃·터치 타깃·잘림 0% ──
+    // ── 2) 800×560 최소 창: <1000px 오버레이 서랍 & <660px 아코디언 + 잘림 0% ──
     {
       const ctx = await browser.newContext({ viewport: { width: 800, height: 560 } });
       const { page, errors } = await openFreshPage(ctx, 800, 560, { withClock: false });
+      checks.push(await inspectDom(page, '800x560-initial-drawer-closed', false));
+
+      await ensureSetupOpen(page, false);
       await setCustomNames(page, NAMES_28);
       await setGroupCount(page, 6);
+      await page.screenshot({ path: path.join(OUT_DIR, '15a-minwin-800x560-drawer-open.png') });
+      checks.push(await inspectDom(page, '800x560-drawer-open', false));
+
+      await page.keyboard.press('Escape');
+      await sleep(320);
+      await ensureSetupClosed(page, false);
 
       await selectTheme(page, '모둠 열차');
       await page.screenshot({ path: path.join(OUT_DIR, '15-minwin-800x560-train-idle.png') });
       checks.push(await inspectDom(page, '800x560-train-idle', false));
 
-      await selectTheme(page, '빙하 갈라지기');
+      await selectTheme(page, '북극 분열');
       await page.screenshot({ path: path.join(OUT_DIR, '16-minwin-800x560-glacier-idle.png') });
 
       await selectTheme(page, '엘리베이터');
@@ -480,8 +562,9 @@ async function main() {
       checks.push(await inspectDom(page, '800x560-theater-run', true));
 
       await page.locator('.gp-skip-btn').click();
-      await sleep(300);
+      await sleep(500);
       await page.screenshot({ path: path.join(OUT_DIR, '19-minwin-800x560-result.png') });
+      checks.push(await inspectDom(page, '800x560-result', false));
 
       allErrors.push(...errors.map((e) => `[800x560] ${e}`));
       await ctx.close();
@@ -504,10 +587,10 @@ async function main() {
       await page.getByRole('button', { name: '설정 바꾸기' }).click();
       await sleep(200);
 
-      // 50명 / 12모둠 극한 밀도 (빙하 + 결과보드)
+      // 50명 / 12모둠 극한 밀도 (북극 분열 + 결과보드)
       await setCustomNames(page, NAMES_50);
       await setGroupCount(page, 12);
-      await selectTheme(page, '빙하 갈라지기');
+      await selectTheme(page, '북극 분열');
       await page.screenshot({ path: path.join(OUT_DIR, '21-1080p-12g-50-glacier-idle.png') });
 
       await page.locator('.gp-primary-cta').click();
@@ -549,8 +632,9 @@ async function main() {
     };
     await fs.writeFile(path.join(OUT_DIR, 'report.json'), JSON.stringify(summary, null, 2), 'utf8');
     console.log(JSON.stringify({
-      errorCount: allErrors.length,
-      perfStats,
+      allErrors: allErrors.length,
+      threeColFailCount: checks.filter((c) => c.threeColOrderOk === false).length,
+      truncatedResultChipTotal: checks.reduce((s, c) => s + (c.truncatedResultChipCount ?? 0), 0),
       brokenImgsTotal: checks.reduce((s, c) => s + c.brokenImgCount, 0),
       hudOverlapMax: Math.max(0, ...checks.map((c) => c.hudOverlapPx)),
       clippedNameplatesTotal: checks.reduce((s, c) => s + c.clippedNameplateCount, 0),

@@ -20,6 +20,7 @@ const CUE_SPEC = Object.freeze(/** @type {Record<string, { bus:'stage'|'ui', pri
   chug:              { bus: 'stage', priority: 2, fallbackMs: 90 },
   doorSlide:         { bus: 'stage', priority: 1, fallbackMs: 140 },
   boardJump:         { bus: 'stage', priority: 2, fallbackMs: 120 },
+  revealPop:         { bus: 'stage', priority: 1, fallbackMs: 130 },
   ticketPop:         { bus: 'stage', priority: 2, fallbackMs: 140, rolling: true },
   ticketLand:        { bus: 'stage', priority: 2, fallbackMs: 140, rolling: true },
   glacierRumble:     { bus: 'stage', priority: 1, fallbackMs: 280 },
@@ -373,6 +374,11 @@ export function createGroupPickerAudio(createContext = () => new AudioContext())
           ? playSample('kalimba', bus, 0.75, 1.06 * rate, 0, voiceGains)
           : playSample('soft-ding', bus, 0.72, rate, 0, voiceGains);
         if (!hit) tone(523.25 * rate, 783.99 * rate, bus, t, 0.11, 0.12, 'sine', voiceGains);
+        break;
+      }
+      case 'revealPop': {
+        const hit = playSample('soft-ding', bus, 0.56, 1.32, 0, voiceGains);
+        tone(hit ? 659.25 : 523.25, 987.77, bus, t, 0.085, hit ? 0.065 : 0.11, 'sine', voiceGains);
         break;
       }
       case 'glacierRumble':

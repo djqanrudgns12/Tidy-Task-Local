@@ -30,6 +30,15 @@ pub(crate) const SCOREBOARD_ROLES: [&str; 3] = ["scoreboard-personal", "scoreboa
 // 간단 뽑기 2종의 창 이름(드롭다운 항목). JS registry.js의 PICKER_TOOLS와 같습니다.
 pub(crate) const PICKER_ROLES: [&str; 2] = ["picker", "picker-group"];
 pub(crate) const TOOL_ROLES: [&str; 15] = ["roster", "noticeboard", "tournament", "focus-bell", "dice", "clock", "thermometer", "thermometer-display", "dday", "vote", "vote-teacher", "seating", "seating-teacher", "seating-display", "toolkit"];
+// 툴바 옆에 숨어 상주하는 팝업 메뉴 창 목록. 드래그 시 숨김·툴킷 끄기·트레이 좌표 초기화 제외 목록의 단일 원천입니다.
+pub(crate) const MENU_LABELS: [&str; 6] = [
+    "toolkit-menu",
+    "toolkit-picker-menu",
+    "toolkit-scoreboard-menu",
+    "toolkit-external-menu",
+    "toolkit-more-menu",
+    "toolkit-context-menu",
+];
 // 타이머 소리 id(시계음·종료 경고음·종료음). JS src/lib/timers/soundLibrary.js의 SOUND_LIBRARY와 같아야 합니다
 // (soundLibrary.test.js가 이 세 목록을 읽어 대조). 목록에 없는 값은 저장을 거부하고, 읽을 때는 기본 소리로 둡니다.
 const TICK_SOUNDS: [&str; 14] = ["clock-closeup", "small-tick", "wall-clock", "grandfather-clock", "alarm-clock", "stopwatch", "kitchen-timer", "metronome", "woodblock", "water-drop", "button-click", "soft-tap", "digital-tick", "glass-tink"];
@@ -506,7 +515,7 @@ pub(crate) fn create_window(app: &tauri::AppHandle, role: &str) -> Result<String
     }
     let _guard = WINDOW_LOCK.lock().map_err(|_| "창 잠금 오류")?;
     let timer = KINDS.contains(&role);
-    if !timer && !is_tool_role(role) && !["toolkit", "toolkit-menu", "toolkit-picker-menu", "toolkit-scoreboard-menu", "toolkit-external-menu", "toolkit-more-menu", "toolkit-context-menu", "toolkit-settings"].contains(&role) {
+    if !timer && !is_tool_role(role) && !MENU_LABELS.contains(&role) && !["toolkit", "toolkit-settings"].contains(&role) {
         return Err("알 수 없는 도구입니다.".into());
     }
     let id = NEXT_WINDOW.fetch_add(1, Ordering::SeqCst);
@@ -636,7 +645,9 @@ pub async fn toolkit_set_enabled(app: tauri::AppHandle, enabled: bool) -> Result
     if enabled {
         create_window(&app, "toolkit")?;
     } else {
-        for label in ["toolkit-menu", "toolkit-picker-menu", "toolkit-scoreboard-menu", "toolkit-external-menu", "toolkit-more-menu", "toolkit-context-menu", "toolkit-settings", "toolkit"] {
+        // 툴바를 파괴하기 전에 진행 중인 드래그 추적을 먼저 중단해 닫힌 창 접근을 막습니다.
+        crate::toolkit_drag::cancel_active_drag_for(&app, "toolkit");
+        for label in MENU_LABELS.into_iter().chain(["toolkit-settings", "toolkit"]) {
             if let Some(win) = app.get_webview_window(label) {
                 let _ = win.destroy();
             }
@@ -666,6 +677,8 @@ pub fn open_from_tray(app: &tauri::AppHandle) {
             }
         };
         if let Some(win) = app.get_webview_window("toolkit") {
+            // 트레이 소환 시 진행 중인 드래그를 먼저 해제해야 JS의 isDragging이 고착되지 않고 새 위치가 저장됩니다.
+            crate::toolkit_drag::cancel_active_drag_for(&app, "toolkit");
             let _ = win.unminimize();
             // 아직 화면(JS)이 뜨는 중인 창이면 곧 저장 위치 복원·크기 맞춤이 지금 옮긴 자리를 덮어쓰므로,
             // 준비가 끝난 뒤 한 번 더 가운데로 옮기도록 맡겨 둡니다.
@@ -753,6 +766,7 @@ pub async fn toolkit_center_if_requested(app: tauri::AppHandle, window: tauri::W
         return false;
     }
     let Some(request) = take_center_request() else { return false };
+    crate::toolkit_drag::cancel_active_drag_for(&app, "toolkit");
     center_on_monitor_at(&app, &window, request.anchor);
     true
 }
@@ -942,7 +956,7 @@ mod tests {
         assert!(is_tool_role("picker-group"));
         assert!(is_work_window("dice"));
         assert!(is_work_window("clock"));
-        for role in ["scoreboard-personal", "scoreboard-group", "scoreboard-custom", "thermometer", "dday", "vote", "vote-teacher"] {
+        for role in ["scoreboard-personal", "scoreboard-group", "scoreboard-custom", "thermometer", "vote", "vote-teacher"] {
             assert!(is_work_window(role), "{role}");
             assert!(is_tool_role(role), "{role}");
         }

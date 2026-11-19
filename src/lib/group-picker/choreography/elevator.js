@@ -10,6 +10,7 @@ import {
   dampedSpring,
   squashStretch,
   groundShadow,
+  computeHoldBudget,
 } from './suspense.js';
 
 export const ELEVATOR_W = 1600;
@@ -131,81 +132,143 @@ export function createElevatorPlan({ groups, allStudentIds, reduced = false }) {
     };
   }
 
-  // 28명/6모둠 기준 ~25.16s 목표 스케일
+  // 2-Pass 비선형 페이싱 + 60초 예산 문턱 스포트라이트 홀드(PRD §3.8)
   const scaleFactor = Math.max(0.65, Math.min(1.35, 28 / Math.max(6, totalN)));
   const dialSweepMs = gCount <= 4 ? 1120 : gCount <= 6 ? 880 : 660;
   const doorMs = 360;
 
-  /** @type {any[]} */
-  const cars = [];
-  /** @type {{studentId:string, groupIndex:number, atMs:number, isClimax?:boolean}[]} */
-  const ticketEvents = [];
-  let t = 0;
-
-  for (let gi = 0; gi < gCount; gi++) {
-    const grp = groups[gi];
-    const startMs = t;
-    const arriveMs = startMs + dialSweepMs;
-    const openEndMs = arriveMs + doorMs;
-    t = openEndMs + 100;
-
+  /** @param {number} revealHoldMs @param {number} groupHoldMs */
+  function buildSchedule(revealHoldMs, groupHoldMs) {
     /** @type {any[]} */
-    const exits = [];
-    const totalInCar = grp.studentIds.length;
+    const cars = [];
+    /** @type {{studentId:string, groupIndex:number, atMs:number, isClimax?:boolean}[]} */
+    const ticketEvents = [];
+    let t = 0;
 
-    for (let mi = 0; mi < totalInCar; mi++) {
-      const sid = grp.studentIds[mi];
-      const isLastOverall = gi === gCount - 1 && mi === totalInCar - 1;
-      let stepMs = Math.round((gi === 0 ? 600 : 410) * scaleFactor);
-      stepMs = Math.max(270, Math.min(680, stepMs));
-      if (isLastOverall) stepMs = 1750;
+    for (let gi = 0; gi < gCount; gi++) {
+      const grp = groups[gi];
+      const startMs = t;
+      const arriveMs = startMs + dialSweepMs;
+      const openEndMs = arriveMs + doorMs;
+      t = openEndMs + 100;
 
-      const exStart = t;
-      const exEnd = t + stepMs;
-      const commitAt = Math.round(exStart + stepMs * (isLastOverall ? 0.88 : 0.72));
+      /** @type {any[]} */
+      const exits = [];
+      const totalInCar = grp.studentIds.length;
 
-      exits.push({
-        studentId: sid,
-        slot: mi,
-        totalInCar,
-        rugSlot: rugSlotPosition(mi, totalInCar),
-        startMs: exStart,
-        endMs: exEnd,
-        commitAt,
-        isDoorGapSurprise: isLastOverall,
-      });
-      ticketEvents.push({
-        studentId: sid,
+      for (let mi = 0; mi < totalInCar; mi++) {
+        const sid = grp.studentIds[mi];
+        const isLastOverall = gi === gCount - 1 && mi === totalInCar - 1;
+        let stepMs = Math.round((gi === 0 ? 600 : 410) * scaleFactor);
+        stepMs = Math.max(270, Math.min(680, stepMs));
+
+        const studentHoldMs = revealHoldMs <= 0
+          ? 0
+          : isLastOverall
+            ? Math.min(280, revealHoldMs)
+            : (totalN >= 25 && mi > 0 && mi < totalInCar - 1)
+              ? Math.max(160, Math.round(revealHoldMs * 0.6))
+              : revealHoldMs;
+
+        if (isLastOverall) {
+          stepMs = 1750 + studentHoldMs;
+          const exStart = t;
+          const exEnd = t + stepMs;
+          const commitAt = Math.round(exStart + stepMs * 0.88);
+          exits.push({
+            studentId: sid,
+            slot: mi,
+            totalInCar,
+            rugSlot: rugSlotPosition(mi, totalInCar),
+            startMs: exStart,
+            revealAt: Math.round(exStart + stepMs * 0.85),
+            walkAt: Math.round(exStart + stepMs * 0.90),
+            endMs: exEnd,
+            commitAt,
+            holdMs: studentHoldMs,
+            isDoorGapSurprise: true,
+          });
+          ticketEvents.push({
+            studentId: sid,
+            groupIndex: grp.index,
+            atMs: commitAt,
+            isClimax: true,
+          });
+          t = exEnd + 65;
+          continue;
+        }
+
+        const stepOutMs = Math.round(stepMs * 0.30);
+        const walkToRugMs = Math.max(180, stepMs - stepOutMs);
+        const exStart = t;
+        const revealAt = exStart + stepOutMs;
+        const walkAt = revealAt + studentHoldMs;
+        const exEnd = walkAt + walkToRugMs;
+        const commitAt = studentHoldMs > 0 ? revealAt : Math.round(exStart + stepMs * 0.72);
+
+        exits.push({
+          studentId: sid,
+          slot: mi,
+          totalInCar,
+          rugSlot: rugSlotPosition(mi, totalInCar),
+          startMs: exStart,
+          revealAt,
+          walkAt,
+          endMs: exEnd,
+          commitAt,
+          holdMs: studentHoldMs,
+          isDoorGapSurprise: false,
+        });
+        ticketEvents.push({
+          studentId: sid,
+          groupIndex: grp.index,
+          atMs: commitAt,
+          isClimax: false,
+        });
+        t = exEnd + 65;
+      }
+
+      const closeStartMs = t + Math.max(140, groupHoldMs);
+      const endMs = closeStartMs + 380;
+      cars.push({
         groupIndex: grp.index,
-        atMs: commitAt,
-        isClimax: isLastOverall,
+        name: grp.name,
+        color: grp.color,
+        symbol: grp.symbol,
+        startMs,
+        arriveMs,
+        openEndMs,
+        closeStartMs,
+        endMs,
+        exits,
       });
-      t = exEnd + 65;
+      t = endMs + 90;
     }
 
-    const closeStartMs = t + 140;
-    const endMs = closeStartMs + 380;
-    cars.push({
-      groupIndex: grp.index,
-      name: grp.name,
-      color: grp.color,
-      symbol: grp.symbol,
-      startMs,
-      arriveMs,
-      openEndMs,
-      closeStartMs,
-      endMs,
-      exits,
-    });
-    t = endMs + 90;
+    return {
+      totalDurationMs: Math.max(t + 300, 4400),
+      cars,
+      ticketEvents,
+    };
   }
+
+  const basePass = buildSchedule(0, 0);
+  const { revealHoldMs, groupHoldMs } = computeHoldBudget({
+    baseMs: basePass.totalDurationMs,
+    totalN,
+    groupCount: gCount,
+    reduced: false,
+  });
+  const finalSchedule = buildSchedule(revealHoldMs, groupHoldMs);
 
   return {
     mode: /** @type {const} */ ('elevator'),
     reduced: false,
-    totalDurationMs: Math.max(t + 300, 4400),
-    cars,
-    ticketEvents,
+    revealHoldMs,
+    groupHoldMs,
+    totalDurationMs: finalSchedule.totalDurationMs,
+    cars: finalSchedule.cars,
+    ticketEvents: finalSchedule.ticketEvents,
   };
 }
 
@@ -261,7 +324,7 @@ export function elevatorPoseAt(plan, elapsedMs) {
   let exiting = null;
   let surprisePeek = null;
   let camPeekZoom = 0;
-  let activeSpeech = `${car.name} 엘리베이터가 내려오고 있어요…`;
+  let activeSpeech = `${car.name} 엘리베이터 이동 중`;
 
   for (const ex of car.exits) {
     if (t >= ex.startMs && t <= ex.endMs) {
@@ -283,7 +346,7 @@ export function elevatorPoseAt(plan, elapsedMs) {
 
         if (u < 0.28) {
           doorOpen = mix(1.0, 0.18, easeInOutCubic(u / 0.28));
-          activeSpeech = '어라, 이제 문이 닫힐까요?…';
+          activeSpeech = `${car.name} 마지막 확인 중`;
         } else if (u < 0.60) {
           doorOpen = 0.18;
           doorQuiverX = Math.sin(t * 0.065) * 2.4;
@@ -304,7 +367,7 @@ export function elevatorPoseAt(plan, elapsedMs) {
             fingersSlideX: 0,
             fingersOpacity: clamp(peekProgress * 1.25),
           };
-          activeSpeech = '잠깐만요!! 마지막 친구가 타고 있어요!';
+          activeSpeech = '잠깐만요, 마지막 친구 도착';
         } else if (u < 0.78) {
           const reopenU = (u - 0.60) / 0.18;
           doorOpen = mix(0.18, 1.0, easeOutCubic(reopenU));
@@ -321,27 +384,44 @@ export function elevatorPoseAt(plan, elapsedMs) {
             fingersSlideX: 6 * easeOutCubic(clamp(reopenU * 1.6)),
             fingersOpacity: fingersFade,
           };
-          activeSpeech = `${car.name} 극적 합류!!`;
+          activeSpeech = `${car.name} 마지막 합류`;
         } else {
           const walkU = clamp((u - 0.78) / 0.22);
-          const sq = squashStretch(walkU);
           doorOpen = 1.0;
           // u=0.78 프레임 X = peekHeadX 로 연속 연결, u=1.0 끝점 = rugSlotPosition 일치!
           let x;
           let y;
           let scale;
-          if (walkU <= 0.35) {
-            const p = easeOutCubic(walkU / 0.35);
+          let isHolding = false;
+          let walkLeanDeg = 0;
+          let hop = 0;
+          let sq = { scaleX: 1, scaleY: 1 };
+
+          if (walkU <= 0.30) {
+            const p = easeOutCubic(walkU / 0.30);
+            sq = squashStretch(p * 0.45);
             x = mix(maxPeekHeadX, ELEVATOR_APERTURE.centerX, p);
             y = mix(745, 776, p);
-            scale = mix(0.84, 0.90, p);
+            scale = mix(0.84, 0.94, p);
+            hop = Math.abs(Math.sin(p * Math.PI)) * 18;
+            walkLeanDeg = Number((Math.sin(p * Math.PI * 2) * 4.5).toFixed(2));
+          } else if (walkU <= 0.50 && (ex.holdMs ?? 0) > 0) {
+            isHolding = true;
+            x = ELEVATOR_APERTURE.centerX;
+            y = 776;
+            scale = 0.96;
+            const pulse = Math.sin(((walkU - 0.30) / 0.20) * Math.PI);
+            sq = { scaleX: Number((1 - 0.025 * pulse).toFixed(4)), scaleY: Number((1 + 0.03 * pulse).toFixed(4)) };
           } else {
-            const p = easeOutCubic((walkU - 0.35) / 0.65);
+            const moveStart = (ex.holdMs ?? 0) > 0 ? 0.50 : 0.30;
+            const p = easeOutCubic(clamp((walkU - moveStart) / (1 - moveStart)));
+            sq = squashStretch(clamp(0.35 + p * 0.65));
             x = mix(ELEVATOR_APERTURE.centerX, target.x, p);
             y = mix(776, target.y, p);
-            scale = mix(0.90, target.scale, p);
+            scale = mix(0.94, target.scale, p);
+            hop = Math.abs(Math.sin(p * Math.PI * 2)) * 22;
+            walkLeanDeg = Number((Math.sin(p * Math.PI * 3) * 4.8).toFixed(2));
           }
-          const hop = Math.abs(Math.sin(walkU * Math.PI * 2)) * 24;
           exiting = {
             studentId: ex.studentId,
             slot: ex.slot,
@@ -351,29 +431,49 @@ export function elevatorPoseAt(plan, elapsedMs) {
             scale,
             scaleX: sq.scaleX,
             scaleY: sq.scaleY,
-            walkLeanDeg: Number((Math.sin(walkU * Math.PI * 4) * 5.0).toFixed(2)),
+            walkLeanDeg,
             yLift: hop,
+            isHolding,
             shadow: groundShadow(hop / 36),
           };
-          activeSpeech = `${car.name} 도착 완료!`;
+          activeSpeech = `${car.name} 도착 완료`;
         }
       } else {
-        const sq = squashStretch(u);
+        const revealAt = ex.revealAt ?? Math.round(ex.startMs + dur * 0.30);
+        const walkAt = ex.walkAt ?? revealAt;
         let x;
         let y;
         let scale;
-        if (u <= 0.35) {
-          const p = easeOutCubic(u / 0.35);
+        let isHolding = false;
+        let sq = { scaleX: 1, scaleY: 1 };
+        let hop = 0;
+        let walkLeanDeg = 0;
+
+        if (t <= revealAt) {
+          const p = easeOutCubic(clamp((t - ex.startMs) / Math.max(1, revealAt - ex.startMs)));
+          sq = squashStretch(p * 0.45);
           x = ELEVATOR_APERTURE.centerX;
           y = mix(745, 776, p);
-          scale = mix(0.84, 0.90, p);
+          scale = mix(0.84, 0.94, p);
+          hop = Math.abs(Math.sin(p * Math.PI)) * 12;
+          walkLeanDeg = Number((Math.sin(p * Math.PI * 2) * 3.6).toFixed(2));
+        } else if (t < walkAt) {
+          isHolding = true;
+          const hp = clamp((t - revealAt) / Math.max(1, walkAt - revealAt));
+          const pulse = Math.sin(hp * Math.PI);
+          x = ELEVATOR_APERTURE.centerX;
+          y = 776;
+          scale = 0.96;
+          sq = { scaleX: Number((1 - 0.025 * pulse).toFixed(4)), scaleY: Number((1 + 0.03 * pulse).toFixed(4)) };
         } else {
-          const p = easeOutCubic((u - 0.35) / 0.65);
+          const p = easeOutCubic(clamp((t - walkAt) / Math.max(1, ex.endMs - walkAt)));
+          sq = squashStretch(clamp(0.35 + p * 0.65));
           x = mix(ELEVATOR_APERTURE.centerX, target.x, p);
           y = mix(776, target.y, p);
-          scale = mix(0.90, target.scale, p);
+          scale = mix(0.94, target.scale, p);
+          hop = Math.abs(Math.sin(p * Math.PI * 1.5)) * 20;
+          walkLeanDeg = Number((Math.sin(p * Math.PI * 3) * 4.5).toFixed(2));
         }
-        const hop = Math.abs(Math.sin(u * Math.PI * 2)) * 20;
         exiting = {
           studentId: ex.studentId,
           slot: ex.slot,
@@ -383,11 +483,12 @@ export function elevatorPoseAt(plan, elapsedMs) {
           scale,
           scaleX: sq.scaleX,
           scaleY: sq.scaleY,
-          walkLeanDeg: Number((Math.sin(u * Math.PI * 4) * 4.8).toFixed(2)),
+          walkLeanDeg,
           yLift: hop,
+          isHolding,
           shadow: groundShadow(hop / 36),
         };
-        activeSpeech = `${car.name} 친구가 부티크 카펫으로 내려와요!`;
+        activeSpeech = isHolding ? `${car.name} 도착 확인` : `${car.name} 하차 중`;
       }
       break;
     }
@@ -410,7 +511,7 @@ export function elevatorPoseAt(plan, elapsedMs) {
   }
 
   if (!exiting && !surprisePeek && t >= car.openEndMs && t < car.closeStartMs) {
-    activeSpeech = `${car.name} · 띵—동! 1층에 도착했어요!`;
+    activeSpeech = `${car.name} · 1층 도착 완료`;
   }
 
   const gapHalf = doorOpen * ELEVATOR_DOOR_W;

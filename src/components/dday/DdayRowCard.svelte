@@ -1,9 +1,8 @@
 <script>
   import { onMount } from 'svelte';
   import {
+    ArrowUpDown,
     Check,
-    ChevronDown,
-    ChevronUp,
     LayoutGrid,
     ListTodo,
     PanelTop,
@@ -24,13 +23,12 @@
    *   accent?: string,
    *   dark?: boolean,
    *   forceCompact?: boolean,
-   *   canMoveUp?: boolean,
-   *   canMoveDown?: boolean,
    *   highlighted?: boolean,
-   *   oncomplete: (id: string) => void,
+   *   sortable?: boolean,
+   *   shouldBlockContextMenu?: (() => boolean) | undefined,
+   *   oncomplete: (id: string, event?: MouseEvent) => void,
    *   ontogglechannel: (id: string, channel: 'showInTodo' | 'showInBanner' | 'showInWidget', nextValue: boolean) => void,
    *   onedit: (id: string) => void,
-   *   onmove: (id: string, dir: -1 | 1) => void,
    *   oncontextopen: (item: import('../../lib/dday/ddayModel.js').DdayItem, x: number, y: number, viaKeyboard?: boolean) => void,
    * }}
    */
@@ -40,13 +38,12 @@
     accent = '#d97706',
     dark = false,
     forceCompact = false,
-    canMoveUp = false,
-    canMoveDown = false,
     highlighted = false,
+    sortable = true,
+    shouldBlockContextMenu = undefined,
     oncomplete,
     ontogglechannel,
     onedit,
-    onmove,
     oncontextopen,
   } = $props();
 
@@ -74,6 +71,7 @@
   /** @param {MouseEvent} e */
   function handleContextMenu(e) {
     e.preventDefault();
+    if (shouldBlockContextMenu?.()) return;
     oncontextopen(item, e.clientX, e.clientY, false);
   }
 
@@ -87,48 +85,27 @@
   }
 </script>
 
+<!-- svelte-ignore a11y_no_static_element_interactions -->
 <div
   bind:this={cardEl}
   class="dd-row"
+  class:sortable
   class:highlighted
   class:overdue={counter.state === 'overdue'}
   class:imminent={counter.state === 'imminent' || counter.state === 'today'}
   data-scheme={dark ? 'dark' : 'light'}
-  data-dday-id={item.id}
-  style="--dd-tone: {toneColor}; --dd-accent: {accent};"
+  style="--dd-tone: {toneColor};"
+  title={sortable ? '위아래로 끌어 순서 변경' : undefined}
   oncontextmenu={handleContextMenu}
-  role="listitem"
 >
   <div class="dd-line1">
-    <div class="dd-order" role="group" aria-label="순서 이동">
-      <button
-        type="button"
-        class="dd-step"
-        disabled={!canMoveUp}
-        aria-label="위로 이동"
-        title="위로 이동"
-        onclick={() => onmove(item.id, -1)}
-      >
-        <ChevronUp size={10} strokeWidth={2.5} />
-      </button>
-      <button
-        type="button"
-        class="dd-step"
-        disabled={!canMoveDown}
-        aria-label="아래로 이동"
-        title="아래로 이동"
-        onclick={() => onmove(item.id, 1)}
-      >
-        <ChevronDown size={10} strokeWidth={2.5} />
-      </button>
-    </div>
-
     <button
       type="button"
       class="dd-check"
+      data-dday-no-sort
       aria-label={`${item.title} 완료 처리`}
       title="완료 아카이브로 보내기"
-      onclick={() => oncomplete(item.id)}
+      onclick={(e) => oncomplete(item.id, e)}
       onkeydown={handleRowKeydown}
     >
       <Check size={11} strokeWidth={2.8} />
@@ -139,9 +116,10 @@
     <button
       type="button"
       class="dd-title-btn"
+      data-dday-sortable
       onclick={() => onedit(item.id)}
       onkeydown={handleRowKeydown}
-      title={`${item.title} (${dateLabel})`}
+      title={sortable ? `${item.title} (${dateLabel}) · 클릭해 편집 · 끌어 순서 변경` : `${item.title} (${dateLabel})`}
     >
       <span class="dd-title">{item.title}</span>
     </button>
@@ -158,6 +136,7 @@
     <button
       type="button"
       class="dd-edit-btn"
+      data-dday-no-sort
       class:icon-only={compactCapsule}
       onclick={() => onedit(item.id)}
       aria-label={`${item.title} 편집`}
@@ -185,12 +164,14 @@
     <div
       class="dd-capsule"
       class:compact={compactCapsule}
+      data-dday-no-sort
       role="group"
       aria-label={`${item.title} 표시 채널`}
     >
       <button
         type="button"
         class="dd-cap-seg"
+        data-dday-no-sort
         class:on={item.showInTodo}
         aria-pressed={item.showInTodo}
         aria-label={`할 일 목록에 함께 표시 (${item.showInTodo ? '켜짐' : '꺼짐'})`}
@@ -209,6 +190,7 @@
       <button
         type="button"
         class="dd-cap-seg"
+        data-dday-no-sort
         class:on={item.showInBanner}
         aria-pressed={item.showInBanner}
         aria-label={`메모 상단 배너에 표시 (${item.showInBanner ? '켜짐' : '꺼짐'})`}
@@ -227,6 +209,7 @@
       <button
         type="button"
         class="dd-cap-seg"
+        data-dday-no-sort
         class:on={item.showInWidget}
         aria-pressed={item.showInWidget}
         aria-label={`툴킷 D-Day 위젯에 표시 (${item.showInWidget ? '켜짐' : '꺼짐'})`}
@@ -243,84 +226,68 @@
       </button>
     </div>
   </div>
+
+  <!-- 키보드 전용 순서 손잡이: DOM 맨 마지막(Tab 순서 일치) + absolute 오버레이로 줄바꿈 흔들림 0px -->
+  <button
+    type="button"
+    class="dd-kbd-handle"
+    data-dday-no-sort
+    disabled={!sortable}
+    aria-label="끌어서 순서 변경"
+    title={sortable ? '순서 변경 (스페이스 → ↑↓ → 스페이스)' : '항목이 2개 이상일 때 순서를 바꿀 수 있어요'}
+  >
+    <ArrowUpDown size={11} strokeWidth={2.5} />
+  </button>
 </div>
 
 <style>
   .dd-row {
     container-type: inline-size;
+    position: relative;
     display: flex;
     flex-direction: column;
     gap: var(--dd-row-gap, 7px);
-    padding: 9px 10px 8px 8px;
+    padding: 9px 10px 8px 10px;
     border-radius: 13px;
-    background: #ffffff;
-    border: 1px solid rgba(15, 23, 42, 0.08);
-    box-shadow: 0 1px 3px rgba(15, 23, 42, 0.03);
+    background: var(--dd-ctrl-surface, #ffffff);
+    border: 1px solid var(--dd-ctrl-line, rgba(15, 23, 42, 0.08));
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.03);
     transition: border-color 140ms ease, background-color 140ms ease, box-shadow 140ms ease;
     min-width: 0;
   }
-  .dd-row:hover {
-    border-color: color-mix(in srgb, var(--dd-tone) 34%, rgba(15, 23, 42, 0.1));
-    box-shadow: 0 3px 10px color-mix(in srgb, var(--dd-tone) 8%, transparent);
+  .dd-row.sortable {
+    cursor: grab;
   }
+  .dd-row:hover {
+    background: var(--dd-ctrl-surface-hover, #ffffff);
+    border-color: color-mix(in srgb, var(--dd-tone) 38%, var(--dd-ctrl-line, rgba(15, 23, 42, 0.1)));
+    box-shadow: 0 3px 10px color-mix(in srgb, var(--dd-tone) 9%, transparent);
+  }
+  /* F5: 외부 링 대신 inset 링으로 강조해 스크롤 경계 좌우 클리핑/잔상을 없앱니다. */
   .dd-row.highlighted {
     border-color: var(--dd-tone);
-    box-shadow: 0 0 0 2px color-mix(in srgb, var(--dd-tone) 22%, transparent);
+    background: color-mix(in srgb, var(--dd-tone) 6%, var(--dd-ctrl-surface, #ffffff));
+    box-shadow: inset 0 0 0 1.5px var(--dd-tone);
   }
   .dd-row[data-scheme='dark'] {
-    background: #232733;
-    border-color: rgba(255, 255, 255, 0.08);
     box-shadow: 0 2px 6px rgba(0, 0, 0, 0.22);
   }
   .dd-row[data-scheme='dark']:hover {
-    background: #272c3a;
-    border-color: color-mix(in srgb, var(--dd-tone) 44%, rgba(255, 255, 255, 0.14));
+    border-color: color-mix(in srgb, var(--dd-tone) 46%, var(--dd-ctrl-line, rgba(255, 255, 255, 0.14)));
   }
 
   .dd-line1 {
     display: flex;
     align-items: center;
-    gap: 6px;
+    gap: 7px;
     min-width: 0;
-  }
-
-  .dd-order {
-    display: flex;
-    flex-direction: column;
-    gap: 1px;
-    flex-shrink: 0;
-  }
-  .dd-step {
-    width: 15px;
-    height: 11px;
-    border: 0;
-    border-radius: 4px;
-    padding: 0;
-    display: grid;
-    place-items: center;
-    background: transparent;
-    color: #94a3b8;
-    cursor: pointer;
-    transition: background-color 120ms ease, color 120ms ease;
-  }
-  .dd-step:hover:not(:disabled) {
-    background: rgba(15, 23, 42, 0.07);
-    color: #334155;
-  }
-  .dd-row[data-scheme='dark'] .dd-step:hover:not(:disabled) {
-    background: rgba(255, 255, 255, 0.1);
-    color: #e2e8f0;
-  }
-  .dd-step:disabled {
-    opacity: 0.22;
-    cursor: default;
   }
 
   .dd-check {
     width: 19px;
     height: 19px;
     border-radius: 50%;
-    border: 1.5px solid #cbd5e1;
+    border: 1.5px solid var(--dd-ctrl-muted, #94a3b8);
     background: transparent;
     color: transparent;
     display: grid;
@@ -333,13 +300,6 @@
   .dd-check:hover {
     border-color: var(--dd-tone);
     background: color-mix(in srgb, var(--dd-tone) 12%, transparent);
-    color: var(--dd-tone);
-  }
-  .dd-row[data-scheme='dark'] .dd-check {
-    border-color: #4b5563;
-  }
-  .dd-row[data-scheme='dark'] .dd-check:hover {
-    border-color: var(--dd-tone);
     color: var(--dd-tone);
   }
 
@@ -363,11 +323,8 @@
     white-space: nowrap;
     font-size: var(--dd-fs-title, 12.5px);
     font-weight: 700;
-    color: #1e2430;
+    color: var(--dd-ctrl-ink, #1e2430);
     line-height: 1.3;
-  }
-  .dd-row[data-scheme='dark'] .dd-title {
-    color: #eef2f9;
   }
 
   .tnum {
@@ -382,30 +339,26 @@
     border-radius: 7px;
     font-size: var(--dd-fs-sub, 11px);
     font-weight: 800;
-    background: color-mix(in srgb, var(--dd-tone) 14%, #ffffff);
-    color: color-mix(in srgb, var(--dd-tone) 88%, #111827);
+    background: color-mix(in srgb, var(--dd-tone) 14%, var(--dd-ctrl-surface, #ffffff));
+    color: color-mix(in srgb, var(--dd-tone) 76%, var(--dd-ctrl-ink, #111827));
   }
   .dd-row[data-scheme='dark'] .dd-counter {
-    background: color-mix(in srgb, var(--dd-tone) 24%, #1a1d26);
-    color: color-mix(in srgb, var(--dd-tone) 85%, #ffffff);
+    background: color-mix(in srgb, var(--dd-tone) 22%, var(--dd-ctrl-surface, #1a1d26));
+    color: color-mix(in srgb, var(--dd-tone) 72%, var(--dd-ctrl-ink, #ffffff));
   }
   .dd-counter.today,
   .dd-counter.imminent {
-    background: color-mix(in srgb, #e11d48 14%, #ffffff);
+    background: color-mix(in srgb, #e11d48 14%, var(--dd-ctrl-surface, #ffffff));
     color: #be123c;
   }
   .dd-row[data-scheme='dark'] .dd-counter.today,
   .dd-row[data-scheme='dark'] .dd-counter.imminent {
-    background: color-mix(in srgb, #f43f5e 26%, #1a1d26);
+    background: color-mix(in srgb, #f43f5e 26%, var(--dd-ctrl-surface, #1a1d26));
     color: #fda4af;
   }
   .dd-counter.overdue {
-    background: rgba(100, 116, 139, 0.14);
-    color: #475569;
-  }
-  .dd-row[data-scheme='dark'] .dd-counter.overdue {
-    background: rgba(148, 163, 184, 0.16);
-    color: #cbd5e1;
+    background: var(--dd-ctrl-surface-muted, rgba(100, 116, 139, 0.14));
+    color: var(--dd-ctrl-sub, #475569);
   }
 
   .dd-edit-btn {
@@ -416,9 +369,9 @@
     height: clamp(24px, calc(var(--dd-icon-sz, 26px) * 0.94), 30px);
     padding: 0 7px;
     border-radius: 7px;
-    border: 1px solid rgba(15, 23, 42, 0.08);
-    background: #f8fafc;
-    color: #475569;
+    border: 1px solid var(--dd-ctrl-line, rgba(15, 23, 42, 0.08));
+    background: var(--dd-ctrl-surface-muted, #f8fafc);
+    color: var(--dd-ctrl-sub, #475569);
     font-size: var(--dd-fs-sub, 10.5px);
     font-weight: 700;
     white-space: nowrap;
@@ -432,18 +385,9 @@
     justify-content: center;
   }
   .dd-edit-btn:hover {
-    background: color-mix(in srgb, var(--dd-accent) 10%, #ffffff);
-    border-color: color-mix(in srgb, var(--dd-accent) 30%, transparent);
-    color: var(--dd-accent);
-  }
-  .dd-row[data-scheme='dark'] .dd-edit-btn {
-    background: #2c3140;
-    border-color: rgba(255, 255, 255, 0.08);
-    color: #cbd5e1;
-  }
-  .dd-row[data-scheme='dark'] .dd-edit-btn:hover {
-    background: color-mix(in srgb, var(--dd-accent) 20%, #2c3140);
-    color: #ffffff;
+    background: var(--dd-accent-soft, rgba(15, 23, 42, 0.08));
+    border-color: var(--dd-accent-border, rgba(15, 23, 42, 0.16));
+    color: var(--dd-accent-ink, var(--dd-accent));
   }
 
   .dd-line2 {
@@ -451,7 +395,7 @@
     align-items: center;
     justify-content: space-between;
     gap: 8px;
-    padding-left: 21px;
+    padding-left: 26px;
     min-width: 0;
   }
 
@@ -462,10 +406,7 @@
     min-width: 0;
     flex: 1;
     font-size: var(--dd-fs-sub, 10.5px);
-    color: #64748b;
-  }
-  .dd-row[data-scheme='dark'] .dd-meta {
-    color: #94a3b8;
+    color: var(--dd-ctrl-sub, #64748b);
   }
 
   .dd-origin {
@@ -475,20 +416,12 @@
     font-weight: 700;
     padding: 1.5px 5.5px;
     border-radius: 5px;
-    background: rgba(15, 23, 42, 0.055);
-    color: #475569;
+    background: var(--dd-ctrl-surface-muted, rgba(15, 23, 42, 0.055));
+    color: var(--dd-ctrl-sub, #475569);
   }
   .dd-origin.linked {
-    background: color-mix(in srgb, var(--dd-accent) 12%, transparent);
-    color: color-mix(in srgb, var(--dd-accent) 90%, #111827);
-  }
-  .dd-row[data-scheme='dark'] .dd-origin {
-    background: rgba(255, 255, 255, 0.08);
-    color: #cbd5e1;
-  }
-  .dd-row[data-scheme='dark'] .dd-origin.linked {
-    background: color-mix(in srgb, var(--dd-accent) 22%, transparent);
-    color: color-mix(in srgb, var(--dd-accent) 82%, #ffffff);
+    background: var(--dd-accent-soft, color-mix(in srgb, var(--dd-accent) 12%, transparent));
+    color: var(--dd-accent-ink, var(--dd-accent));
   }
 
   .dd-dot-sep {
@@ -510,12 +443,8 @@
     padding: 2px;
     gap: 2px;
     border-radius: 999px;
-    background: #f1f5f9;
-    border: 1px solid rgba(15, 23, 42, 0.06);
-  }
-  .dd-row[data-scheme='dark'] .dd-capsule {
-    background: #1a1d26;
-    border-color: rgba(255, 255, 255, 0.08);
+    background: var(--dd-ctrl-section, #f1f5f9);
+    border: 1px solid var(--dd-ctrl-line, rgba(15, 23, 42, 0.06));
   }
 
   .dd-cap-seg {
@@ -527,7 +456,7 @@
     border: 0;
     border-radius: 999px;
     background: transparent;
-    color: #94a3b8;
+    color: var(--dd-ctrl-muted, #64748b);
     font-size: var(--dd-fs-micro, 10px);
     font-weight: 700;
     line-height: 1;
@@ -550,13 +479,7 @@
     }
   }
   .dd-cap-seg:hover {
-    color: #475569;
-  }
-  .dd-row[data-scheme='dark'] .dd-cap-seg {
-    color: #64748b;
-  }
-  .dd-row[data-scheme='dark'] .dd-cap-seg:hover {
-    color: #cbd5e1;
+    color: var(--dd-ctrl-ink, #1e2430);
   }
 
   .dd-cap-dot {
@@ -568,17 +491,45 @@
     flex-shrink: 0;
   }
   .dd-cap-seg.on {
-    background: #ffffff;
-    color: color-mix(in srgb, var(--dd-tone) 88%, #111827);
-    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.1);
+    background: var(--dd-ctrl-surface, #ffffff);
+    color: color-mix(in srgb, var(--dd-tone) 45%, var(--dd-ctrl-ink, #111827));
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.12);
   }
   .dd-cap-seg.on .dd-cap-dot {
     background: var(--dd-tone);
     opacity: 1;
   }
   .dd-row[data-scheme='dark'] .dd-cap-seg.on {
-    background: #2f3545;
-    color: #f8fafc;
+    background: var(--dd-ctrl-surface-hover, #2f3545);
+    color: var(--dd-ctrl-ink, #f8fafc);
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
+  }
+
+  /* 평상시 투명(레이아웃 점유 0px), Tab :focus-visible 시에만 노출 */
+  .dd-kbd-handle {
+    position: absolute;
+    right: 8px;
+    bottom: 8px;
+    width: 24px;
+    height: 22px;
+    padding: 0;
+    border-radius: 7px;
+    border: 1.5px solid var(--dd-accent-ink, var(--dd-accent));
+    background: var(--dd-ctrl-surface, #ffffff);
+    color: var(--dd-accent-ink, var(--dd-accent));
+    display: grid;
+    place-items: center;
+    opacity: 0;
+    pointer-events: none;
+    box-shadow: 0 2px 8px rgba(15, 23, 42, 0.18);
+    z-index: 4;
+    cursor: grab;
+    transition: opacity 120ms ease;
+  }
+  .dd-kbd-handle:focus-visible {
+    opacity: 1;
+    pointer-events: auto;
+    outline: 2px solid var(--dd-accent);
+    outline-offset: 1px;
   }
 </style>

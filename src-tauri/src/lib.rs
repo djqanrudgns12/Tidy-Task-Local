@@ -6,6 +6,7 @@ use tauri_plugin_autostart::MacosLauncher;
 mod neis;
 mod analytics;
 mod toolkit;
+mod toolkit_drag;
 mod tray;
 mod picker;
 mod tournament;
@@ -334,6 +335,17 @@ pub fn run() {
                 let windows = app.webview_windows();
                 let destroyed_label = window.label();
 
+                if destroyed_label == "toolkit" {
+                    toolkit_drag::cancel_active_drag_for(app, "toolkit");
+                }
+                if destroyed_label == "dday" {
+                    toolkit_drag::cancel_active_drag_for(app, "dday");
+                    if let Some(menu) = app.get_webview_window("dday-widget-menu") {
+                        let _ = menu.destroy();
+                    }
+                    // 어떤 경로(X 버튼·강제 종료·토글)로 위젯이 닫혀도 모든 메모 창·컨트롤 타워의 ON/OFF 스위치가 OFF로 동기화되도록 알립니다.
+                    let _ = app.emit("dday-widget-window-state", false);
+                }
                 // 글꼴 선택 팝업을 열어 둔 호스트 창이 강제 종료되어도 팝업이 허공에 남지 않도록 즉시 닫힘을 알립니다.
                 if destroyed_label != "font-picker" && app.get_webview_window("font-picker").is_some() {
                     let _ = app.emit_to(
@@ -386,7 +398,7 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         // 앱 안 자동 업데이트 (진행 순서는 app_update.rs가 쥡니다)
         .plugin(tauri_plugin_updater::Builder::new().build())
-        .invoke_handler(tauri::generate_handler![app_update::update_install, app_update::update_cancel, app_update::update_prepare_ack, tournament::tournament_read, tournament::tournament_write, picker::picker_read, picker::picker_write, noticeboard::noticeboard_execute, noticeboard_quit::noticeboard_quit_reply, noticeboard_quit::noticeboard_cancel_quit, save_custom_font, store_health, neis::neis_search_schools, neis::neis_meals, neis::neis_schedule, neis::meal_take_launch_token, analytics::analytics_track, classroom::classroom_quit_reply, classroom::seating::seating_context, classroom::seating::seating_public, classroom::classroom_read, classroom::classroom_execute, classroom::classroom_clear_history, classroom::import::classroom_take_drop, classroom::import::classroom_parse, classroom::import::classroom_cancel_parse, classroom::import::classroom_project, toolkit::toolkit_read, toolkit::toolkit_patch, toolkit::toolkit_open, toolkit::toolkit_set_enabled, toolkit::toolkit_center_if_requested, clock_time::clock_time_offset, clock_time::clock_wall_skew, tray::tray_request_done, tray::tray_take_pending_request, scores::scores_read, scores::scores_write, scores::thermometer_windows_start, classroom::intent::classroom_set_intent, classroom::intent::classroom_take_intent, factory_reset::factory_reset])
+        .invoke_handler(tauri::generate_handler![app_update::update_install, app_update::update_cancel, app_update::update_prepare_ack, tournament::tournament_read, tournament::tournament_write, picker::picker_read, picker::picker_write, noticeboard::noticeboard_execute, noticeboard_quit::noticeboard_quit_reply, noticeboard_quit::noticeboard_cancel_quit, save_custom_font, store_health, neis::neis_search_schools, neis::neis_meals, neis::neis_schedule, neis::meal_take_launch_token, analytics::analytics_track, classroom::classroom_quit_reply, classroom::seating::seating_context, classroom::seating::seating_public, classroom::classroom_read, classroom::classroom_execute, classroom::classroom_clear_history, classroom::import::classroom_take_drop, classroom::import::classroom_parse, classroom::import::classroom_cancel_parse, classroom::import::classroom_project, toolkit::toolkit_read, toolkit::toolkit_patch, toolkit::toolkit_open, toolkit::toolkit_set_enabled, toolkit::toolkit_center_if_requested, toolkit_drag::toolkit_start_drag, toolkit_drag::toolkit_move_drag, toolkit_drag::toolkit_end_drag, toolkit_drag::toolkit_drag_diag_enabled, clock_time::clock_time_offset, clock_time::clock_wall_skew, tray::tray_request_done, tray::tray_take_pending_request, scores::scores_read, scores::scores_write, scores::thermometer_windows_start, classroom::intent::classroom_set_intent, classroom::intent::classroom_take_intent, factory_reset::factory_reset])
         .setup(move |app| {
             // 설정의 "데이터 초기화"를 누르고 다시 시작한 경우: 다른 무엇보다 먼저 앱 데이터 폴더를 비웁니다.
             // (아래의 백업 복구가 지운 메모를 되살리지 않도록 반드시 그보다 앞에 둡니다)

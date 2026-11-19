@@ -2,7 +2,7 @@
   import GroupSymbol from '../../scoreboard/GroupSymbol.svelte';
   import StageHudBand from './StageHudBand.svelte';
   import StageStudent from './StageStudent.svelte';
-  import { createBannerTracker } from './stageShared.js';
+  import { createBannerTracker, idleTitle } from './stageShared.js';
   import { PALETTE } from '../../../lib/scoreboard/model.js';
   import { formatStudentLabel } from '../../../lib/group-picker/allocation.js';
   import {
@@ -46,6 +46,7 @@
     fontFamily = 'Pretendard, sans-serif',
     onStart,
     onSkip,
+    onOpenSetup,
     onMarkBroken,
   } = $props<{
     phase: 'idle' | 'running' | 'settled';
@@ -64,6 +65,7 @@
     fontFamily?: string;
     onStart: () => void;
     onSkip?: () => void;
+    onOpenSetup?: () => void;
     onMarkBroken: (src: string) => void;
   }>();
 
@@ -127,7 +129,7 @@
       return bannerTracker.update({
         mode: 'elevator',
         elapsed: 0,
-        idleText: `부티크 로비 · ${groups.length}개 모둠 엘리베이터 대기 중`,
+        idleText: idleTitle('엘리베이터', participants.length, groups.length),
       });
     }
     if (lastRunRef !== plan) {
@@ -145,6 +147,7 @@
             key: `el-${st.id}`,
             groupIndex: activeCar.index,
             groupName: activeCar.name,
+            groupColorId: activeCar.color,
             groupColorHex: activeColorHex,
             groupSymbol: activeCar.symbol,
             studentName: formatStudentLabel(st, allStudents, alwaysShowNumber),
@@ -218,7 +221,6 @@
     return items;
   });
 
-  const heroCalloutStudent = $derived(pose?.heroCallout ? studentById[pose.heroCallout.studentId] : null);
   const cam = $derived(pose?.camera ?? { x: 0, y: 0, scale: 1, originX: 800, originY: 520 });
   const cabSettleY = $derived(pose?.cabSettleY ?? 0);
   const doorQuiverX = $derived(pose?.doorQuiverX ?? 0);
@@ -238,12 +240,13 @@
 <div class="gp-stage-canvas" data-mode="elevator">
   <StageHudBand
     {phase}
+    mode="elevator"
     {groups}
     activeIndex={pose ? pose.activeGroupIndex : 0}
     doneAll={pose ? pose.committedIds.size === participants.length : false}
     {banner}
     {fontFamily}
-    idleStatusText={`파스텔 부티크 로비 · ${groups.length}개 모둠 엘리베이터 대기 중`}
+    idleStatusText={idleTitle('엘리베이터', participants.length, groups.length)}
     {onSkip}
   />
 
@@ -518,6 +521,15 @@
         />
       {/if}
 
+      {#if pose?.exiting?.isHolding}
+        <div
+          class="gp-elevator-hold-spot"
+          style:left="800px"
+          style:top="776px"
+          style:--spot-hex={activeColorHex}
+        ></div>
+      {/if}
+
       <!-- Z6: 로비 러그 착지 완료 + 하차 이동 중 학생 (기둥·버튼 회피 472/1128 양날개, y 오름차순 깊이 정렬) -->
       {#each foregroundStudents as fs (fs.studentId)}
         {@const av = avatarForStudent(fs.student, classAvatarMap)}
@@ -549,18 +561,6 @@
         />
       {/each}
 
-      {#if pose?.heroCallout && heroCalloutStudent}
-        <div
-          class="gp-hero-callout"
-          style:left={`${pose.heroCallout.x.toFixed(1)}px`}
-          style:top={`${Math.max(120, pose.heroCallout.y - 315).toFixed(1)}px`}
-          style:border-color={activeColorHex}
-        >
-          <GroupSymbol symbol={activeCar.symbol} color={activeColorHex} size={22} />
-          <span>{formatStudentLabel(heroCalloutStudent, allStudents, alwaysShowNumber)}</span>
-        </div>
-      {/if}
-
       {#if pose && pose.rugOverflowCount > 0}
         <div class="gp-queue-more-pill" style:left="1380px" style:top="768px" style:z-index="6">
           +{pose.rugOverflowCount}명 러그 합류
@@ -584,7 +584,13 @@
             모둠 뽑기 시작 →
           {/if}
         </button>
-        <span class="gp-cta-hint">{startDisabledReason || '띵—동! 엘리베이터 문이 열리면 우리 모둠 친구들이 걸어 나와요'}</span>
+        {#if startDisabledReason && onOpenSetup}
+          <button type="button" class="gp-cta-hint clickable" onclick={onOpenSetup}>
+            {startDisabledReason}
+          </button>
+        {:else}
+          <span class="gp-cta-hint">{startDisabledReason || '띵—동! 엘리베이터 문이 열리면 우리 모둠 친구들이 걸어 나와요'}</span>
+        {/if}
       </div>
     {/if}
   </div>

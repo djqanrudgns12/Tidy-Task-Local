@@ -118,21 +118,33 @@ test('settings and widget prefs sanitize malformed values cleanly', () => {
   assert.equal(s.controlGeometry, null);
   assert.equal(s.controlAlwaysOnTop, true);
 
-  // normalizeControlGeometry 경계 및 듀얼 좌표 검증
-  assert.equal(normalizeControlGeometry({ x: 100, y: 100, width: 299, height: 400 }), null);
+  // normalizeControlGeometry 경계·위치 보존 클램프 및 듀얼 좌표 검증
+  assert.deepEqual(
+    normalizeControlGeometry({ x: 100, y: 120, width: 299, height: 400 }),
+    { x: 100, y: 120, physicalX: 100, physicalY: 120, width: 340, height: 460 },
+  );
+  assert.deepEqual(
+    normalizeControlGeometry({ x: 140, y: 160, logicalX: 70, logicalY: 80, width: 900, height: 1000 }),
+    { x: 140, y: 160, physicalX: 140, physicalY: 160, logicalX: 70, logicalY: 80, width: 580, height: 860 },
+  );
   assert.equal(normalizeControlGeometry({ x: -32000, y: 100, width: 380, height: 580 }), null);
+  assert.equal(normalizeControlGeometry({ x: 100, y: 100, width: 0, height: 580 }), null);
   assert.equal(normalizeControlGeometry({ x: 100, y: 100, width: 380, height: Number.NaN }), null);
   assert.deepEqual(
-    normalizeControlGeometry({ physicalX: 240.4, physicalY: 180.6, logicalX: 120, logicalY: 90, width: 560, height: 640 }),
-    { x: 240, y: 181, physicalX: 240, physicalY: 181, logicalX: 120, logicalY: 90, width: 560, height: 640 },
+    normalizeControlGeometry({ physicalX: 240.4, physicalY: 180.6, logicalX: 120, logicalY: 90, width: 560, height: 660 }),
+    { x: 240, y: 181, physicalX: 240, physicalY: 181, logicalX: 120, logicalY: 90, width: 560, height: 660 },
   );
 
+  // 기존 사용자의 범위 밖 controlGeometry(300×400)도 위치를 보존하고 크기만 최소 경계(340×460)로 보정
   const sWithGeom = normalizeDdaySettings({
     controlAlwaysOnTop: false,
     controlGeometry: { x: 400, y: 200, width: 300, height: 400 },
   });
   assert.equal(sWithGeom.controlAlwaysOnTop, false);
-  assert.equal(sWithGeom.controlGeometry?.width, 300);
+  assert.equal(sWithGeom.controlGeometry?.x, 400);
+  assert.equal(sWithGeom.controlGeometry?.y, 200);
+  assert.equal(sWithGeom.controlGeometry?.width, 340);
+  assert.equal(sWithGeom.controlGeometry?.height, 460);
 });
 
 test('DDAY_ICONS 21종 카탈로그는 기존 8종 하위 호환과 메타·SVG 1:1 정합성을 보장한다', () => {

@@ -8,6 +8,7 @@ import { SYMBOL_PATHS } from '../scoreboard/symbolPaths.js';
 import { fitFontSize } from '../scoreboard/fitText.js';
 import { formatStudentLabel } from './allocation.js';
 import { assignClassAvatars, avatarForStudent } from './assets.js';
+import { resolveDeepBadgeHex } from './recolor.js';
 
 const PALETTE_COLOR = Object.fromEntries(PALETTE.map((p) => [p.id, p.color]));
 
@@ -24,20 +25,20 @@ function roundRectPath(ctx, x, y, w, h, r) {
 }
 
 /** 화면 GroupSymbol.svelte 와 100% 동일한 24×24 viewBox Path2D 심볼 그리기.
- * @param {CanvasRenderingContext2D} ctx @param {string} symbol @param {number} cx @param {number} cy @param {number} size @param {string} fill */
-function drawGroupSymbol(ctx, symbol, cx, cy, size, fill) {
+ * @param {CanvasRenderingContext2D} ctx @param {string} symbol @param {number} cx @param {number} cy @param {number} size @param {string} fill @param {string} [strokeColor] */
+function drawGroupSymbol(ctx, symbol, cx, cy, size, fill, strokeColor = '#ffffff') {
   const def = SYMBOL_PATHS[symbol] ?? SYMBOL_PATHS.acorn;
   const s = size / 24;
   ctx.save();
   ctx.translate(cx - size * 0.5, cy - size * 0.5);
   ctx.scale(s, s);
   ctx.fillStyle = fill;
-  ctx.strokeStyle = '#ffffff';
-  ctx.lineWidth = 1.2;
+  ctx.strokeStyle = strokeColor;
+  ctx.lineWidth = strokeColor === 'transparent' ? 0 : 1.2;
   ctx.lineJoin = 'round';
   const mainPath = new Path2D(def.d);
   ctx.fill(mainPath, def.fillRule ?? 'nonzero');
-  ctx.stroke(mainPath);
+  if (strokeColor !== 'transparent') ctx.stroke(mainPath);
   if (def.strokePaths) {
     ctx.strokeStyle = fill;
     ctx.lineWidth = 2.2;
@@ -119,7 +120,10 @@ export async function renderBoardPng({
   const cardW = Math.floor((width - padX * 2 - gap * (cols - 1)) / cols);
   const chipCols = maxMembers > 6 ? 2 : 1;
   const chipRows = Math.ceil(maxMembers / chipCols);
-  const cardH = Math.max(290, 128 + chipRows * 74);
+  const cardHeadH = 92;
+  const chipH = 74;
+  const rowStride = 90;
+  const cardH = Math.max(320, cardHeadH + 34 + chipRows * rowStride + 14);
   const height = Math.min(18000, headerH + rows * cardH + (rows - 1) * gap + 96);
 
   const canvas = document.createElement('canvas');
@@ -154,10 +158,11 @@ export async function renderBoardPng({
     const x = padX + col * (cardW + gap);
     const y = headerH + row * (cardH + gap);
     const accent = PALETTE_COLOR[g.color] ?? '#4FC2A0';
+    const deepHex = resolveDeepBadgeHex(g.color);
 
     // 카드 그림자 + 크림 바탕
     ctx.save();
-    ctx.shadowColor = dark ? 'rgba(0,0,0,0.35)' : 'rgba(32,59,50,0.08)';
+    ctx.shadowColor = dark ? 'rgba(0,0,0,0.35)' : 'rgba(32,59,50,0.09)';
     ctx.shadowBlur = 24;
     ctx.shadowOffsetY = 8;
     ctx.fillStyle = dark ? '#26302C' : '#FFFDF9';
@@ -165,32 +170,41 @@ export async function renderBoardPng({
     ctx.fill();
     ctx.restore();
 
-    // 카드 상단 색 띠
+    // 시안 1A: 92px OKLab Deep 컬러 헤더 밴드
     ctx.save();
     roundRectPath(ctx, x, y, cardW, cardH, 30);
     ctx.clip();
-    ctx.fillStyle = accent;
-    ctx.fillRect(x, y, cardW, 18);
+    ctx.fillStyle = deepHex;
+    ctx.fillRect(x, y, cardW, cardHeadH);
     ctx.restore();
 
-    ctx.strokeStyle = dark ? 'rgba(255,255,255,0.12)' : 'rgba(32,59,50,0.12)';
-    ctx.lineWidth = 2;
+    ctx.strokeStyle = dark ? 'rgba(255,255,255,0.16)' : `${deepHex}55`;
+    ctx.lineWidth = 2.5;
     roundRectPath(ctx, x, y, cardW, cardH, 30);
     ctx.stroke();
 
-    // 모둠 헤더 (12종 Path2D 정합 심볼)
-    drawGroupSymbol(ctx, g.symbol, x + 50, y + 66, 36, accent);
-    ctx.fillStyle = dark ? '#F2F7F4' : '#203B32';
-    ctx.font = `800 34px ${family}`;
-    ctx.fillText(cleanLabel(g.name, 40) || `${i + 1}모둠`, x + 84, y + 68);
+    // 모둠 헤더 (흰 심볼 + 흰 모둠명 38px + 반투명 흰 인원 알약)
+    drawGroupSymbol(ctx, g.symbol, x + 52, y + cardHeadH / 2, 42, '#ffffff', 'transparent');
+    ctx.fillStyle = '#ffffff';
+    ctx.font = `800 38px ${family}`;
+    ctx.textBaseline = 'middle';
+    const titleAvail = cardW - 210;
+    ctx.fillText(cleanLabel(g.name, 40) || `${i + 1}모둠`, x + 90, y + cardHeadH / 2 + 1, titleAvail);
 
-    ctx.textAlign = 'right';
-    ctx.fillStyle = dark ? '#A7BBB1' : '#5F776C';
-    ctx.font = `700 26px ${family}`;
-    ctx.fillText(`${g.studentIds.length}명`, x + cardW - 34, y + 68);
+    const countText = `${g.studentIds.length}명`;
+    ctx.font = `800 26px ${family}`;
+    const pillW = Math.max(82, ctx.measureText(countText).width + 36);
+    const pillX = x + cardW - 28 - pillW;
+    const pillY = y + (cardHeadH - 44) / 2;
+    ctx.fillStyle = 'rgba(255,255,255,0.22)';
+    roundRectPath(ctx, pillX, pillY, pillW, 44, 22);
+    ctx.fill();
+    ctx.fillStyle = '#ffffff';
+    ctx.textAlign = 'center';
+    ctx.fillText(countText, pillX + pillW / 2, y + cardHeadH / 2 + 1);
     ctx.textAlign = 'left';
 
-    // 학생 크림 티켓 칩 (46px 원형 포트레이트 + 2px 링 + fitText)
+    // 학생 크림 타일 칩 (74px 높이 + 54px 원형 포트레이트 + Deep 테두리 + fitText 34px)
     const innerW = cardW - 60;
     const cW = chipCols === 2 ? Math.floor((innerW - 18) / 2) : innerW;
     for (let m = 0; m < g.studentIds.length; m++) {
@@ -200,21 +214,21 @@ export async function renderBoardPng({
       const mc = m % chipCols;
       const mr = Math.floor(m / chipCols);
       const cx = x + 30 + mc * (cW + 18);
-      const cy = y + 106 + mr * 74;
+      const cy = y + cardHeadH + 26 + mr * rowStride;
 
       ctx.fillStyle = dark ? '#323F3A' : '#FFFFFF';
-      ctx.strokeStyle = dark ? 'rgba(255,255,255,0.15)' : `${accent}66`;
-      ctx.lineWidth = 2;
-      roundRectPath(ctx, cx, cy, cW, 58, 16);
+      ctx.strokeStyle = dark ? 'rgba(255,255,255,0.18)' : `${accent}66`;
+      ctx.lineWidth = 2.5;
+      roundRectPath(ctx, cx, cy, cW, chipH, 18);
       ctx.fill();
       ctx.stroke();
 
-      // 46px 원형 포트레이트 (x+10, y+6 기준, 중심 (cx+33, cy+29))
+      // 54px 원형 포트레이트
       const av = avatarForStudent(st, avatarMap);
       const bmp = loadedBitmaps.get(av.portraitSrc);
-      const px = cx + 10;
-      const py = cy + 6;
-      const pSize = 46;
+      const pSize = 54;
+      const px = cx + 12;
+      const py = cy + (chipH - pSize) / 2;
       const pcx = px + pSize / 2;
       const pcy = py + pSize / 2;
 
@@ -229,7 +243,7 @@ export async function renderBoardPng({
         ctx.drawImage(bmp, px, py, pSize, pSize);
       } else {
         ctx.fillStyle = dark ? '#D6EAE2' : '#203B32';
-        ctx.font = `800 20px ${family}`;
+        ctx.font = `800 22px ${family}`;
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
         ctx.fillText((st.name || '?')[0], pcx, pcy + 1);
@@ -240,23 +254,23 @@ export async function renderBoardPng({
       // 원형 링 테두리 (다크모드 2px 흰 링)
       ctx.beginPath();
       ctx.arc(pcx, pcy, pSize / 2, 0, Math.PI * 2);
-      ctx.strokeStyle = dark ? '#FFFFFF' : `${accent}AA`;
+      ctx.strokeStyle = dark ? '#FFFFFF' : `${deepHex}AA`;
       ctx.lineWidth = 2;
       ctx.stroke();
 
       const label = formatStudentLabel(st, allStudents, alwaysShowNumber);
-      const textAvail = Math.max(48, cW - 82);
+      const textAvail = Math.max(48, cW - (pSize + 44));
       const { size } = fitFontSize(label, {
         family,
         weight: 800,
         avail: textAvail,
-        max: 30,
-        min: 18,
+        max: 34,
+        min: 20,
       });
       ctx.fillStyle = dark ? '#F3F7F5' : '#203B32';
       ctx.font = `800 ${Math.round(size)}px ${family}`;
       ctx.textBaseline = 'middle';
-      ctx.fillText(label, cx + 64, cy + 30, textAvail);
+      ctx.fillText(label, cx + pSize + 24, cy + chipH / 2 + 1, textAvail);
     }
   }
 

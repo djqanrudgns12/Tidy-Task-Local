@@ -9,6 +9,7 @@ import {
   dampedSpring,
   squashStretch,
   groundShadow,
+  computeHoldBudget,
 } from './suspense.js';
 import { shuffle } from '../solver.js';
 
@@ -29,8 +30,10 @@ export const TRAIN_DOOR_RECT = Object.freeze({
 
 export const TRAIN_QUEUE_Y = 812;
 export const TRAIN_MAX_QUEUE_SLOTS = 4;
-export const TRAIN_STUDENT_BASE_H = 192;
+export const TRAIN_STUDENT_BASE_H = 234;
 export const TRAIN_STUDENT_BASE_W = 124;
+export const TRAIN_DOOR_FIT_W = 124;
+export const TRAIN_PHOTO_LANE_DX = 10;
 
 /** 원근 지면 배율 연속 함수 (PRD §4.2: Yg=690→0.86, Yg=812→1.034).
  * @param {number} footY */
@@ -101,11 +104,19 @@ export function createTrainPlan({ groups, allStudentIds, reduced = false, word }
     waitingRankMap[sid] = idx;
   });
 
+  /** @type {Record<string, number>} */
+  const groupByStudent = {};
+  for (const g of groups) {
+    for (const sid of g.studentIds) groupByStudent[sid] = g.index;
+  }
+
   if (reduced) {
     /** @type {{studentId:string, groupIndex:number, atMs:number}[]} */
     const ticketEvents = [];
     /** @type {Record<string, number>} */
     const leaveMsByStudent = {};
+    /** @type {Record<string, number>} */
+    const revealMsByStudent = {};
     let cursor = 140;
     const gap = Math.max(12, Math.floor((REDUCED_DURATION_MS - 260) / Math.max(1, totalN)));
     const cars = groups.map((g) => ({
@@ -120,18 +131,21 @@ export function createTrainPlan({ groups, allStudentIds, reduced = false, word }
       departEndMs: REDUCED_DURATION_MS,
       boardings: g.studentIds.map((sid, mi) => {
         const at = cursor;
+        revealMsByStudent[sid] = at;
         leaveMsByStudent[sid] = at;
         ticketEvents.push({ studentId: sid, groupIndex: g.index, atMs: at });
         cursor += gap;
         return {
           studentId: sid,
           slotInCar: mi,
+          revealMs: at,
           startMs: at,
           endMs: at + gap,
           commitAt: at,
           isMidRace: false,
           isPhotoFinish: false,
           isPhotoPairLead: false,
+          photoLane: 0,
           rivalId: null,
         };
       }),
@@ -142,25 +156,21 @@ export function createTrainPlan({ groups, allStudentIds, reduced = false, word }
       totalDurationMs: REDUCED_DURATION_MS,
       waitingOrder,
       waitingRankMap,
+      groupByStudent,
+      revealMsByStudent,
       leaveMsByStudent,
       cars,
       ticketEvents,
     };
   }
 
-  // 비선형 페이싱: 28명/6모둠 기준 ~23.75초 수렴
+  // 비선형 페이싱 + 2-Pass 60초 예산 인지 홀드 계산(PRD §3.6)
   const perCarIn = gCount <= 3 ? 1050 : gCount <= 6 ? 820 : 620;
   const perCarOut = gCount <= 3 ? 680 : gCount <= 6 ? 560 : 420;
   const midCarIdx = gCount >= 3 ? Math.floor(gCount / 2) : -1;
   const lastCarIdx = gCount - 1;
   const scaleFactor = Math.max(0.62, Math.min(1.38, 28 / Math.max(6, totalN)));
 
-  /** @type {any[]} */
-  const cars = [];
-  /** @type {{studentId:string, groupIndex:number, atMs:number, isClimax?:boolean}[]} */
-  const ticketEvents = [];
-  /** @type {Record<string, number>} */
-  const leaveMsByStudent = {};
   /** @type {Record<string, number>} */
   const globalOrderIdx = {};
 
@@ -172,108 +182,145 @@ export function createTrainPlan({ groups, allStudentIds, reduced = false, word }
     }
   }
 
-  let t = 0;
-
-  for (let gi = 0; gi < gCount; gi++) {
-    const grp = groups[gi];
-    const carStart = t;
-    const arriveEnd = carStart + perCarIn;
-    t = arriveEnd + 160; // 정차 후 문 개방 대기
-
+  /** @param {number} revealHoldMs @param {number} groupHoldMs */
+  function buildSchedule(revealHoldMs, groupHoldMs) {
     /** @type {any[]} */
-    const boardings = [];
-    const members = grp.studentIds;
+    const cars = [];
+    /** @type {{studentId:string, groupIndex:number, atMs:number, isClimax?:boolean}[]} */
+    const ticketEvents = [];
+    /** @type {Record<string, number>} */
+    const leaveMsByStudent = {};
+    /** @type {Record<string, number>} */
+    const revealMsByStudent = {};
+    let t = 0;
 
-    for (let mi = 0; mi < members.length; mi++) {
-      const sid = members[mi];
-      const isLastCar = gi === lastCarIdx;
-      const isLastOverall = isLastCar && mi === members.length - 1;
-      const isPhotoLead = isLastCar && members.length >= 2 && mi === members.length - 2;
-      const isPhotoPairSecond = isLastCar && members.length >= 2 && mi === members.length - 1;
-      const isMidHighlight = gi === midCarIdx && mi === members.length - 1 && totalN >= 6;
+    for (let gi = 0; gi < gCount; gi++) {
+      const grp = groups[gi];
+      const carStart = t;
+      const arriveEnd = carStart + perCarIn;
+      t = arriveEnd + 160; // 정차 후 문 개방 대기
 
-      let stepMs = gi === 0 ? 640 : 410;
-      stepMs = Math.round(stepMs * scaleFactor);
-      stepMs = Math.max(260, Math.min(720, stepMs));
-      if (isMidHighlight) stepMs = Math.max(stepMs, 760);
-      if (isPhotoLead || isLastOverall) stepMs = 1050;
+      /** @type {any[]} */
+      const boardings = [];
+      const members = grp.studentIds;
 
-      // PRD §4.2 C5:
-      // - 포토피니시: 마지막 호차 마지막 2명이 6px y-오프셋으로 나란히 달려와 둘 다 0.25s(250ms) 차로 탑승(패자 없음).
-      // - 중반 하이라이트 라이벌: 아직 미탑승 상태(rivalId ∉ committedIds)인 후속 순번 학생으로만 제한!
-      let rivalId = null;
-      if (isMidHighlight) {
-        const mySeq = globalOrderIdx[sid] ?? 0;
-        // 아직 탑승하지 않은 후속 학생 중 현재 대기열 앞쪽(슬롯 0..6)에 서 있는 후보 우선
-        const laterCandidates = allStudentIds
-          .filter((id) => id !== sid && (globalOrderIdx[id] ?? -1) > mySeq)
-          .sort((a, b) => (waitingRankMap[a] ?? 999) - (waitingRankMap[b] ?? 999));
-        if (laterCandidates.length > 0) {
-          rivalId = laterCandidates[0];
+      for (let mi = 0; mi < members.length; mi++) {
+        const sid = members[mi];
+        const isLastCar = gi === lastCarIdx;
+        const isLastOverall = isLastCar && mi === members.length - 1;
+        const isPhotoLead = isLastCar && members.length >= 2 && mi === members.length - 2;
+        const isPhotoPairSecond = isLastCar && members.length >= 2 && mi === members.length - 1;
+        const isMidHighlight = gi === midCarIdx && mi === members.length - 1 && totalN >= 6;
+
+        let stepMs = gi === 0 ? 640 : 410;
+        stepMs = Math.round(stepMs * scaleFactor);
+        stepMs = Math.max(260, Math.min(720, stepMs));
+        if (isMidHighlight) stepMs = Math.max(stepMs, 760);
+        if (isPhotoLead || isLastOverall) stepMs = 1050;
+
+        let rivalId = null;
+        if (isMidHighlight) {
+          const mySeq = globalOrderIdx[sid] ?? 0;
+          const laterCandidates = allStudentIds
+            .filter((id) => id !== sid && (globalOrderIdx[id] ?? -1) > mySeq)
+            .sort((a, b) => (waitingRankMap[a] ?? 999) - (waitingRankMap[b] ?? 999));
+          if (laterCandidates.length > 0) {
+            rivalId = laterCandidates[0];
+          }
+        }
+
+        // 포토피니시 2인은 첫 번째 리드 학생의 1회 홀드를 공유하고 250ms 차로 나란히 출발!
+        let revealMs = t;
+        let bStart = revealMs + revealHoldMs;
+        if (isPhotoPairSecond && boardings.length > 0) {
+          const leadBoarding = boardings[boardings.length - 1];
+          revealMs = leadBoarding.revealMs + 80;
+          bStart = leadBoarding.startMs + 250;
+        }
+        const bEnd = bStart + stepMs;
+        const commitAt = Math.round(bStart + stepMs * 0.78);
+        revealMsByStudent[sid] = revealMs;
+        leaveMsByStudent[sid] = bStart;
+
+        boardings.push({
+          studentId: sid,
+          slotInCar: mi,
+          revealMs,
+          startMs: bStart,
+          endMs: bEnd,
+          commitAt,
+          isMidRace: isMidHighlight,
+          isPhotoFinish: isPhotoLead || isPhotoPairSecond || isLastOverall,
+          photoLane: isPhotoLead ? -1 : isPhotoPairSecond ? 1 : 0,
+          rivalId,
+        });
+        ticketEvents.push({
+          studentId: sid,
+          groupIndex: grp.index,
+          atMs: commitAt,
+          isClimax: isPhotoPairSecond || (members.length === 1 && isLastOverall),
+        });
+
+        if (isPhotoLead) {
+          // 다음 loop(isPhotoPairSecond)는 leadBoarding.startMs + 250을 직접 참조해 정확히 250ms 차 보존
+          t = bStart;
+        } else {
+          t = bEnd + (isLastOverall ? 220 : 60);
         }
       }
 
-      const bStart = t;
-      const bEnd = t + stepMs;
-      // Phase B 도약 착지 완료(u ≈ 0.82) 직전인 0.78 시점에 확정 티켓 발사
-      const commitAt = Math.round(bStart + stepMs * 0.78);
-      leaveMsByStudent[sid] = bStart;
+      const lastBEnd = boardings.reduce((mx, b) => Math.max(mx, b.endMs), t);
+      const closeStartMs = Math.max(t, lastBEnd + Math.max(40, groupHoldMs)); // 인지 완료 홀드 후 문 닫힘
+      const boardEnd = closeStartMs + 180;
+      const departEnd = boardEnd + perCarOut;
 
-      boardings.push({
-        studentId: sid,
-        slotInCar: mi,
-        startMs: bStart,
-        endMs: bEnd,
-        commitAt,
-        isMidRace: isMidHighlight,
-        isPhotoFinish: isPhotoLead || isPhotoPairSecond || isLastOverall,
-        photoLane: isPhotoLead ? -1 : isPhotoPairSecond ? 1 : 0,
-        rivalId,
-      });
-      ticketEvents.push({
-        studentId: sid,
+      cars.push({
         groupIndex: grp.index,
-        atMs: commitAt,
-        isClimax: isPhotoPairSecond || (members.length === 1 && isLastOverall),
+        name: grp.name,
+        color: grp.color,
+        symbol: grp.symbol,
+        startMs: carStart,
+        arriveEndMs: arriveEnd,
+        closeStartMs,
+        boardEndMs: boardEnd,
+        departEndMs: departEnd,
+        boardings,
       });
-
-      if (isPhotoLead) {
-        // 마지막 2인은 250ms 차이로 나란히 달려와 둘 다 탑승!
-        t = bStart + 250;
-      } else {
-        t = bEnd + (isLastOverall ? 220 : 60);
-      }
+      t = departEnd + 80;
     }
 
-    const lastBEnd = boardings.reduce((mx, b) => Math.max(mx, b.endMs), t);
-    const closeStartMs = Math.max(t, lastBEnd + 40); // Phase C 착지 완료 후 문 닫힘 시작
-    const boardEnd = closeStartMs + 180;
-    const departEnd = boardEnd + perCarOut;
-
-    cars.push({
-      groupIndex: grp.index,
-      name: grp.name,
-      color: grp.color,
-      symbol: grp.symbol,
-      startMs: carStart,
-      arriveEndMs: arriveEnd,
-      closeStartMs,
-      boardEndMs: boardEnd,
-      departEndMs: departEnd,
-      boardings,
-    });
-    t = departEnd + 80;
+    return {
+      totalDurationMs: Math.max(t + 320, 4200),
+      cars,
+      ticketEvents,
+      revealMsByStudent,
+      leaveMsByStudent,
+    };
   }
+
+  // Pass 1: 순수 주행/이동 시간 baseMs 측정 -> Pass 2: 60초 예산 기반 hold 배분
+  const basePass = buildSchedule(0, 0);
+  const { revealHoldMs, groupHoldMs } = computeHoldBudget({
+    baseMs: basePass.totalDurationMs,
+    totalN,
+    groupCount: gCount,
+    reduced: false,
+  });
+  const finalSchedule = buildSchedule(revealHoldMs, groupHoldMs);
 
   return {
     mode: /** @type {const} */ ('train'),
     reduced: false,
-    totalDurationMs: Math.max(t + 320, 4200),
+    revealHoldMs,
+    groupHoldMs,
+    totalDurationMs: finalSchedule.totalDurationMs,
     waitingOrder,
     waitingRankMap,
-    leaveMsByStudent,
-    cars,
-    ticketEvents,
+    groupByStudent,
+    revealMsByStudent: finalSchedule.revealMsByStudent,
+    leaveMsByStudent: finalSchedule.leaveMsByStudent,
+    cars: finalSchedule.cars,
+    ticketEvents: finalSchedule.ticketEvents,
   };
 }
 
@@ -341,6 +388,21 @@ export function trainPoseAt(plan, elapsedMs) {
   if (activeCarIdx > 0 && activeCarIdx < plan.cars.length - 1) act = 2;
   if (activeCarIdx === plan.cars.length - 1) act = 3;
 
+  /** @type {any[]} */
+  const activeReveals = [];
+  if (!plan.reduced) {
+    for (const b of car.boardings) {
+      if (t >= b.revealMs && t < b.startMs) {
+        activeReveals.push({
+          studentId: b.studentId,
+          groupIndex: car.groupIndex,
+          groupName: car.name,
+          progress: clamp((t - b.revealMs) / Math.max(1, b.startMs - b.revealMs)),
+        });
+      }
+    }
+  }
+
   // 3단계 문턱 핸드오프(Phase A 승강장 접근 -> Phase B 문턱 도약 -> Phase C 객실 착지)
   /** @type {any[]} */
   const activeBoardings = [];
@@ -355,7 +417,7 @@ export function trainPoseAt(plan, elapsedMs) {
       const laneOffsetY = b.photoLane === -1 ? -6 : b.photoLane === 1 ? 0 : 0;
       const startY = TRAIN_QUEUE_Y + laneOffsetY;
       const seatOffsetX = ((b.slotInCar % 3) - 1) * 16;
-      const laneXOffset = b.photoLane === -1 ? -18 : b.photoLane === 1 ? 18 : 0;
+      const laneXOffset = b.photoLane * TRAIN_PHOTO_LANE_DX;
 
       let x = startX;
       let y = startY;
@@ -407,7 +469,7 @@ export function trainPoseAt(plan, elapsedMs) {
         photoFinishCamZoom = Math.max(photoFinishCamZoom, Math.sin(clamp(u) * Math.PI));
       }
 
-      const w = TRAIN_STUDENT_BASE_W * perspScale;
+      const w = TRAIN_DOOR_FIT_W * perspScale;
       const h = TRAIN_STUDENT_BASE_H * perspScale;
       // 실측 문 개구부(719..881) 내부로 들어왔을 때만 Z5 -> Z2 전환(절대 팝/잘림 방지)
       const behindDoor =
@@ -457,16 +519,18 @@ export function trainPoseAt(plan, elapsedMs) {
       activeBoardings.push(entry);
 
       if (b.isPhotoFinish) {
-        activeSpeech = '마지막 두 친구 나란히 탑승!';
+        activeSpeech = `${car.name} 나란히 탑승`;
       } else if (b.isMidRace) {
-        activeSpeech = '내가 먼저 탈래! 두근두근!';
+        activeSpeech = `${car.name} 승차 순서 공개`;
       } else {
-        activeSpeech = `${car.name} 승차 중!`;
+        activeSpeech = `${car.name} 승차 중`;
       }
     }
   }
 
-  // 최근 확정된 영웅 호명 콜아웃 (commitAt..commitAt+900ms)
+  const revealingHero = activeReveals[activeReveals.length - 1] ?? null;
+
+  // 최근 확정된 영웅 시각 후광 포즈 (텍스트는 StageHudBand 단일 채널만 사용)
   let heroCallout = null;
   for (let i = car.boardings.length - 1; i >= 0; i--) {
     const b = car.boardings[i];
@@ -484,12 +548,16 @@ export function trainPoseAt(plan, elapsedMs) {
   const boarding = activeBoardings[activeBoardings.length - 1] ?? null;
 
   if (!activeSpeech) {
-    if (t < car.arriveEndMs) {
-      activeSpeech = `${car.name} 열차가 햇살역으로 들어와요!`;
+    if (revealingHero) {
+      activeSpeech = `${car.name} 승차 순서 공개`;
+    } else if (t < car.arriveEndMs) {
+      activeSpeech = `${car.name} 열차 진입`;
     } else if (t > car.boardEndMs) {
-      activeSpeech = `${car.name} 출발! 칙칙폭폭~`;
+      activeSpeech = `${car.name} 객차 출발`;
+    } else if (t >= (car.closeStartMs ?? car.boardEndMs)) {
+      activeSpeech = `${car.name} 탑승 완료`;
     } else {
-      activeSpeech = `${car.name} 문이 활짝 열렸어요`;
+      activeSpeech = `${car.name} 문 개방`;
     }
   }
 
@@ -516,6 +584,9 @@ export function trainPoseAt(plan, elapsedMs) {
   const waitingPositions = waitingStudents.map((sid) => {
     const q = queueXAt(plan, sid, t);
     const isTemporarilyRacing = activeRivalIds.has(sid);
+    const revealMs = plan.revealMsByStudent?.[sid] ?? Infinity;
+    const revealed = Boolean(plan.reduced || t >= revealMs);
+    const justRevealed = Boolean(!plan.reduced && t >= revealMs && t < revealMs + 340);
     return {
       studentId: sid,
       x: q.x,
@@ -524,6 +595,9 @@ export function trainPoseAt(plan, elapsedMs) {
       opacity: isTemporarilyRacing ? 0 : q.opacity,
       visible: q.visible && !isTemporarilyRacing,
       rank: q.rank,
+      revealed,
+      justRevealed,
+      revealedGroupIndex: plan.groupByStudent?.[sid] ?? car.groupIndex,
     };
   });
   const queueHiddenCount = Math.max(0, waitingStudents.length - TRAIN_MAX_QUEUE_SLOTS);
@@ -564,6 +638,8 @@ export function trainPoseAt(plan, elapsedMs) {
     wheelAngleDeg,
     crankAngleRad,
     doorOpenRatio,
+    activeReveals,
+    revealingHero,
     boarding,
     activeBoardings,
     heroCallout,

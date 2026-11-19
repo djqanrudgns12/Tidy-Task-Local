@@ -4,10 +4,11 @@
   import { applyTodoOrder } from "../lib/todos/order.js";
   import { appState } from "../lib/appState.svelte.js";
   import { editable } from "../lib/editable.js";
-  import { Check, Plus, Flag, ArrowUpDown } from "lucide-svelte";
+  import { Check, Plus, ArrowUpDown } from "lucide-svelte";
+  import DdayTodoChip from "./dday/DdayTodoChip.svelte";
   import clsx from "clsx";
   import { onMount, tick } from "svelte";
-  import SoftX from "./todo/SoftX.svelte";
+  import EraserButton from "./todo/EraserButton.svelte";
   import UndoToast from "./todo/UndoToast.svelte";
   import { REMOVAL_GUARD_MS, createRemovalGuard, isXArmed } from "../lib/todos/rowGestures.js";
   import Icon from "@iconify/svelte";
@@ -417,17 +418,13 @@
           -->
           <div class="todo-tail" class:has-flag={!!linkedDday}>
             {#if linkedDday}
-              <button
-                type="button"
+              <DdayTodoChip
+                item={linkedDday}
+                todayKey={appState.todayKey}
+                themeColor={appState.themeColor}
+                dark={appState.isDarkMode}
                 onclick={() => appState.openDdayControl({ focusDdayId: linkedDday.id })}
-                onmousedown={(e) => e.preventDefault()}
-                class="todo-lead px-1 rounded transition-transform hover:scale-110 active:scale-95 shrink-0"
-                style="color: {appState.getThemeAccentColor()}; opacity: 0.85;"
-                title="D-Day 컨트롤에서 보기"
-                aria-label="D-Day 연결됨 · 컨트롤 열기"
-              >
-                <Flag size={11} strokeWidth={2.4} />
-              </button>
+              />
             {/if}
 
             <div class="todo-float">
@@ -443,7 +440,7 @@
                 <ArrowUpDown size={11} strokeWidth={2.6} />
               </button>
               <span class="todo-x-pop">
-                <SoftX
+                <EraserButton
                   dark={appState.isDarkMode}
                   canPress={(e) => canPressX(e, todo.id)}
                   onremove={(e) => handleRemove(e, todo.id)}
@@ -611,7 +608,7 @@
     transition: opacity 140ms ease-out;
     z-index: 1;
   }
-  .todo-tail.has-flag .todo-float { margin-right: 1px; }
+  .todo-tail.has-flag .todo-float { margin-right: 2px; }
 
   .todo-veil {
     position: absolute;
@@ -622,12 +619,12 @@
     transition: background-color 200ms ease;
   }
 
-  /* X는 나타날 때 0.6배에서 톡 튀어나옵니다(크기는 겉 상자, 올림·누름 효과는 SoftX 자신이 맡음). */
+  /* 지우개 단추는 나타날 때 0.72배에서 톡 튀어나옵니다(크기는 겉 상자, 올림·누름 효과는 EraserButton 자신이 맡음). */
   .todo-x-pop {
     position: relative;
     display: grid;
     pointer-events: none;
-    transform: scale(0.6);
+    transform: scale(0.72);
     transition: transform 220ms cubic-bezier(0.34, 1.56, 0.64, 1), opacity 140ms ease-out;
   }
 
@@ -637,7 +634,7 @@
     display: grid;
     place-items: center;
     width: 0;
-    height: 18px;
+    height: 20px;
     padding: 0;
     margin: 0;
     border: 0;
@@ -671,7 +668,7 @@
   .todo-rows .todo-row:global(:is([data-dnd-dragging], [data-dnd-dropping])) .todo-x-pop,
   .todo-rows.is-settling .todo-row .todo-x-pop {
     opacity: 0;
-    transform: scale(0.6);
+    transform: scale(0.72);
     pointer-events: none;
   }
   /* 잡힌 줄: 마우스로 끄는 중이면 묶음을 숨기고, 키보드로 끄는 중이면 손잡이만 남깁니다. */
@@ -705,11 +702,11 @@
     to { background-color: transparent; }
   }
 
-  /* 마우스를 올릴 수 없는 기기: X를 늘 보여 주고, 그 자리만큼 글 오른쪽을 비웁니다(기기마다 고정이라 흔들림 없음). */
+  /* 마우스를 올릴 수 없는 기기: 지우개를 늘 보여 주고, 그 자리만큼 글 오른쪽을 비웁니다(기기마다 고정이라 흔들림 없음). */
   @media (hover: none) {
     .todo-float { opacity: 1; }
     .todo-x-pop { transform: none; pointer-events: auto; }
-    .todo-text { padding-right: 26px; }
+    .todo-text { padding-right: 30px; }
   }
 
   @media (prefers-reduced-motion: reduce) {
@@ -723,9 +720,15 @@
     padding-bottom: var(--todo-pad-y);
     /* 사용자가 넣은 띄어쓰기/줄바꿈을 그대로 보존합니다. */
     white-space: pre-wrap;
-    /* 한국어는 어절(띄어쓰기) 단위로 줄을 넘겨야 자연스럽습니다. */
-    word-break: keep-all;
-    /* 다만 URL처럼 띄어쓰기가 없는 긴 문자열은 강제로 잘라 가로 넘침을 막습니다. */
+    /* 좁은 할 일 칸에서 띄어쓰기가 없는 긴 단어가 통째로 내려가 오른쪽 빈 공간이 크게 생기는 것을 막기 위해 글자 단위로 줄바꿈합니다. */
+    word-break: break-all;
+    /* 특수문자 연속 등 word-break로 못 자르는 문자열도 가로 넘침 없이 줄바꿈합니다. */
+    overflow-wrap: anywhere;
+  }
+
+  .todo-input-field {
+    /* 새 할 일 입력칸도 목록과 동일하게 글자 단위로 줄바꿈해 빈 공간과 가로 넘침을 막습니다. */
+    word-break: break-all;
     overflow-wrap: anywhere;
   }
 

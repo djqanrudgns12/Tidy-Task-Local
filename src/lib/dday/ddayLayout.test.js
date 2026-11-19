@@ -9,54 +9,59 @@ import {
 } from './ddayLayout.js';
 
 test('classifyControlLayout applies hysteresis deadbands without boundary flicker', () => {
-  const std = classifyControlLayout({ width: 372, height: 572, itemCount: 3, archiveCount: 2 });
+  const std = classifyControlLayout({ width: 380, height: 580, itemCount: 3, archiveCount: 2 });
   assert.equal(std.tier, 'standard');
   assert.equal(std.compactWidth, false);
   assert.equal(std.wideEdit, false);
   assert.equal(std.listGrid2Col, false);
 
-  // 진입 임계치(336px 미만) 전에는 standard 유지, 미만에서 compact 진입
-  const at340 = classifyControlLayout({ width: 340, height: 572, prev: std });
-  assert.equal(at340.compactWidth, false);
-  const comp = classifyControlLayout({ width: 332, height: 572, prev: at340 });
+  // 진입 임계치(360px 미만) 전에는 standard 유지, 미만에서 compact 진입
+  const at362 = classifyControlLayout({ width: 362, height: 580, prev: std });
+  assert.equal(at362.compactWidth, false);
+  const comp = classifyControlLayout({ width: 340, height: 580, prev: at362 });
   assert.equal(comp.compactWidth, true);
-  // 345px(데드밴드 336..352 구간)로 커져도 즉시 풀리지 않고 compact 유지
-  const stillComp = classifyControlLayout({ width: 345, height: 572, prev: comp });
+  assert.equal(comp.tier, 'compact');
+  // 366px(데드밴드 360..372 구간)로 커져도 즉시 풀리지 않고 compact 유지
+  const stillComp = classifyControlLayout({ width: 366, height: 580, prev: comp });
   assert.equal(stillComp.compactWidth, true);
-  // 352px 이상에서 이탈
-  const backStd = classifyControlLayout({ width: 355, height: 572, prev: stillComp });
+  // 372px 이상에서 이탈
+  const backStd = classifyControlLayout({ width: 374, height: 580, prev: stillComp });
   assert.equal(backStd.compactWidth, false);
 
-  // 560px 와이드 프리셋(shell 552px)에서 wideEdit·wideSettings 모두 켜짐
-  const wide = classifyControlLayout({ width: 552, height: 632, itemCount: 3, prev: backStd });
+  // 560px 와이드 프리셋에서 wideEdit·wideSettings 모두 켜짐
+  const wide = classifyControlLayout({ width: 560, height: 660, itemCount: 3, prev: backStd });
+  assert.equal(wide.tier, 'wide');
   assert.equal(wide.wideEdit, true);
   assert.equal(wide.wideSettings, true);
-  // 데드밴드(536px)에서는 유지, 520px에서는 해제
-  assert.equal(classifyControlLayout({ width: 536, height: 632, prev: wide }).wideEdit, true);
-  assert.equal(classifyControlLayout({ width: 520, height: 632, prev: wide }).wideEdit, false);
+  // 데드밴드(528px)에서는 유지, 520px 미만에서는 해제
+  assert.equal(classifyControlLayout({ width: 528, height: 660, prev: wide }).wideEdit, true);
+  assert.equal(classifyControlLayout({ width: 518, height: 660, prev: wide }).wideEdit, false);
 });
 
-test('listGrid2Col stays single-column when only 0 or 1 active item exists', () => {
-  const single = classifyControlLayout({ width: 760, height: 700, itemCount: 1, archiveCount: 1 });
-  assert.equal(single.tier, 'xwide');
-  assert.equal(single.listGrid2Col, false);
-  assert.equal(single.archiveGrid2Col, false);
+test('listGrid2Col and archiveGrid2Col stay single-column across full width harness (340..580)', () => {
+  const minW = classifyControlLayout({ width: 340, height: 460, itemCount: 8, archiveCount: 5 });
+  assert.equal(minW.listGrid2Col, false);
+  assert.equal(minW.archiveGrid2Col, false);
+  assert.equal(minW.veryNarrow, false);
 
-  const multi = classifyControlLayout({ width: 760, height: 700, itemCount: 2, archiveCount: 2 });
-  assert.equal(multi.listGrid2Col, true);
-  assert.equal(multi.archiveGrid2Col, true);
+  const maxW = classifyControlLayout({ width: 580, height: 860, itemCount: 8, archiveCount: 5 });
+  assert.equal(maxW.tier, 'wide');
+  assert.equal(maxW.listGrid2Col, false);
+  assert.equal(maxW.archiveGrid2Col, false);
+  assert.equal(maxW.wideEdit, true);
+  assert.equal(maxW.wideSettings, true);
 });
 
-test('computeControlMetrics clamps CalendarPanel 15.4em cleanly even at 292px + 14pt', () => {
-  const narrowHeavy = computeControlMetrics({
-    width: 292,
-    height: 392,
-    uiFontSize: 14,
+test('computeControlMetrics clamps CalendarPanel 15.4em cleanly even at 340px + 15pt', () => {
+  const minHeavy = computeControlMetrics({
+    width: 340,
+    height: 460,
+    uiFontSize: 15,
     wideEdit: false,
   });
   // CalendarPanel width is 15.4em -> must stay strictly inside shell width
-  assert.ok(narrowHeavy.calFs * 15.4 < 260, `cal width too wide: ${narrowHeavy.calFs * 15.4}`);
-  assert.ok(narrowHeavy.scale >= 0.88 && narrowHeavy.scale <= 1.05);
+  assert.ok(minHeavy.calFs * 15.4 < 310, `cal width too wide: ${minHeavy.calFs * 15.4}`);
+  assert.ok(minHeavy.scale >= 0.88 && minHeavy.scale <= 1.15);
 
   const flatWide = computeControlMetrics({
     width: 720,

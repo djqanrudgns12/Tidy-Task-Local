@@ -15,24 +15,40 @@ import {
   normalizeRatios,
 } from './allocation.js';
 
-test('recommendAllocations produces unique sig tiers and never exposes 1-person groups for N >= 4', () => {
+test('recommendAllocations returns contiguous window (max 4, N>=10 -> 4) preserving [0] as top pick and >=2 caps', () => {
   assert.deepEqual(recommendAllocations(2), []);
   assert.deepEqual(recommendAllocations(3), []);
   assert.equal(recommendAllocations(4).length, 1);
   assert.equal(recommendAllocations(5).length, 1);
   assert.equal(recommendAllocations(6).length, 2);
   assert.equal(recommendAllocations(7).length, 2);
+  assert.equal(recommendAllocations(8).length, 3);
+  assert.equal(recommendAllocations(9).length, 3);
 
   for (let n = 4; n <= 50; n++) {
     const recs = recommendAllocations(n);
-    assert.ok(recs.length >= 1 && recs.length <= 3, `N=${n}`);
-    const sigs = recs.map((r) => r.sig);
-    assert.equal(new Set(sigs).size, sigs.length, `sig 중복 발생 N=${n}: ${sigs}`);
+    const expectedLen = n <= 5 ? 1 : n <= 7 ? 2 : n <= 9 ? 3 : 4;
+    assert.equal(recs.length, expectedLen, `N=${n}: length=${recs.length}`);
+    assert.equal(recs[0].isTop, true, `N=${n}: recs[0] must be top recommendation`);
+    assert.equal(recs.filter((r) => r.isTop).length, 1, `N=${n}: exactly one isTop`);
+
+    const asc = [...recs].sort((a, b) => a.groupCount - b.groupCount);
+    for (let i = 1; i < asc.length; i++) {
+      assert.equal(asc[i].groupCount, asc[i - 1].groupCount + 1, `N=${n}: non-contiguous ${asc.map((x) => x.groupCount)}`);
+    }
     for (const r of recs) {
       assert.equal(r.capacities.reduce((a, b) => a + b, 0), n);
       assert.ok(r.capacities.every((c) => c >= 2), `N=${n} 1인 모둠 포함: ${r.capacities}`);
     }
   }
+
+  // N=21 기본값 5모둠 불변 계약 & 실측 연속 조합 확인
+  const r21 = recommendAllocations(21);
+  assert.equal(createDefaultIntent(21).baseIntent.groupCount, 5);
+  assert.equal(r21[0].groupCount, 5);
+  assert.deepEqual(r21.map((r) => r.groupCount).sort((a, b) => a - b), [4, 5, 6, 7]);
+  assert.deepEqual(recommendAllocations(29).map((r) => r.groupCount).sort((a, b) => a - b), [6, 7, 8, 9]);
+  assert.deepEqual(recommendAllocations(37).map((r) => r.groupCount).sort((a, b) => a - b), [8, 9, 10, 11]);
 });
 
 test('computeRemainderOptions blocks 1-person isolation on K=2 odd N and keeps exact sum', () => {

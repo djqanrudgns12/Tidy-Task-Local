@@ -2,9 +2,9 @@
   import GroupSymbol from '../../scoreboard/GroupSymbol.svelte';
   import StageHudBand from './StageHudBand.svelte';
   import StageStudent from './StageStudent.svelte';
-  import { createBannerTracker } from './stageShared.js';
+  import { createBannerTracker, idleTitle } from './stageShared.js';
   import { PALETTE } from '../../../lib/scoreboard/model.js';
-  import { STORYBOOK_PAINT } from '../../../lib/group-picker/recolor.js';
+  import { STORYBOOK_PAINT, resolveDeepBadgeHex } from '../../../lib/group-picker/recolor.js';
   import { formatStudentLabel } from '../../../lib/group-picker/allocation.js';
   import {
     GLACIER_URLS,
@@ -47,6 +47,7 @@
     fontFamily = 'Pretendard, sans-serif',
     onStart,
     onSkip,
+    onOpenSetup,
     onMarkBroken,
   } = $props<{
     phase: 'idle' | 'running' | 'settled';
@@ -67,6 +68,7 @@
     fontFamily?: string;
     onStart: () => void;
     onSkip?: () => void;
+    onOpenSetup?: () => void;
     onMarkBroken: (src: string) => void;
   }>();
 
@@ -104,7 +106,7 @@
   // 대기 상태 정원 비례 미리보기 BSP
   const idleBsp = $derived(
     capacities.length >= 2 && capacities.every((c: number) => c >= 1)
-      ? partitionGlacierBSP(capacities, GLACIER_W, GLACIER_H, 42)
+      ? partitionGlacierBSP(capacities, GLACIER_W, GLACIER_H, 42, capacities.map((c: number) => c + 1.2))
       : null,
   );
 
@@ -120,7 +122,7 @@
       return bannerTracker.update({
         mode: 'glacier',
         elapsed: 0,
-        idleText: `${groups.length}개 모둠 얼음섬이 정원 비율로 나뉠 준비가 됐어요!`,
+        idleText: idleTitle('북극 분열', participants.length, groups.length),
       });
     }
     if (lastRunRef !== plan) {
@@ -142,6 +144,7 @@
               key: `gl-hero-${hero.id}`,
               groupIndex: lastGrp.index,
               groupName: lastGrp.name,
+              groupColorId: lastGrp.color,
               groupColorHex: hex,
               groupSymbol: lastGrp.symbol,
               studentName: formatStudentLabel(hero, allStudents, alwaysShowNumber),
@@ -171,6 +174,7 @@
           ? {
               groupIndex: focus.g.index,
               groupName: focus.g.name,
+              groupColorId: focus.g.color,
               groupColorHex: focusHex,
               groupSymbol: focus.g.symbol,
               text: `${focus.doneCount}/${focus.targetCount}명 착지 완료`,
@@ -245,8 +249,6 @@
     { src: GLACIER_URLS['g1-ice-shard-4'], x: 1500, y: 742, w: 46 },
   ];
 
-  const heroCalloutStudent = $derived(pose?.heroCallout ? studentById[pose.heroCallout.studentId] : null);
-  const heroGroup = $derived(pose?.heroCallout ? groups.find((g: any) => g.index === pose.heroCallout?.groupIndex) : null);
   const cam = $derived(pose?.camera ?? { x: 0, y: 0, scale: 1, originX: 800, originY: 450 });
 
   export function getLaunchScreenPoint(studentId?: string) {
@@ -263,13 +265,14 @@
 <div class="gp-stage-canvas" data-mode="glacier">
   <StageHudBand
     {phase}
+    mode="glacier"
     {groups}
     activeIndex={hudActiveIndex}
     doneAll={pose ? pose.committedIds.size === participants.length : false}
     {doneGroupIndices}
     {banner}
     {fontFamily}
-    idleStatusText={`북극 눈꽃 빙하 · ${groups.length}개 모둠 정원 비례 분할 (${participants.length}명)`}
+    idleStatusText={idleTitle('북극 분열', participants.length, groups.length)}
     {onSkip}
   />
 
@@ -441,6 +444,12 @@
                 stroke-width={pose.driftProgress < 0.08 ? 1.8 : 3.5}
                 stroke-linejoin="round"
               />
+              <path
+                d={floe.pathD}
+                fill={paintHex}
+                fill-opacity={(0.14 * pose.driftProgress).toFixed(3)}
+                stroke="none"
+              />
               {#if dark}
                 <path d={floe.pathD} fill="#1E3550" fill-opacity="0.28" stroke="none" />
               {/if}
@@ -572,7 +581,7 @@
       <!-- Z2: GPU HTML 모둠 깃발 + 대형 고대비 뱃지 (Act 2 균열과 함께 탄성 등장) -->
       {#if pose && !pose.useUnifiedRoot}
         {#each pose.sortedFloes as floe (floe.groupIndex)}
-          {@const uiHex = UI_COLOR_MAP[floe.color] ?? '#4FC2A0'}
+          {@const deepHex = resolveDeepBadgeHex(floe.color)}
           {@const flagSrc = recoloredFlags[floe.color] ?? GLACIER_URLS['g1-flag-base']}
           {@const bx = floe.badge.x + (floe.offsetX ?? 0) + (pose.tremorX ?? 0)}
           {@const by = floe.badge.y + (floe.offsetY ?? 0) + (floe.bobY ?? 0)}
@@ -598,12 +607,14 @@
               />
             {/if}
             <div
-              class="gp-stage-badge"
-              style:border-color={uiHex}
+              class="gp-stage-badge gp-glacier-deep-badge"
+              style:background={deepHex}
+              style:border-color="#FFFDF9"
+              style:color="#FFFFFF"
               style:font-size={compactFlag ? '22px' : '27px'}
               style:padding={compactFlag ? '5px 12px' : '6px 15px'}
             >
-              <GroupSymbol symbol={floe.symbol} color={uiHex} size={compactFlag ? 19 : 23} />
+              <GroupSymbol symbol={floe.symbol} color="#ffffff" size={compactFlag ? 19 : 23} />
               <span>{floe.name}</span>
             </div>
           </div>
@@ -681,19 +692,6 @@
           {/if}
         {/each}
 
-        {#if pose.heroCallout && heroCalloutStudent && heroGroup}
-          {@const hHex = UI_COLOR_MAP[heroGroup.color] ?? '#4FC2A0'}
-          <div
-            class="gp-hero-callout"
-            style:left={`${pose.heroCallout.x.toFixed(1)}px`}
-            style:top={`${Math.max(96, pose.heroCallout.y - 165).toFixed(1)}px`}
-            style:border-color={hHex}
-            style:--callout-hex={hHex}
-          >
-            <GroupSymbol symbol={heroGroup.symbol} color={hHex} size={22} />
-            <span>{formatStudentLabel(heroCalloutStudent, allStudents, alwaysShowNumber)}</span>
-          </div>
-        {/if}
       {:else}
         <!-- 대기 상태 통합 빙하 위 학생 미리보기 (본체 + 최상위 이름표 분리) -->
         {#each idlePreviewStudents as item (item.st.id)}
@@ -705,7 +703,7 @@
             fullSrc={av.fullSrc}
             x={item.x}
             y={item.y}
-            heightPx={122}
+            heightPx={152}
             vpScale={vp.scale}
             idleCssAnim={true}
             {elapsed}
@@ -725,7 +723,7 @@
             fullSrc={av.fullSrc}
             x={item.x}
             y={item.y}
-            heightPx={122}
+            heightPx={152}
             vpScale={vp.scale}
             {elapsed}
             accentHex="#5A4336"
@@ -753,7 +751,13 @@
             모둠 뽑기 시작 →
           {/if}
         </button>
-        <span class="gp-cta-hint">{startDisabledReason || '스페이스바(Space)로 북극 빙하가 인원수에 비례해 갈라져요'}</span>
+        {#if startDisabledReason && onOpenSetup}
+          <button type="button" class="gp-cta-hint clickable" onclick={onOpenSetup}>
+            {startDisabledReason}
+          </button>
+        {:else}
+          <span class="gp-cta-hint">{startDisabledReason || '스페이스바(Space)로 북극 분열을 시작해요'}</span>
+        {/if}
       </div>
     {/if}
   </div>

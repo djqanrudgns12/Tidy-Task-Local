@@ -1170,7 +1170,7 @@
   .rte-faithful {
     line-height: 1.6;
     font-weight: 500;
-    word-break: break-word;
+    word-break: break-all;
     overflow-wrap: anywhere;
     white-space: normal;
     min-height: 1.2em;

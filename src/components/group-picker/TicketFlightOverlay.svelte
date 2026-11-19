@@ -96,7 +96,9 @@
       const endX = rect.left + rect.width / 2;
       const endY = rect.top + rect.height / 2;
       const ctrlX = (f.fromX + endX) / 2;
-      const ctrlY = Math.min(f.fromY, endY) - 82;
+      const hudRect = document.querySelector('.gp-hud-band')?.getBoundingClientRect();
+      const hudBottom = hudRect ? hudRect.bottom : 96;
+      const ctrlY = Math.max(hudBottom + 18, Math.min(f.fromY, endY) - 68);
       const e = easeOutCubic(u);
       const pt = bezierQuad(
         { x: f.fromX, y: f.fromY },
@@ -110,8 +112,12 @@
         { x: endX, y: endY },
         Math.max(0, e - 0.03),
       );
-      const tangentRad = Math.atan2(pt.y - ptPrev.y, pt.x - ptPrev.x);
-      const rotDeg = Math.max(-14, Math.min(14, (tangentRad * 180) / Math.PI * 0.25));
+      const dx = pt.x - ptPrev.x;
+      const dy = pt.y - ptPrev.y;
+      const horiz = Math.max(0.5, Math.abs(dx));
+      const slopeDeg = (Math.atan2(dy, horiz) * 180) / Math.PI;
+      const dirSign = dx < 0 ? -1 : 1;
+      const rotDeg = Math.max(-14, Math.min(14, slopeDeg * 0.28 * dirSign));
 
       let scale = 1;
       let opacity = 1;

@@ -10,7 +10,10 @@
     VolumeX,
     SlidersHorizontal,
     UserX,
-    Settings2,
+    PanelRightOpen,
+    TrainFront,
+    Snowflake,
+    Bell,
     UsersRound,
     ArrowRight,
   } from 'lucide-svelte';
@@ -25,7 +28,6 @@
   import { clearFitCache } from '../../lib/scoreboard/fitText.js';
   import ToolIcon from '../toolkit/ToolIcon.svelte';
   import ToolkitSelect from '../toolkit/ToolkitSelect.svelte';
-  import ToolkitSwitch from '../toolkit/ToolkitSwitch.svelte';
   import SetupSidebar from './SetupSidebar.svelte';
   import LiveManifestBoard from './LiveManifestBoard.svelte';
   import TicketFlightOverlay from './TicketFlightOverlay.svelte';
@@ -73,6 +75,7 @@
   import {
     ARM_MS,
     SETTLED_ARM_MS,
+    SETTLING_MS,
     TICKET_FLIGHT_MS,
     missedTicketEvents,
   } from '../../lib/group-picker/choreography/suspense.js';
@@ -85,7 +88,7 @@
   const ADD_CLASS_ID = '__add_class__';
   const STAGE_MODES = [
     { id: 'train' as const, label: '모둠 열차' },
-    { id: 'glacier' as const, label: '빙하 갈라지기' },
+    { id: 'glacier' as const, label: '북극 분열' },
     { id: 'elevator' as const, label: '엘리베이터' },
   ];
 
@@ -138,7 +141,6 @@
   let constraintsOpen = $state(false);
   let bridgeOpen = $state(false);
   let bridgeBusy = $state(false);
-  let displayMenuOpen = $state(false);
   let closeConfirmOpen = $state(false);
   let pendingLockSwitch = $state<{ message: string; onConfirm: () => void } | null>(null);
   let rosterDriftBanner = $state(false);
@@ -152,16 +154,43 @@
   const audio = createGroupPickerAudio();
   let brokenAssets = $state<Set<string>>(new Set());
 
-  // ── 단계 상태 기계 (idle -> running -> settled) ──
-  let phase = $state<'idle' | 'running' | 'settled'>('idle');
+  // ── 단계 상태 기계 (idle -> running -> settling -> settled) & 우측 설정 패널 ──
+  let phase = $state<'idle' | 'running' | 'settling' | 'settled'>('idle');
   let phaseEnteredAt = $state(0);
   let freeEditCaps = $state<number[] | null>(null);
+  let bodyW = $state(1280);
+  let appH = $state(820);
+  let narrowDrawerOpen = $state(false);
+  let lastFanfareRunId = '';
 
   // Object.freeze 된 추첨 결과 및 결과 보드 스냅샷은 반드시 $state.raw 에 보관합니다.
   let activeRun = $state.raw<Readonly<DrawRun> | null>(null);
   let activePlan = $state.raw<any>(null);
   let elapsed = $state(0);
   let committedIds = $state<Set<string>>(new Set());
+
+  const isTheater = $derived(phase === 'running' || phase === 'settling');
+  const stagePhase = $derived<'idle' | 'running' | 'settled'>(phase === 'settling' ? 'running' : phase);
+  const stageElapsed = $derived(phase === 'settling' ? (activePlan?.totalDurationMs ?? elapsed) : elapsed);
+  const narrowDrawer = $derived(bodyW > 0 && bodyW < 1000);
+  const setupOpenNow = $derived(phase === 'idle' && (narrowDrawer ? narrowDrawerOpen : prefsData.setupPanelOpen));
+  const sidebarCollapsed = $derived(!setupOpenNow);
+
+  function openSetupPanel() {
+    if (phase !== 'idle') return;
+    if (narrowDrawer) narrowDrawerOpen = true;
+    else prefsClient.mutate((p) => ({ ...p, setupPanelOpen: true }));
+  }
+
+  function collapseSetupPanel() {
+    setupSidebarRef?.flushPendingEdit();
+    if (narrowDrawer) narrowDrawerOpen = false;
+    else prefsClient.mutate((p) => ({ ...p, setupPanelOpen: false }));
+  }
+
+  $effect(() => {
+    if (!narrowDrawer && narrowDrawerOpen) narrowDrawerOpen = false;
+  });
 
   type SettledGroup = {
     index: number;
@@ -180,6 +209,7 @@
   let trainStageRef = $state<ReturnType<typeof TrainStage>>();
   let glacierStageRef = $state<ReturnType<typeof GlacierStage>>();
   let elevatorStageRef = $state<ReturnType<typeof ElevatorStage>>();
+  let setupSidebarRef = $state<ReturnType<typeof SetupSidebar>>();
   let sidebarSlotEl = $state<HTMLDivElement>();
   let preparingStage = $state(false);
   let docHidden = $state(false);
@@ -282,7 +312,7 @@
     if (!isCustomMode && !rosterReady) return '학급 명단을 확인하고 있어요…';
     if (over50) return `참여 인원(${presentCount}명)이 50명을 넘어 결석 제외가 필요해요`;
     if (presentCount < 2) return '최소 2명 이상이어야 모둠을 나눌 수 있어요';
-    if (!sumMatches) return '왼쪽 패널에서 [나머지 자동 맞추기]를 눌러 정원 합계를 맞춰 주세요';
+    if (!sumMatches) return '오른쪽 모둠 설정에서 [나머지 자동 맞추기]를 눌러 정원 합계를 맞춰 주세요';
     return '';
   });
 
@@ -298,13 +328,13 @@
 
   const stageGroupsRunning = $derived(activeRun?.groups ?? stageGroupsIdle);
   const activeGroupIndex = $derived.by(() => {
-    if (phase !== 'running' || !activePlan) return -1;
-    if (activePlan.mode === 'train') return trainPoseAt(activePlan, elapsed).car.groupIndex;
-    if (activePlan.mode === 'elevator') return elevatorPoseAt(activePlan, elapsed).car.groupIndex;
+    if (!isTheater || !activePlan) return -1;
+    if (activePlan.mode === 'train') return trainPoseAt(activePlan, stageElapsed).car.groupIndex;
+    if (activePlan.mode === 'elevator') return elevatorPoseAt(activePlan, stageElapsed).car.groupIndex;
     if (activePlan.mode === 'glacier') {
-      if (elapsed >= 17800) return stageGroupsRunning[stageGroupsRunning.length - 1]?.index ?? -1;
-      if (elapsed >= 12800 && stageGroupsRunning.length > 0) {
-        const focusIdx = Math.floor((elapsed - 12800) / 900) % stageGroupsRunning.length;
+      if (stageElapsed >= 17800) return stageGroupsRunning[stageGroupsRunning.length - 1]?.index ?? -1;
+      if (stageElapsed >= 12800 && stageGroupsRunning.length > 0) {
+        const focusIdx = Math.floor((stageElapsed - 12800) / 900) % stageGroupsRunning.length;
         return stageGroupsRunning[focusIdx]?.index ?? -1;
       }
     }
@@ -720,11 +750,45 @@
 
     const settleDelay = prefsData.reduced ? 40 : Math.round(TICKET_FLIGHT_MS * 0.86);
     const tid = setTimeout(() => {
-      if (disposed || phase !== 'running') return;
+      if (disposed || !isTheater) return;
       if (!committedIds.has(ev.studentId)) {
         committedIds = new Set([...committedIds, ev.studentId]);
       }
     }, settleDelay);
+    commitTimers.push(tid);
+  }
+
+  function playFanfareOnce(runId: string) {
+    if (lastFanfareRunId === runId) return;
+    lastFanfareRunId = runId;
+    audio.play('fanfare');
+  }
+
+  function enterSettling(run: Readonly<DrawRun>) {
+    if (prefsData.reduced) {
+      enterSettled(run);
+      return;
+    }
+    cancelAnimationFrame(rafId);
+    rafId = 0;
+    committedIds = new Set(run.participantIds);
+    elapsed = activePlan?.totalDurationMs ?? elapsed;
+    unsavedResult = true;
+    phase = 'settling';
+    phaseEnteredAt = performance.now();
+    playFanfareOnce(run.runId);
+    const gen = drawGeneration;
+    const clearTid = setTimeout(() => {
+      if (!disposed && phase === 'settling' && gen === drawGeneration) {
+        flightOverlay?.clearFlights();
+      }
+    }, 180);
+    commitTimers.push(clearTid);
+    const tid = setTimeout(() => {
+      if (!disposed && phase === 'settling' && gen === drawGeneration && activeRun) {
+        enterSettled(activeRun);
+      }
+    }, SETTLING_MS);
     commitTimers.push(tid);
   }
 
@@ -748,7 +812,7 @@
     unsavedResult = true;
     phase = 'settled';
     phaseEnteredAt = performance.now();
-    audio.play('fanfare');
+    playFanfareOnce(run.runId);
   }
 
   function stepAnimation(now: number) {
@@ -782,6 +846,13 @@
         if (pose.boarding && !audioCuesPlayed.has(`tr-jump-${pose.boarding.studentId}`)) {
           audioCuesPlayed.add(`tr-jump-${pose.boarding.studentId}`);
           audio.play('boardJump');
+        }
+        for (const sid of pose.activeReveals ?? []) {
+          const revKey = `tr-rev-${sid}`;
+          if (!audioCuesPlayed.has(revKey)) {
+            audioCuesPlayed.add(revKey);
+            audio.play('revealPop');
+          }
         }
       } else if (activePlan.mode === 'glacier') {
         const pose = glacierPoseAt(activePlan, nextElapsed);
@@ -842,7 +913,7 @@
     }
 
     if (nextElapsed >= activePlan.totalDurationMs) {
-      enterSettled(activeRun);
+      enterSettling(activeRun);
       return;
     }
     rafId = requestAnimationFrame(stepAnimation);
@@ -851,7 +922,13 @@
   /** 시어터 접힘 전환(280ms)과 테마 리컬러 웜업 완료 중 늦은 시점을 시계 0ms로 동기화 (상한 800ms 가드, PRD §2.1). */
   async function waitForTheaterClockGate(reducedMode: boolean) {
     await tick();
-    const sidebarWait = reducedMode || !sidebarSlotEl
+    const shouldWaitSidebar =
+      !reducedMode &&
+      !narrowDrawer &&
+      prefsData.setupPanelOpen &&
+      Boolean(sidebarSlotEl) &&
+      sidebarSlotEl!.getBoundingClientRect().width > 2;
+    const sidebarWait = !shouldWaitSidebar
       ? Promise.resolve()
       : new Promise<void>((resolve) => {
           let settled = false;
@@ -863,7 +940,7 @@
             resolve();
           };
           const onEnd = (e: TransitionEvent) => {
-            if (e.propertyName === 'width') finish();
+            if (e.target === sidebarSlotEl && e.propertyName === 'width') finish();
           };
           sidebarSlotEl?.addEventListener('transitionend', onEnd);
           const fbTimer = setTimeout(finish, 340);
@@ -877,12 +954,14 @@
 
   async function startDraw(lockedGroupsMap?: Map<number, string[]>) {
     if (!ready) return;
+    setupSidebarRef?.flushPendingEdit();
     if (phase === 'idle' && !canStart) {
       showToast(startDisabledReason || '인원 배정을 확인해 주세요.');
       audio.play('error');
       return;
     }
 
+    narrowDrawerOpen = false;
     drawError = '';
     const caps = lockedGroupsMap
       ? settledGroups.map((g) => g.studentIds.length)
@@ -964,6 +1043,10 @@
   }
 
   function skipToResult() {
+    if (phase === 'settling' && activeRun) {
+      enterSettled(activeRun);
+      return;
+    }
     if (phase !== 'running' || !activeRun) return;
     if (performance.now() - phaseEnteredAt < ARM_MS) return;
     audio.stopStageAudio();
@@ -1168,7 +1251,7 @@
   }
 
   function requestClose() {
-    if (phase === 'settled' && unsavedResult) {
+    if ((phase === 'settled' || phase === 'settling') && unsavedResult) {
       closeConfirmOpen = true;
       return;
     }
@@ -1204,7 +1287,7 @@
     const typing = tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT';
 
     if (e.key === 'Escape') {
-      if (displayMenuOpen) { displayMenuOpen = false; e.preventDefault(); return; }
+      if (narrowDrawer && narrowDrawerOpen) { collapseSetupPanel(); e.preventDefault(); return; }
       if (closeConfirmOpen) { closeConfirmOpen = false; e.preventDefault(); return; }
       if (pendingLockSwitch) { pendingLockSwitch = null; e.preventDefault(); return; }
       return;
@@ -1232,12 +1315,15 @@
       } else if (phase === 'running') {
         e.preventDefault();
         if (performance.now() - phaseEnteredAt >= ARM_MS) skipToResult();
+      } else if (phase === 'settling') {
+        e.preventDefault();
+        skipToResult();
       }
     }
   }
 
   function handleKeyup(e: KeyboardEvent) {
-    if ((e.key === ' ' || e.code === 'Space') && phase === 'running') {
+    if ((e.key === ' ' || e.code === 'Space') && isTheater) {
       e.preventDefault();
     }
   }
@@ -1283,9 +1369,13 @@
       void openRosterFor({ action: 'create-class' });
       return;
     }
+    setupSidebarRef?.flushPendingEdit();
     activeClassId = val;
     freeEditCaps = null;
     drawError = '';
+    narrowDrawerOpen = false;
+    drawGeneration++;
+    audio.stopStageAudio();
     if (phase !== 'idle') {
       clearAnimationTimers();
       phase = 'idle';
@@ -1350,18 +1440,12 @@
           lastFrameElapsed = nowElapsed;
           elapsed = nowElapsed;
         }
+      } else if (phase === 'settling' && activeRun) {
+        enterSettled(activeRun);
       }
     };
     document.addEventListener('visibilitychange', onVisibility);
     offs.push(() => document.removeEventListener('visibilitychange', onVisibility));
-
-    const onDocPointerDown = (e: PointerEvent) => {
-      if (displayMenuOpen && !(e.target as Element)?.closest('.gp-popover-anchor')) {
-        displayMenuOpen = false;
-      }
-    };
-    document.addEventListener('pointerdown', onDocPointerDown);
-    offs.push(() => document.removeEventListener('pointerdown', onDocPointerDown));
 
     audio.prefetchSamples();
 
@@ -1389,7 +1473,7 @@
           const win = getCurrentWindow();
           fullscreen = await win.isFullscreen();
           const closeOff = await win.onCloseRequested((e) => {
-            if (phase === 'settled' && unsavedResult) {
+            if ((phase === 'settled' || phase === 'settling') && unsavedResult) {
               e.preventDefault();
               closeConfirmOpen = true;
             } else {
@@ -1418,7 +1502,14 @@
 
 <svelte:window onkeydown={handleKeydown} onkeyup={handleKeyup} />
 
-<section class="gp-app" data-scheme={scheme} data-reduced={prefsData.reduced ? 'true' : 'false'} data-hidden={docHidden ? 'true' : 'false'} aria-label="모둠원 뽑기">
+<section
+  class="gp-app"
+  data-scheme={scheme}
+  data-reduced={prefsData.reduced ? 'true' : 'false'}
+  data-hidden={docHidden ? 'true' : 'false'}
+  aria-label="모둠원 뽑기"
+  bind:clientHeight={appH}
+>
   {#if native}
     <div class="gp-resize gp-resize-nw" role="presentation" onmousedown={(e) => resizeFromCorner(e, 'NorthWest')}></div>
     <div class="gp-resize gp-resize-ne" role="presentation" onmousedown={(e) => resizeFromCorner(e, 'NorthEast')}></div>
@@ -1450,7 +1541,7 @@
     </div>
   </header>
 
-  <!-- 보조 도구줄 (52px) -->
+  <!-- 보조 도구줄 (54px) -->
   {#if phase !== 'settled'}
     <div class="gp-toolbar">
       <div class="gp-toolbar-group">
@@ -1458,16 +1549,16 @@
           value={activeClassId}
           label="학급 또는 명단 선택"
           options={classSelectOptions}
-          disabled={phase === 'running'}
+          disabled={isTheater}
           onchange={chooseClassOption}
         />
         <button
           type="button"
           class="gp-pill-btn"
-          disabled={phase === 'running' || allStudents.length === 0}
+          disabled={isTheater || allStudents.length === 0}
           onclick={() => (absenceOpen = true)}
         >
-          <UserX size={14} />
+          <UserX size={15} />
           <span class="gp-hide-narrow">결석 제외</span>
           {#if entryState.excludedIds.length > 0}
             <span class="gp-badge-count">{entryState.excludedIds.length}</span>
@@ -1476,10 +1567,10 @@
         <button
           type="button"
           class="gp-pill-btn"
-          disabled={phase === 'running' || effectiveParticipants.length < 2}
+          disabled={isTheater || effectiveParticipants.length < 2}
           onclick={() => (constraintsOpen = true)}
         >
-          <SlidersHorizontal size={14} />
+          <SlidersHorizontal size={15} />
           <span class="gp-hide-narrow">조건 설정</span>
           {#if activeRuleCount > 0}
             <span class="gp-badge-count">{activeRuleCount}</span>
@@ -1494,9 +1585,21 @@
             role="tab"
             aria-selected={prefsData.lastMode === m.id}
             class:active={prefsData.lastMode === m.id}
-            disabled={phase === 'running'}
-            onclick={() => prefsClient.mutate((p) => ({ ...p, lastMode: m.id }))}
-          >{m.label}</button>
+            disabled={isTheater}
+            onclick={() => {
+              setupSidebarRef?.flushPendingEdit();
+              prefsClient.mutate((p) => ({ ...p, lastMode: m.id }));
+            }}
+          >
+            {#if m.id === 'train'}
+              <TrainFront size={16} />
+            {:else if m.id === 'glacier'}
+              <Snowflake size={16} />
+            {:else}
+              <Bell size={16} />
+            {/if}
+            <span>{m.label}</span>
+          </button>
         {/each}
       </div>
 
@@ -1509,44 +1612,8 @@
           title={prefsData.sound ? '소리 켜짐' : '소리 꺼짐'}
           onclick={() => prefsClient.mutate((p) => ({ ...p, sound: !p.sound }))}
         >
-          {#if prefsData.sound}<Volume2 size={17} />{:else}<VolumeX size={17} />{/if}
+          {#if prefsData.sound}<Volume2 size={18} />{:else}<VolumeX size={18} />{/if}
         </button>
-
-        <div class="gp-popover-anchor">
-          <button
-            type="button"
-            class="gp-icon-btn"
-            class:active={displayMenuOpen}
-            aria-label="표시 설정"
-            aria-expanded={displayMenuOpen}
-            title="표시 설정"
-            onclick={() => (displayMenuOpen = !displayMenuOpen)}
-          >
-            <Settings2 size={17} />
-          </button>
-
-          {#if displayMenuOpen}
-            <div class="gp-popover" role="dialog" aria-label="표시 설정">
-              <div class="gp-popover-row">
-                <span>동작 감소 모드</span>
-                <ToolkitSwitch
-                  checked={prefsData.reduced}
-                  label="동작 감소 모드"
-                  disabled={phase === 'running'}
-                  onchange={(v) => prefsClient.mutate((p) => ({ ...p, reduced: v }))}
-                />
-              </div>
-              <div class="gp-popover-row">
-                <span>번호 항상 보기</span>
-                <ToolkitSwitch
-                  checked={prefsData.alwaysShowNumber}
-                  label="번호 항상 보기"
-                  onchange={(v) => prefsClient.mutate((p) => ({ ...p, alwaysShowNumber: v }))}
-                />
-              </div>
-            </div>
-          {/if}
-        </div>
       </div>
     </div>
   {/if}
@@ -1595,8 +1662,8 @@
     </div>
   {/if}
 
-  <!-- 메인 작업 영역 (실행 중 시어터 모드: 좌측 사이드바 접고 무대 64% : 현황판 36% 확장) -->
-  <div class="gp-body" class:theater={phase === 'running'}>
+  <!-- 메인 작업 영역 ([좌: 실시간 모둠 현황] · [중: 연출 무대] · [우: 접이식/서랍 모둠 설정]) -->
+  <div class="gp-body" class:theater={isTheater} bind:clientWidth={bodyW}>
     {#if phase === 'settled'}
       <ResultBoard
         groups={settledGroups}
@@ -1630,40 +1697,19 @@
         onMarkBroken={markBroken}
       />
     {:else}
-      <div class="gp-sidebar-slot" class:collapsed={phase === 'running'} bind:this={sidebarSlotEl}>
-        <SetupSidebar
-          {presentCount}
-          {isCustomMode}
-          customLines={customData.lines}
-          baseIntent={effectiveBaseIntent}
-          capacities={activeCapacities}
-          locks={activeLocks}
-          {pinnedFloors}
-          {groupPool}
-          {rosterGroups}
-          keepTotal={prefsData.keepTotal}
-          hasOnePersonDueToSmallN={derivedAlloc.hasOnePersonDueToSmallN}
-          disabled={phase === 'running'}
-          onApplyRecommendation={handleApplyRecommendation}
-          onSwitchMode={handleSwitchAllocMode}
-          onSetGroupCount={handleSetGroupCount}
-          onSetTargetSize={handleSetTargetSize}
-          onSelectRemainder={handleSelectRemainder}
-          onStepGroup={handleStepGroup}
-          onToggleLock={handleToggleLock}
-          onRenameGroup={handleRenameSetupGroup}
-          onAddGroup={handleAddGroup}
-          onRemoveGroup={handleRemoveGroup}
-          onAutoBalance={handleAutoBalance}
-          onToggleKeepTotal={(keepTotal) => prefsClient.mutate((p) => ({ ...p, keepTotal }))}
-          onUpdateCustomLines={(lines) => {
-            freeEditCaps = null;
-            customClient.mutate((cur) => ({ ...cur, lines }));
-          }}
-        />
-      </div>
+      <LiveManifestBoard
+        phase={stagePhase}
+        theater={isTheater}
+        groups={isTheater ? stageGroupsRunning : stageGroupsIdle}
+        capacities={activeCapacities}
+        {activeGroupIndex}
+        {committedIds}
+        studentMap={settledStudentMap}
+        {allStudents}
+        alwaysShowNumber={prefsData.alwaysShowNumber}
+      />
 
-      <main class="gp-workspace" class:theater={phase === 'running'}>
+      <main class="gp-workspace" class:theater={isTheater}>
         <div class="gp-stage-shell">
           {#if !isCustomMode && rosterReady && roster.classes.length === 0}
             <div class="gp-empty-card">
@@ -1703,10 +1749,10 @@
           {:else if prefsData.lastMode === 'glacier'}
             <GlacierStage
               bind:this={glacierStageRef}
-              {phase}
+              phase={stagePhase}
               plan={activePlan}
-              {elapsed}
-              groups={phase === 'running' ? stageGroupsRunning : stageGroupsIdle}
+              elapsed={stageElapsed}
+              groups={isTheater ? stageGroupsRunning : stageGroupsIdle}
               capacities={activeCapacities}
               participants={effectiveParticipants}
               {committedIds}
@@ -1721,15 +1767,16 @@
               {fontFamily}
               onStart={() => void startDraw()}
               onSkip={skipToResult}
+              onOpenSetup={openSetupPanel}
               onMarkBroken={markBroken}
             />
           {:else if prefsData.lastMode === 'elevator'}
             <ElevatorStage
               bind:this={elevatorStageRef}
-              {phase}
+              phase={stagePhase}
               plan={activePlan}
-              {elapsed}
-              groups={phase === 'running' ? stageGroupsRunning : stageGroupsIdle}
+              elapsed={stageElapsed}
+              groups={isTheater ? stageGroupsRunning : stageGroupsIdle}
               participants={effectiveParticipants}
               {allStudents}
               {classAvatarMap}
@@ -1742,15 +1789,16 @@
               {fontFamily}
               onStart={() => void startDraw()}
               onSkip={skipToResult}
+              onOpenSetup={openSetupPanel}
               onMarkBroken={markBroken}
             />
           {:else}
             <TrainStage
               bind:this={trainStageRef}
-              {phase}
+              phase={stagePhase}
               plan={activePlan}
-              {elapsed}
-              groups={phase === 'running' ? stageGroupsRunning : stageGroupsIdle}
+              elapsed={stageElapsed}
+              groups={isTheater ? stageGroupsRunning : stageGroupsIdle}
               participants={effectiveParticipants}
               {allStudents}
               {classAvatarMap}
@@ -1763,23 +1811,106 @@
               {fontFamily}
               onStart={() => void startDraw()}
               onSkip={skipToResult}
+              onOpenSetup={openSetupPanel}
               onMarkBroken={markBroken}
             />
           {/if}
-        </div>
 
-        <LiveManifestBoard
-          {phase}
-          theater={phase === 'running'}
-          groups={phase === 'running' ? stageGroupsRunning : stageGroupsIdle}
-          capacities={activeCapacities}
-          {activeGroupIndex}
-          {committedIds}
-          studentMap={settledStudentMap}
-          {allStudents}
-          alwaysShowNumber={prefsData.alwaysShowNumber}
-        />
+          {#if phase === 'settling'}
+            <button
+              type="button"
+              class="gp-settling-curtain"
+              aria-label="모둠 편성 완료! 누르면 전체 모둠표로 바로 이동합니다"
+              onclick={skipToResult}
+            >
+              <span class="gp-settling-confetti" aria-hidden="true">
+                {#each Array.from({ length: 18 }) as _, ci (ci)}
+                  <span class="gp-confetti-piece" style:--ci={ci}></span>
+                {/each}
+              </span>
+              <span class="gp-settling-ribbon" role="status" aria-live="polite">
+                <strong>모둠 편성 완료!</strong>
+                <small>잠시 후 전체 모둠표로 이동해요</small>
+              </span>
+            </button>
+          {/if}
+        </div>
       </main>
+
+      {#if narrowDrawer && narrowDrawerOpen && phase === 'idle'}
+        <button
+          type="button"
+          class="gp-drawer-scrim"
+          aria-label="모둠 설정 닫기"
+          onclick={collapseSetupPanel}
+        ></button>
+      {/if}
+
+      <div class="gp-setup-dock" class:drawer-mode={narrowDrawer} class:open={setupOpenNow}>
+        {#if phase === 'idle' && !setupOpenNow}
+          <button
+            type="button"
+            class="gp-setup-reopen-tab"
+            aria-label="모둠 설정 열기"
+            title="모둠 설정 열기"
+            onclick={openSetupPanel}
+          >
+            <PanelRightOpen size={16} />
+            <span>모둠 설정</span>
+            {#if !sumMatches}
+              <span class="gp-warn-dot" aria-hidden="true"></span>
+            {/if}
+          </button>
+        {/if}
+
+        <div
+          class="gp-sidebar-slot"
+          class:collapsed={sidebarCollapsed}
+          class:drawer={narrowDrawer}
+          class:drawer-open={narrowDrawer && narrowDrawerOpen && phase === 'idle'}
+          inert={sidebarCollapsed}
+          bind:this={sidebarSlotEl}
+        >
+          <SetupSidebar
+            bind:this={setupSidebarRef}
+            {presentCount}
+            {isCustomMode}
+            customLines={customData.lines}
+            baseIntent={effectiveBaseIntent}
+            capacities={activeCapacities}
+            locks={activeLocks}
+            {pinnedFloors}
+            {groupPool}
+            {rosterGroups}
+            keepTotal={prefsData.keepTotal}
+            hasOnePersonDueToSmallN={derivedAlloc.hasOnePersonDueToSmallN}
+            reducedMotion={prefsData.reduced}
+            alwaysShowNumber={prefsData.alwaysShowNumber}
+            compactHeight={appH > 0 && appH < 660}
+            showCollapse={phase === 'idle'}
+            disabled={isTheater}
+            onCollapse={collapseSetupPanel}
+            onApplyRecommendation={handleApplyRecommendation}
+            onSwitchMode={handleSwitchAllocMode}
+            onSetGroupCount={handleSetGroupCount}
+            onSetTargetSize={handleSetTargetSize}
+            onSelectRemainder={handleSelectRemainder}
+            onStepGroup={handleStepGroup}
+            onToggleLock={handleToggleLock}
+            onRenameGroup={handleRenameSetupGroup}
+            onAddGroup={handleAddGroup}
+            onRemoveGroup={handleRemoveGroup}
+            onAutoBalance={handleAutoBalance}
+            onToggleKeepTotal={(keepTotal) => prefsClient.mutate((p) => ({ ...p, keepTotal }))}
+            onToggleReduced={(reduced) => prefsClient.mutate((p) => ({ ...p, reduced }))}
+            onToggleAlwaysNumber={(alwaysShowNumber) => prefsClient.mutate((p) => ({ ...p, alwaysShowNumber }))}
+            onUpdateCustomLines={(lines) => {
+              freeEditCaps = null;
+              customClient.mutate((cur) => ({ ...cur, lines }));
+            }}
+          />
+        </div>
+      </div>
     {/if}
   </div>
 

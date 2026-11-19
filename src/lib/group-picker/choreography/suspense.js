@@ -3,12 +3,28 @@
 
 export const ARM_MS = 500;
 export const SETTLED_ARM_MS = 400;
+export const SETTLING_MS = 1400;
+export const STAGE_TIME_BUDGET_MS = 60000;
+export const ACTIVE_STAGE_MAX_MS = STAGE_TIME_BUDGET_MS - SETTLING_MS; // 58600ms
 export const REDUCED_DURATION_MS = 950;
 export const TICKET_FLIGHT_MS = 420;
 export const DAMPED_ZETA = 0.58;
 
 /** @param {number} v @param {number} [min] @param {number} [max] */
 export const clamp = (v, min = 0, max = 1) => Math.max(min, Math.min(max, v));
+
+/** 50명/12모둠 포함 전 규모가 (무대 + settling <= 60s) 이내에 수렴하도록 인지 홀드 자동 압축.
+ * @param {{ baseMs:number, totalN:number, groupCount:number, reduced?:boolean }} params */
+export function computeHoldBudget({ baseMs, totalN, groupCount, reduced = false }) {
+  if (reduced) return { k: 0, revealHoldMs: 0, groupHoldMs: 0 };
+  const rawNeed = 400 * Math.max(1, totalN) + 650 * Math.max(1, groupCount);
+  const k = clamp((ACTIVE_STAGE_MAX_MS - baseMs) / Math.max(1, rawNeed), 0, 1);
+  return {
+    k,
+    revealHoldMs: Math.round(clamp(400 * k, 160, 400)),
+    groupHoldMs: Math.round(clamp(650 * k, 260, 650)),
+  };
+}
 
 /** @param {number} a @param {number} b @param {number} t */
 export const mix = (a, b, t) => a + (b - a) * clamp(t);

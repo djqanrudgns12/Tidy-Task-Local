@@ -1,6 +1,9 @@
 <script lang="ts">
+  // 6.0.0 새 소식 창 (release-news). 지난 공지(5.6.3 소식 · 지난 업데이트 · 롤링 썬더)는 사용자 요청으로 모두 내렸습니다.
+  // 처음 설정(initial-setup 창)은 이 창과 별개라 그대로이며, 새 사용자는 설정을 마친 뒤 이 창을 봅니다.
+  // 글자 크기는 "본문 14px · 작은 글 12px 이상"을 지킵니다(이전 공지의 9~11px 글자가 읽기 어렵다는 의견).
   import { onMount, tick } from 'svelte';
-  import { X, ArrowUpRight, ArrowRight, BookOpen, ZoomIn, Check, GripHorizontal, Sparkles, History, ExternalLink, Play, Smartphone } from 'lucide-svelte';
+  import { X, ArrowUpRight, BookOpen, ZoomIn, Check, GripHorizontal, Sparkles, LayoutGrid, Play, Smartphone, ShieldCheck, CalendarHeart, ListChecks, UsersRound, Type, MousePointerClick, Timer } from 'lucide-svelte';
   import { getCurrentWindow } from '@tauri-apps/api/window';
   import { WebviewWindow } from '@tauri-apps/api/webviewWindow';
   import { LazyStore } from '@tauri-apps/plugin-store';
@@ -9,7 +12,7 @@
   import { RELEASE_NEWS_ID, RELEASE_NEWS_KEY, DISMISSED_FOREVER, tomorrowStart } from '../lib/releaseNews.js';
   import './release-news.css';
   import ToolIcon from './toolkit/ToolIcon.svelte';
-  import { TOOL_REGISTRY, TIMER_TOOLS, SCOREBOARD_TOOLS, PLATFORM_TOOLS } from '../lib/toolkit/registry.js';
+  import { TOOL_REGISTRY, TIMER_TOOLS, SCOREBOARD_TOOLS, PICKER_TOOLS } from '../lib/toolkit/registry.js';
 
   let { preview = false } = $props<{ preview?: boolean }>();
   let tab = $state(0), busy = $state(false), closed = $state(false), error = $state('');
@@ -18,56 +21,153 @@
   let lightbox: HTMLDialogElement | undefined = $state();
   let dialog: HTMLDivElement | undefined = $state();
   let previousFocus: HTMLElement | null = null;
-  const base = '/images/update-5.6/';
+  const base = '/images/update-6.0/';
   // 화면의 버전 글자는 공지 ID 하나에서 만듭니다. 다음에 공지를 올릴 때 한 곳만 고치면 되게.
   const version = RELEASE_NEWS_ID.replace(/^v/, '');
-  const tabs = [`${version} 새 소식`, '툴킷 전체', '지난 업데이트', '롤링 썬더'];
-  // 5.6.0 공지를 이미 본 사용자에게 같은 내용만 다시 보이지 않도록, 이번 패치에서 달라진 점을 첫 탭 맨 위에 둡니다.
-  const patchNotes = [
-    {title:'사용 통계 연결 복구', text:'일부 버전에서 사용 현황이 전달되지 않던 문제를 고쳤어요.'},
-    {title:'도구별 사용 현황 개선', text:'투표·주사위·타이머 등 어떤 도구가 쓰이는지 구분해 개선에 참고해요.'},
-    {title:'입력 내용은 보내지 않아요', text:'메모·학생 이름·투표 내용과 결과는 사용 통계에 포함하지 않아요.'},
-  ];
-  const toolGroups = [
-    {title:'시간과 집중', ids:['timer','clock','focus-bell']},
-    {title:'뽑기와 놀이', ids:['picker','tournament','dice']},
-    {title:'학급 운영', ids:['noticeboard','roster','seating']},
-    {title:'참여와 성장', ids:['vote','scoreboard','thermometer']},
-  ];
-  const toolCopy: Record<string,string> = {
-    timer:'디지털·아날로그·모래시계·스톱워치로 활동 시간을 정해요.',
-    clock:'디지털과 아날로그로 교실에 현재 시간을 보여 줘요.',
-    'focus-bell':'종소리로 활동의 시작을 알리고 주의를 모아요.',
-    picker:'이름이나 항목을 넣고 다양한 연출로 뽑아요.',
-    tournament:'대진표를 따라 후보를 고르며 최종 우승을 정해요.',
-    dice:'여러 주사위를 굴리고 결과를 함께 확인해요.',
-    noticeboard:'안내할 내용을 큰 글씨로 작성해 교실에 띄워요.',
-    roster:'학생 명단을 관리하고 연결된 도구에서 함께 써요.',
-    seating:'학급 명단과 배치 조건으로 자리를 정하고 저장해요.',
-    vote:'선거·의견·찬반 투표를 진행하고 개표와 결과를 즐겨요.',
-    scoreboard:'개인·모둠·직접 만든 항목의 점수를 기록해요.',
-    thermometer:'학급의 목표와 보상, 도장판으로 성장을 함께 봐요.',
+  const major = version.split('.').slice(0, 2).join('.');
+  const tabs = [`${major} 새 소식`, '툴킷 전체'];
+
+  type Shot = { file: string; title: string; alt: string; tall?: boolean };
+  type Feature = {
+    id: string; badge: 'NEW' | '새 단장'; tone: string; icon: typeof Sparkles; chip: string;
+    title: string; lead: string; points: { b: string; t: string }[];
+    where: string; layout: 'side' | 'wide' | 'pair'; shots: Shot[];
   };
-  const features = [
-    {id:'vote', no:'01', title:'학급 투표', sub:'우리 반의 생각이 모이는 시간', text:'회장 선거, 의견 모으기, 찬반 투표까지. 개표하는 순간도 우리 반에 맞게 고르고, 결과는 이미지로 간직하세요.', tags:['세 가지 투표','다양한 개표','결과 보관'], image:'vote', tone:'peach'},
-    {id:'seating', no:'02', title:'자리 배치', sub:'새로운 짝꿍, 새로운 시작', text:'학급 명단으로 바로 시작해요. 배치 조건과 지난 자리를 참고하고, 두 학생을 누르거나 끌어서 자리를 바꿔 보세요.', tags:['학급 명단 연결','지난 자리 참고','배치도 저장'], image:'seating', tone:'sage'},
-    {id:'scoreboard', no:'03', title:'점수판', sub:'함께 쌓는 작은 성취', text:'개인·모둠·커스텀 점수판으로 활동 점수를 기록해요. 잘못 누른 점수는 되돌릴 수 있어요.', tags:['개인 · 모둠 · 커스텀'], image:'scoreboard', tone:'lavender'},
-    {id:'thermometer', no:'04', title:'학급 온도계', sub:'우리의 목표가 자라는 모습', text:'목표와 중간 보상, 도장판을 우리 반에 맞게 꾸미고 하루하루의 변화를 함께 살펴보세요.', tags:['목표 · 보상 · 기록'], image:'thermometer', tone:'butter'},
-    {id:'clock', no:'05', title:'시계', sub:'교실 어디서나, 또렷하게', text:'디지털과 아날로그 중 골라 사용해요. 시계 읽기를 돕는 분 숫자도 함께 표시할 수 있어요.', tags:['디지털 · 아날로그'], image:'clock', tone:'sky'},
-    {id:'dice', no:'06', title:'주사위', sub:'한 번 굴리면 시작되는 활동', text:'필요한 만큼 주사위를 꺼내 굴려 보세요. 수학 활동부터 놀이까지, 결과를 한눈에 확인해요.', tags:['여러 주사위 · 결과 확인'], image:'dice', tone:'rose'},
+  // 사진은 모두 개발 미리보기에서 찍은 실제 화면입니다(scripts/capture-release-6.0.mjs). 이름·일정은 예시입니다.
+  const features: Feature[] = [
+    {
+      id: 'dday', badge: 'NEW', tone: 'peach', icon: CalendarHeart, chip: 'D-Day',
+      title: '다가오는 날, 한눈에 D-Day',
+      lead: '할 일에 D-Day를 달면 메모 창 위 배너와 바탕화면 위젯에 남은 날이 보여요.',
+      points: [
+        { b: '할 일과 바로 연결', t: '할 일을 우클릭해 D-Day로 만들 수 있어요.' },
+        { b: '한곳에서 관리', t: 'D-Day 컨트롤에서 할 일 · 배너 · 위젯 표시를 골라요.' },
+        { b: '귀여운 꾸미기', t: '파스텔 스티커 21종과 위젯 모양 두 가지.' },
+      ],
+      where: '메모 창 툴바의 D-Day 단추 · 툴킷의 D-Day 위젯', layout: 'side',
+      shots: [
+        { file: 'dday-control', title: 'D-Day 컨트롤', alt: '할 일 연동 D-Day 목록과 상단 배너 설정이 보이는 D-Day 컨트롤 창', tall: true },
+        { file: 'dday-widget-w4', title: 'D-Day 위젯 · 모눈', alt: '모눈 바탕에 D-5가 크게 보이는 D-Day 위젯' },
+        { file: 'dday-widget-w1', title: 'D-Day 위젯 · 달력', alt: '탁상 달력 모양의 D-Day 위젯' },
+      ],
+    },
+    {
+      id: 'todo', badge: '새 단장', tone: 'mint', icon: ListChecks, chip: '할 일 정리',
+      title: '할 일 정리가 손에 착',
+      lead: '줄 오른쪽의 빈자리를 없애 글이 끝까지 보이고, 순서 바꾸기와 지우기가 쉬워졌어요.',
+      points: [
+        { b: '끌어서 순서 바꾸기', t: '완료 단추나 날짜를 잡고 위아래로 끌어요.' },
+        { b: '지우개로 쓱', t: '줄에 마우스를 올리면 지우개 단추가 나타나요.' },
+        { b: '6초 안에 되돌리기', t: '잘못 지워도 지운 것만 제자리로 돌아와요.' },
+      ],
+      where: '모든 메모 창의 할 일 · 마감된 일 목록', layout: 'side',
+      shots: [{ file: 'todo-undo', title: '할 일 지우기와 되돌리기', alt: '할 일을 지운 뒤 휴지통 친구와 되돌리기 단추가 뜬 메모 창', tall: true }],
+    },
+    {
+      id: 'group', badge: 'NEW', tone: 'lavender', icon: UsersRound, chip: '모둠원 뽑기',
+      title: '모둠 나누기가 작은 공연처럼',
+      lead: '학급 명단이나 직접 입력한 이름으로 모둠을 정해요. 모둠 수와 인원은 알아서 추천해 줘요.',
+      points: [
+        { b: '세 가지 무대', t: '모둠 열차 · 빙하 갈라지기 · 엘리베이터 중에 골라요.' },
+        { b: '결석 · 조건 설정', t: '오늘 빠진 친구는 빼고, 떨어뜨릴 친구 · 남녀 균형 같은 조건을 정해요.' },
+        { b: '실시간 현황판', t: '뽑히는 대로 오른쪽 모둠 칸이 채워져요.' },
+      ],
+      where: '툴킷 → 간단 뽑기 → 모둠원 뽑기', layout: 'wide',
+      shots: [
+        { file: 'group-train', title: '모둠 열차', alt: '햇살역 승강장에 학생들이 줄 선 모둠 열차 무대' },
+        { file: 'group-glacier', title: '빙하 갈라지기', alt: '북극 빙하 위에 학생 이름표가 놓인 빙하 갈라지기 무대' },
+        { file: 'group-elevator', title: '엘리베이터', alt: '분홍 엘리베이터 앞에 학생들이 기다리는 엘리베이터 무대' },
+      ],
+    },
+    {
+      id: 'font', badge: '새 단장', tone: 'butter', icon: Type, chip: '글꼴 72종',
+      title: '글꼴 72종, 고르기도 쉽게',
+      lead: '새 글꼴 24종이 더해졌어요. 길게 늘어선 목록 대신 묶음별로 보고, 굵기도 바로 골라요.',
+      points: [
+        { b: '묶음별 탭', t: '포인트 · 고딕 · 명조 · 손글씨 · 학교 · 기본.' },
+        { b: '굵기는 옆 알약에서', t: '누르기 전에 글꼴 모양을 미리 볼 수 있어요.' },
+        { b: '어디서나 같은 창', t: '메모 · Tiny Note · 알림장 · 설정에서 똑같이 열려요.' },
+      ],
+      where: '서식 툴바의 글꼴 단추 · 설정 → 글자', layout: 'side',
+      shots: [{ file: 'font-picker', title: '새 글꼴 고르기 창', alt: '포인트와 고딕 묶음, 굵기 알약이 보이는 글꼴 고르기 창', tall: true }],
+    },
+    {
+      id: 'menu', badge: '새 단장', tone: 'sky', icon: MousePointerClick, chip: '우클릭 메뉴',
+      title: '우클릭 한 번이면 충분해요',
+      lead: '자주 쓰는 일을 큰 단추로 모은 작은 주머니 메뉴로 바뀌었어요.',
+      points: [
+        { b: '할 일 우클릭', t: 'D-Day · 마감일 · 완료 · 삭제를 한 번에.' },
+        { b: 'D-Day 배너 우클릭', t: '표시할 곳과 배너 모양을 바로 바꿔요.' },
+        { b: '서식은 바로 보이게', t: '글자를 고른 채 서식을 바꾸면 그 자리에서 반영돼요.' },
+      ],
+      where: '할 일 · 메모 · Tiny Note · D-Day 배너에서 오른쪽 클릭', layout: 'pair',
+      shots: [
+        { file: 'ctx-todo', title: '할 일 우클릭', alt: 'D-Day · 마감일 · 완료 · 삭제 단추가 있는 할 일 우클릭 메뉴' },
+        { file: 'ctx-dday', title: 'D-Day 배너 우클릭', alt: '표시 위치와 배너 모양을 고르는 D-Day 배너 우클릭 메뉴' },
+      ],
+    },
+    {
+      id: 'timer', badge: '새 단장', tone: 'sage', icon: Timer, chip: '타이머',
+      title: '멀리서도 또렷한 타이머',
+      lead: '창 크기에 맞춰 숫자와 제목 크기가 저절로 맞춰져요. 교실 뒤에서도 잘 보여요.',
+      points: [
+        { b: '글자 크기 자동', t: '제목 · 설명 크기는 작게부터 더 크게까지 직접 골라도 돼요.' },
+        { b: '위젯 모드', t: '작은 창으로 띄워 수업 화면 옆에 두어요.' },
+        { b: '설정은 함께', t: '글자와 화면 설정은 타이머 네 가지에 똑같이 적용돼요.' },
+      ],
+      where: '툴킷 → 타이머', layout: 'wide',
+      shots: [{ file: 'timer', title: '전광판 타이머', alt: '큰 05:00 숫자와 글자 크기 설정이 보이는 전광판 타이머' }],
+    },
   ];
+  const extras = [
+    { b: '설정 창 새 단장', t: '모양 · 글자 · 동작 · 관리 네 칸으로 나눠 찾기 쉬워졌어요.' },
+    { b: '메모 칸 높이 안정', t: '창 크기를 바꿔도 메모 칸이 흔들리거나 사라지지 않아요.' },
+    { b: '작은 오류 수정', t: '띄어쓰기 없는 긴 글이 큰 빈칸을 남기던 줄바꿈, D-Day 위젯 단추 등을 고쳤어요.' },
+  ];
+
+  // ── 툴킷 전체 탭 ── 도구 수는 등록부(registry)에서 세어 글과 숫자가 어긋나지 않게 합니다.
+  const toolGroups = [
+    { title: '시간과 집중', ids: ['timer', 'clock', 'focus-bell'] },
+    { title: '뽑기와 놀이', ids: ['picker', 'tournament', 'dice'] },
+    { title: '학급 운영', ids: ['noticeboard', 'roster', 'seating', 'dday'] },
+    { title: '참여와 성장', ids: ['vote', 'scoreboard', 'thermometer'] },
+  ];
+  const toolCopy: Record<string, string> = {
+    timer: '디지털 · 아날로그 · 모래시계 · 스톱워치로 활동 시간을 정해요.',
+    clock: '디지털과 아날로그로 교실에 지금 시각을 보여 줘요.',
+    'focus-bell': '종소리로 활동의 시작을 알리고 주의를 모아요.',
+    picker: '한 명 뽑기와 모둠원 뽑기로 발표자도 모둠도 정해요.',
+    tournament: '대진표를 따라 후보를 고르며 최종 우승을 정해요.',
+    dice: '여러 주사위를 굴리고 결과를 함께 확인해요.',
+    noticeboard: '안내할 내용을 큰 글씨로 써서 교실에 띄워요.',
+    roster: '학생 명단을 관리하고 다른 도구에서 함께 써요.',
+    seating: '학급 명단과 배치 조건으로 자리를 정하고 저장해요.',
+    dday: '다가오는 날을 바탕화면 위젯으로 늘 보이게 해요.',
+    vote: '선거 · 의견 · 찬반 투표를 하고 개표와 결과를 즐겨요.',
+    scoreboard: '개인 · 모둠 · 직접 만든 항목의 점수를 기록해요.',
+    thermometer: '학급 목표와 보상, 도장판으로 성장을 함께 봐요.',
+  };
+
   const draggable = (node: HTMLElement) => preview ? { destroy() {} } : dragRegion(node);
   onMount(() => { dialog?.focus(); });
 
   async function select(index: number, focus = false) {
-    tab = index; error = ''; scroller?.scrollTo({top:0});
+    tab = index; error = ''; scroller?.scrollTo({ top: 0 });
     await tick();
     if (focus) document.getElementById(`news-tab-${index}`)?.focus();
   }
   function tabKey(event: KeyboardEvent) {
-    if (!['ArrowLeft','ArrowRight','Home','End'].includes(event.key)) return;
+    if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
     event.preventDefault();
     void select(event.key === 'Home' ? 0 : event.key === 'End' ? tabs.length - 1 : (tab + (event.key === 'ArrowRight' ? 1 : tabs.length - 1)) % tabs.length, true);
+  }
+  // 한눈에 보기 칩: 창 안 스크롤 상자만 움직입니다(창 전체가 밀리지 않게).
+  function jump(id: string) {
+    const target = document.getElementById(`rn-${id}`);
+    if (!target || !scroller) return;
+    const top = target.getBoundingClientRect().top - scroller.getBoundingClientRect().top + scroller.scrollTop - 12;
+    scroller.scrollTo({ top, behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
+    target.focus({ preventScroll: true });
   }
   async function close() {
     if (busy) return;
@@ -102,13 +202,13 @@
     } catch { error = '툴킷을 열지 못했어요. 다시 시도해 주세요.'; }
     finally { busy = false; }
   }
-  async function guide(anchor = 'toolkit') {
+  async function guide(anchor = 'start') {
     error = '';
     try {
       if (preview) { window.open(`/help.html#${anchor}`, '_blank', 'noopener'); return; }
       const existing = await WebviewWindow.getByLabel('help');
       if (existing) { await existing.unminimize(); await existing.show(); await existing.setFocus(); return; }
-      const win = new WebviewWindow('help', {url:`help.html#${anchor}`,title:'Tidy Task 사용 가이드',width:920,height:800,center:true,resizable:true});
+      const win = new WebviewWindow('help', { url: `help.html#${anchor}`, title: 'Tidy Task 사용 가이드', width: 920, height: 800, center: true, resizable: true });
       await win.once('tauri://error', () => { error = '사용 가이드를 열지 못했어요. 다시 시도해 주세요.'; });
     } catch { error = '사용 가이드를 열지 못했어요. 다시 시도해 주세요.'; }
   }
@@ -119,6 +219,13 @@
   }
 </script>
 
+{#snippet photo(shot: Shot, tone: string, eager = false)}
+  <button class={`rn-shot ${tone}`} class:rn-shot-tall={shot.tall} aria-label={`${shot.title} 실제 화면 크게 보기`} onclick={() => zoom(`${base}${shot.file}.webp`, shot.title)}>
+    <img src={`${base}${shot.file}.webp`} alt={`${shot.alt}. 예시 자료로 찍은 실제 앱 화면.`} loading={eager ? 'eager' : 'lazy'}/>
+    <span class="rn-shot-zoom" aria-hidden="true"><ZoomIn size={14}/></span>
+  </button>
+{/snippet}
+
 <svelte:window onkeydown={keydown}/>
 {#if !closed}
 <div class="release-news" role="dialog" aria-labelledby="news-window-title" tabindex="-1" bind:this={dialog}>
@@ -128,106 +235,82 @@
   </header>
   <div class="rn-tabs" role="tablist" aria-label="새로운 소식 분류">
     {#each tabs as label, i}<button id={`news-tab-${i}`} role="tab" aria-selected={tab === i} aria-controls="news-panel" tabindex={tab === i ? 0 : -1} onclick={() => select(i)} onkeydown={tabKey}>
-      {#if i === 0}<Sparkles size={17}/>{:else if i === 1}<BookOpen size={17}/>{:else if i === 2}<History size={17}/>{:else}<ExternalLink size={17}/>{/if}{label}{#if i === 0}<span class="rn-new">NEW</span>{/if}
+      {#if i === 0}<Sparkles size={17}/>{:else}<LayoutGrid size={17}/>{/if}{label}{#if i === 0}<span class="rn-new">NEW</span>{/if}
     </button>{/each}
   </div>
   <div class="rn-scroll" id="news-panel" role="tabpanel" aria-labelledby={`news-tab-${tab}`} tabindex="0" bind:this={scroller}>
   {#key tab}
   <div class="rn-page">
     {#if tab === 0}
-      <section class="rn-intro">
-        <div class="rn-intro-row"><img class="rn-welcome-icon" src="/images/toolkit/toolkit-icon.png" alt=""/><div><span class="rn-kicker">Tidy Task {version}</span><h1>작은 도구함에, 새로운 즐거움.</h1><p>우리 반을 위한 여섯 가지 도구가 찾아왔어요.</p></div><button class="rn-primary" disabled={busy} onclick={launch}>툴킷 열기 <ArrowUpRight size={16}/></button></div>
+      <section class="rn-hero" aria-labelledby="rn-hero-title">
+        <div class="rn-hero-copy">
+          <span class="rn-hero-kicker"><span class="rn-sticker">v{version}</span>큰 업데이트가 도착했어요</span>
+          <h1 id="rn-hero-title">더 귀엽고,<br/>더 손에 착 붙게.</h1>
+          <p>D-Day부터 모둠원 뽑기까지, {major}에서 달라진 점을 모았어요.</p>
+        </div>
+        <img class="rn-hero-mascot" src="/chaltteok.webp" alt=""/>
+        <p class="rn-safe"><ShieldCheck size={17}/><span>지금까지 쓰신 할 일 · 메모 · 툴킷 자료는 <b>그대로</b> 남아 있어요.</span></p>
       </section>
+
+      <nav class="rn-glance" aria-label="한눈에 보기">
+        <span class="rn-glance-title">한눈에 보기</span>
+        <div>{#each features as f}{@const Icon = f.icon}<button class={`rn-chip ${f.tone}`} onclick={() => jump(f.id)}><Icon size={15}/>{f.chip}{#if f.badge === 'NEW'}<i>NEW</i>{/if}</button>{/each}</div>
+      </nav>
+
+      {#each features as f, fi}
+        {@const Icon = f.icon}
+        <article class={`rn-card ${f.tone} rn-${f.layout}`} id={`rn-${f.id}`} tabindex="-1" aria-labelledby={`rn-${f.id}-title`}>
+          <span class="rn-tab-label"><span class="rn-badge" class:rn-badge-new={f.badge === 'NEW'}>{f.badge}</span>{String(fi + 1).padStart(2, '0')}</span>
+          <div class="rn-card-head">
+            <span class="rn-card-icon" aria-hidden="true"><Icon size={22}/></span>
+            <div><h2 id={`rn-${f.id}-title`}>{f.title}</h2><p class="rn-lead">{f.lead}</p></div>
+          </div>
+          <div class="rn-card-body">
+            <ul class="rn-points">{#each f.points as p}<li><span class="rn-check" aria-hidden="true"><Check size={13} strokeWidth={3}/></span><span><b>{p.b}</b>{p.t}</span></li>{/each}</ul>
+            {#if f.layout === 'side'}
+              <div class="rn-shots-side">{@render photo(f.shots[0], f.tone, fi < 2)}{#if f.shots.length > 1}<div class="rn-shots-mini">{#each f.shots.slice(1) as s}{@render photo(s, f.tone)}{/each}</div>{/if}</div>
+            {/if}
+          </div>
+          {#if f.layout === 'wide'}
+            <div class="rn-shots-wide">{@render photo(f.shots[0], f.tone)}{#if f.shots.length > 1}<div class="rn-shots-row">{#each f.shots.slice(1) as s}<figure>{@render photo(s, f.tone)}<figcaption>{s.title}</figcaption></figure>{/each}</div>{/if}</div>
+          {:else if f.layout === 'pair'}
+            <div class="rn-shots-pair">{#each f.shots as s}<figure>{@render photo(s, f.tone)}<figcaption>{s.title}</figcaption></figure>{/each}</div>
+          {/if}
+          <p class="rn-where"><span>여기서 만나요</span>{f.where}</p>
+        </article>
+      {/each}
+
+      <section class="rn-extras" aria-labelledby="rn-extras-title">
+        <h2 id="rn-extras-title">그 밖에도 좋아졌어요</h2>
+        <ul>{#each extras as e}<li><b>{e.b}</b><span>{e.t}</span></li>{/each}</ul>
+      </section>
+
+      <section class="rn-help">
+        <BookOpen size={24}/>
+        <div><h2>처음 써 보는 기능도 차근차근</h2><p>처음 설정에서 고른 툴킷은 <b>설정 → 동작</b>, 급식창은 <b>급식창 설정</b>에서 언제든 바꿀 수 있어요.</p></div>
+        <button onclick={() => guide()}>사용 가이드 <ArrowUpRight size={16}/></button>
+      </section>
+      <p class="rn-credit">실제 사용 화면 · 학생 이름과 일정은 예시입니다. 사진을 누르면 크게 볼 수 있어요.</p>
+    {:else}
+      <section class="rn-catalog-intro"><img src="/images/toolkit/toolkit-icon.png" alt=""/><div><span class="rn-hero-kicker">TIDY TOOLKIT</span><h1>교실에 필요한 도구, 여기 다 있어요</h1><p>수업의 시작부터 하루의 마무리까지.</p></div></section>
+      <div class="rn-tool-stats" aria-label="툴킷 구성">
+        <div><b>{TOOL_REGISTRY.length}<small>가지</small></b><span>교실 도구</span></div>
+        <div><b>{TIMER_TOOLS.length}<small>종</small></b><span>타이머</span></div>
+        <div><b>{PICKER_TOOLS.length}<small>종</small></b><span>뽑기</span></div>
+        <div><b>{SCOREBOARD_TOOLS.length}<small>종</small></b><span>점수판</span></div>
+      </div>
+      <p class="rn-count-note">타이머 · 뽑기 · 점수판의 여러 종류는 {TOOL_REGISTRY.length}가지 도구 안에 함께 들어 있어요.</p>
+      <div class="rn-tool-groups">{#each toolGroups as group}<section class="rn-tool-group"><h2>{group.title}<span>{group.ids.length}</span></h2>{#each group.ids as id}{@const tool = TOOL_REGISTRY.find(item => item.id === id)}<article data-tool-id={id}><ToolIcon kind={id} size={34}/><div><h3>{tool?.label}</h3><p>{toolCopy[id]}</p></div></article>{/each}</section>{/each}</div>
       <div class="rn-videos" role="group" aria-label="Tidy Task 소개 영상">
         <button class="rn-video rn-video-featured" onclick={() => external('https://www.youtube.com/watch?v=O_snQZp20_k')}>
-          <span class="rn-video-copy"><span class="rn-video-label"><span class="rn-youtube"><Play size={10} fill="currentColor"/></span> YouTube · 소개 영상</span><strong>영상으로 먼저 만나 보세요</strong><span class="rn-video-description">우리 반 도구함, 어떻게 쓸까요?</span><span class="rn-video-action">소개 영상 보기 <ArrowUpRight size={14}/></span></span>
-          <span class="rn-video-play" aria-hidden="true"><Play size={25} fill="currentColor"/></span>
+          <span class="rn-video-copy"><span class="rn-video-label"><span class="rn-youtube"><Play size={10} fill="currentColor"/></span> YouTube · 소개 영상</span><strong>영상으로 먼저 만나 보세요</strong><span class="rn-video-action">소개 영상 보기 <ArrowUpRight size={14}/></span></span>
+          <span class="rn-video-play" aria-hidden="true"><Play size={22} fill="currentColor"/></span>
         </button>
         <button class="rn-video rn-video-shorts" onclick={() => external('https://www.youtube.com/shorts/cruV-jDR49Q')}>
-          <span class="rn-video-copy"><span class="rn-video-label"><Smartphone size={13}/> YouTube Shorts</span><strong>짧게, 한눈에!</strong><span class="rn-video-description">숏츠로 가볍게 살펴봐요</span><span class="rn-video-action">숏츠 보기 <ArrowUpRight size={14}/></span></span>
-          <span class="rn-video-phone" aria-hidden="true"><Play size={17} fill="currentColor"/></span>
+          <span class="rn-video-copy"><span class="rn-video-label"><Smartphone size={13}/> YouTube Shorts</span><strong>짧게, 한눈에!</strong><span class="rn-video-action">숏츠 보기 <ArrowUpRight size={14}/></span></span>
         </button>
       </div>
-      <button class="rn-community" onclick={() => external('https://indischool.com/boards/libClass/37569890')}>
-        <span class="rn-community-icon" aria-hidden="true"><BookOpen size={19}/></span>
-        <span class="rn-community-copy"><b>인디스쿨에서 글로 읽어 보세요</b><span>Tidy Task 소개 글</span></span>
-        <ArrowUpRight size={18}/>
-      </button>
-      <section class="rn-patch" aria-labelledby="rn-patch-title">
-        <h2 id="rn-patch-title">{version}에서 더 좋아졌어요</h2>
-        <ul>{#each patchNotes as note}<li><b>{note.title}</b><span>{note.text}</span></li>{/each}</ul>
-      </section>
-      <div class="rn-section-heading"><span>새로 만나는 도구 <b>6</b></span><span>사진을 누르면 크게 볼 수 있어요</span></div>
-      <section class="rn-features" aria-label="새로 추가된 여섯 도구">
-        {#each features as feature, i}
-          <article class={`rn-feature ${feature.tone}`} class:rn-feature-large={i < 2}>
-            <div class="rn-feature-copy"><ToolIcon kind={feature.id} size={40}/><div><h2>{feature.title}</h2><h3>{feature.sub}</h3></div></div>
-            <button class="rn-photo" aria-label={`${feature.title} 실제 화면 크게 보기`} onclick={() => zoom(`${base}${feature.image}.webp`, feature.title)}><img src={`${base}${feature.image}.webp`} alt={`${feature.title} 실제 앱 화면. 가상 학급과 예시 자료 사용.`} loading={i < 2 ? 'eager' : 'lazy'}/><span><ZoomIn size={15}/> 크게 보기</span></button>
-            <p class="rn-feature-description">{feature.text}</p>
-            <div class="rn-tags">{#each feature.tags as tag}<span>{tag}</span>{/each}</div>
-          </article>
-        {/each}
-      </section>
-      <section class="rn-personalize"><div><span class="rn-kicker">나에게 맞는 도구함</span><h2>자주 쓰는 순서대로.<br/>편안한 글꼴로.</h2><p>툴킷 설정에서 손잡이를 끌어 순서를 바꾸고,<br/>사용할 도구와 화면 글꼴을 골라 보세요.</p><div class="rn-note"><Check size={18}/><span>시계·점수판·주사위·학급 온도계는<br/><b>툴킷 설정 → 비활성화된 도구</b>에서 켤 수 있어요.</span></div></div><button class="rn-settings-photo" aria-label="툴킷 설정 실제 화면 크게 보기" onclick={() => zoom(`${base}settings.webp`,'툴킷 설정')}><img src={`${base}settings.webp`} alt="도구 표시와 순서를 정하는 현재 툴킷 설정" loading="lazy"/><span><ZoomIn size={15}/> 설정 화면 크게 보기</span></button></section>
-      <div class="rn-guide-card"><BookOpen size={26}/><div><h2>처음 써 보는 도구도 차근차근.</h2><p>자세한 사용법은 Tidy Task 사용 가이드에서 확인하세요.</p></div><button onclick={() => guide()}>사용 가이드 <ArrowUpRight size={18}/></button></div>
-      <p class="rn-photo-credit">실제 사용 화면 · 학생 이름과 자료는 예시입니다.</p>
-    {:else if tab === 1}
-      <section class="rn-catalog-intro"><img src="/images/toolkit/toolkit-icon.png" alt=""/><div><span class="rn-kicker">TIDY TOOLKIT</span><h1>교실에 필요한 도구, 여기 다 있어요.</h1><p>수업의 시작부터 하루의 마무리까지.</p></div></section>
-      <div class="rn-tool-stats" aria-label="툴킷 구성"><div><b>{TOOL_REGISTRY.length}<small>가지</small></b><span>교실 도구</span></div><div><b>{TIMER_TOOLS.length}<small>종</small></b><span>타이머</span></div><div><b>{SCOREBOARD_TOOLS.length}<small>종</small></b><span>점수판</span></div></div>
-      <p class="rn-count-note">타이머 4종과 점수판 3종은 12가지 도구에 포함돼요.</p>
-      <div class="rn-tool-groups">{#each toolGroups as group}<section class="rn-tool-group"><h2>{group.title}<span>{group.ids.length}</span></h2>{#each group.ids as id}{@const tool = TOOL_REGISTRY.find(item => item.id === id)}<article data-tool-id={id}><ToolIcon kind={id} size={34}/><div><h3>{tool?.label}</h3><p>{toolCopy[id]}</p></div></article>{/each}</section>{/each}</div>
-      <section class="rn-catalog-extra"><ToolIcon kind="settings" size={32}/><div><h2>도구함도 내 취향대로</h2><p>도구 표시와 순서, 테마·글꼴·크기를 설정에서 골라요.</p></div></section>
-      <section class="rn-catalog-external"><h2>외부 서비스도 바로 연결</h2><div>{#each PLATFORM_TOOLS as service}<button onclick={() => external(service.url)}><img src={service.icon} alt=""/><span>{service.label}</span><ArrowUpRight size={14}/></button>{/each}</div><p>웹 브라우저에서 열리는 별도 서비스예요.</p></section>
       <div class="rn-catalog-bottom"><p>안 보이는 도구는 <b>툴킷 설정 → 비활성화된 도구</b>에서 켜 주세요.</p><button class="rn-primary" disabled={busy} onclick={launch}>툴킷 열기 <ArrowUpRight size={16}/></button></div>
-    {:else if tab === 2}
-      <section class="rn-archive-intro"><span class="rn-archive-icon"><History size={24}/></span><div><h1>차곡차곡 쌓인 업데이트</h1><p>급식창부터 툴킷까지, 꼭 알아두면 좋은 변화예요.</p></div></section>
-      <div class="rn-timeline">
-        <article class="rn-history">
-          <div class="rn-history-date"><b>5.5.3</b><span>사용성 개선</span></div>
-          <div class="rn-history-body"><h2>업데이트와 날짜 선택이 간편하게</h2><ul><li><b>앱 안에서 업데이트</b><span>새 버전을 내려받고 설치할 수 있어요.</span></li><li><b>빠른 날짜 선택</b><span>달력에서 할 일의 마감일을 골라요.</span></li><li><b>툴킷 다듬기</b><span>사용성을 높이고 작은 오류를 고쳤어요.</span></li></ul></div>
-          <button class="rn-history-photo" aria-label="날짜 선택 실제 화면 크게 보기" onclick={() => zoom(`${base}calendar.webp`,'할 일 날짜 선택')}><img src={`${base}calendar.webp`} alt="실제 날짜 선택창" loading="lazy"/><span><ZoomIn size={13}/> 날짜 선택</span></button>
-        </article>
-        <article class="rn-history">
-          <div class="rn-history-date"><b>5.5.0</b><span>툴킷의 시작</span></div>
-          <div class="rn-history-body"><h2>수업 곁에 작은 도구함 하나</h2><ul><li><b>시간과 집중</b><span>네 가지 타이머와 집중벨</span></li><li><b>함께하는 활동</b><span>간단 뽑기와 토너먼트</span></li><li><b>교실의 일상</b><span>알림장과 학급 명단</span></li></ul></div>
-          <div class="rn-archive-pair">{#each [{file:'picker',title:'간단 뽑기'},{file:'noticeboard',title:'알림장'}] as item}<button class="rn-history-photo" aria-label={`${item.title} 실제 화면 크게 보기`} onclick={() => zoom(`${base}${item.file}.webp`,item.title)}><img src={`${base}${item.file}.webp`} alt={`${item.title} 현재 앱 화면. 예시 자료 사용.`} loading="lazy"/><span><ZoomIn size={13}/>{item.title}</span></button>{/each}</div>
-        </article>
-        <article class="rn-history">
-          <div class="rn-history-date"><b>5.1</b><span>급식과 꾸미기</span></div>
-          <div class="rn-history-body"><h2>오늘의 식단도, 내 취향도</h2><ul><li><b>독립된 급식창</b><span>학교를 등록하고 날짜별 식단을 확인해요.</span></li><li><b>새로운 상단 디자인</b><span>클래식과 모던 중 편한 모습을 골라요.</span></li><li><b>15가지 테마</b><span>색과 글꼴을 취향에 맞게 꾸며요.</span></li></ul></div>
-          <button class="rn-history-photo" aria-label="급식창 실제 화면 크게 보기" onclick={() => zoom(`${base}meal.webp`,'학교 급식')}><img src={`${base}meal.webp`} alt="실제 급식창. 예시 식단 사용." loading="lazy"/><span><ZoomIn size={13}/> 급식창</span></button>
-        </article>
-      </div>
-      <p class="rn-photo-credit">지난 소식은 이곳에서 다시 볼 수 있어요. 소개 이미지는 현재 버전의 화면입니다.</p>
-    {:else}
-      <section class="rn-rolling">
-        <div class="rn-rolling-top"><span class="rn-kicker">찰떡쌤의 또 다른 교실 도구</span><span class="rn-service-mark">ROLLIN THUNDER <ArrowUpRight size={16}/></span></div>
-        <div class="rn-rolling-heading"><img src="/images/toolkit/rollinthunder.png" alt=""/><div><span>함께 응원하는 추첨</span><h1>롤링 썬더<span>지금의 이름, 롤린썬더</span></h1></div></div>
-        <h2>기다리는 순간도 즐거운 추첨</h2>
-        <p class="rn-rolling-lead">이름을 넣고 시작하면, 구르고 부딪히는 칩들이 교실의 작은 경기를 만들어요.</p>
-        <div class="rn-videos rn-videos-rolling" role="group" aria-label="롤링썬더 소개 영상">
-          <button class="rn-video rn-video-featured" onclick={() => external('https://www.youtube.com/watch?v=rUkiBAN1Go4')}>
-            <span class="rn-video-copy"><span class="rn-video-label"><span class="rn-youtube"><Play size={10} fill="currentColor"/></span> YouTube · 60초</span><strong>어떤 추첨인지 궁금하다면?</strong><span class="rn-video-description">롤링썬더를 영상으로 만나 보세요</span><span class="rn-video-action">60초 영상 보기 <ArrowUpRight size={14}/></span></span>
-            <span class="rn-video-play" aria-hidden="true"><Play size={25} fill="currentColor"/></span>
-          </button>
-          <button class="rn-video rn-video-detail" onclick={() => external('https://www.youtube.com/watch?v=jm5UKRxObp8&t=13s')}>
-            <span class="rn-video-copy"><span class="rn-video-label"><Play size={13}/> YouTube · 3분 30초</span><strong>조금 더 자세히</strong><span class="rn-video-action">소개 영상 보기 <ArrowUpRight size={14}/></span></span>
-          </button>
-          <button class="rn-video rn-video-shorts" onclick={() => external('https://www.youtube.com/shorts/v1bytPpxqrk')}>
-            <span class="rn-video-copy"><span class="rn-video-label"><Smartphone size={13}/> YouTube Shorts</span><strong>짧게, 한눈에!</strong><span class="rn-video-action">숏츠 보기 <ArrowUpRight size={14}/></span></span>
-            <span class="rn-video-phone" aria-hidden="true"><Play size={17} fill="currentColor"/></span>
-          </button>
-        </div>
-        <button class="rn-community" onclick={() => external('https://indischool.com/boards/libRecreation/37589551')}>
-          <span class="rn-community-icon" aria-hidden="true"><BookOpen size={19}/></span>
-          <span class="rn-community-copy"><b>인디스쿨에서 글로 읽어 보세요</b><span>롤린썬더 소개 글</span></span>
-          <ArrowUpRight size={18}/>
-        </button>
-        <div class="rn-rolling-art"><img src="/images/toolkit/rollinthunder.png" alt="롤린썬더 서비스 아이콘"/><div><span>READY, SET, ROLL.</span><strong>선생님은 시작을.<br/>아이들은 응원을.</strong><div class="rn-rolling-chips" aria-hidden="true"><i>01</i><i>02</i><i>03</i><i>04</i><i>05</i></div></div></div>
-        <div class="rn-rolling-grid"><article><span>01 / RACE</span><h3>물리 엔진 레이스</h3><p>구르고 부딪히며 순위가 바뀌는 추첨을 함께 지켜봐요.</p></article><article><span>02 / ARENA</span><h3>서바이벌 아레나</h3><p>마지막까지 남을 칩을 응원하며 또 다른 경기를 즐겨요.</p></article><article><span>03 / CLASSROOM</span><h3>교실의 다양한 순간</h3><p>발표 순서, 모둠 활동, 작은 경품까지 즐겁게 정해 보세요.</p></article></div>
-        <div class="rn-rolling-cta"><button class="rn-primary" onclick={() => external('https://www.rollinthunder.net/')}>롤린썬더 시작하기 <ArrowUpRight size={19}/></button><button class="rn-text-button" onclick={() => external('https://www.rollinthunder.net/guide')}>활용 가이드 <ArrowRight size={17}/></button></div>
-        <p class="rn-small">웹 브라우저에서 열리는 별도 서비스입니다. 이용 범위와 요금은 서비스에서 확인해 주세요.</p>
-      </section>
     {/if}
     <div class="rn-signature"><img src="/chaltteok.webp" alt=""/><span>선생님의 하루에 작은 여유를.<b>Tidy Task · 찰떡쌤</b></span><span>© 2026 찰떡쌤</span></div>
   </div>
@@ -238,7 +321,7 @@
   {#if enlarged}
     <dialog class="rn-lightbox" bind:this={lightbox} aria-label={`${enlarged.title} 실제 화면`} oncancel={(event) => {event.preventDefault(); unzoom();}}>
       <header><div><span>실제 앱 화면</span><h2>{enlarged.title}</h2></div><button class="rn-icon-button" aria-label="확대 화면 닫기" onclick={unzoom}><X size={23}/></button></header>
-      <div><img src={enlarged.src} alt={`${enlarged.title} 고해상도 실제 화면`}/></div><p>예시 자료로 촬영한 화면입니다. 확대 화면을 닫으면 보던 위치로 돌아갑니다.</p>
+      <div><img src={enlarged.src} alt={`${enlarged.title} 고해상도 실제 화면`}/></div><p>예시 자료로 찍은 화면입니다. 확대 화면을 닫으면 보던 위치로 돌아갑니다.</p>
     </dialog>
   {/if}
 </div>

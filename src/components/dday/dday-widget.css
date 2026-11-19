@@ -1,24 +1,61 @@
-/* D-Day 데스크톱 위젯 스타일 (W-1 플립 캘린더 · W-4 폴라로이드 스티커 · 도트그리드 설정)
-   light-dark() 사용 금지 — [data-scheme='light' | 'dark']와 툴킷 테마 변수(--tk-*)만 사용합니다. */
+/* D-Day 데스크톱 위젯 스타일 (Zero-Halo Flush Edge · 15종 테마 실시간 연동 · macOS 감성 호버 컨트롤)
+   light-dark() 사용 금지 — 모든 색상은 ddayWidgetTheme.js가 계산한 --dw-* 명시적 토큰과 data-scheme만 사용합니다. */
+
+html:has(.dw-root),
+body:has(.dw-root),
+#app:has(.dw-root) {
+  background: transparent !important;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+}
 
 .dw-root {
-  width: 100%;
+  width: 100vw;
   height: 100dvh;
-  padding: 6px;
+  padding: 0;
+  margin: 0;
   box-sizing: border-box;
   position: relative;
+  background: transparent;
+  overflow: hidden;
   user-select: none;
   outline: none;
 }
-.dw-root *,
-.dw-menu * {
+.dw-root * {
   box-sizing: border-box;
 }
+.dw-root .dw-shell :is(button, [tabindex]):focus-visible {
+  outline: 2px solid var(--dw-accent, #d97706);
+  outline-offset: -2px;
+}
+
+.dw-stage {
+  width: 100%;
+  height: 100%;
+  position: relative;
+}
+
+/* 브라우저 프리뷰(?toolkit-preview=dday) 전용 무대 */
 .dw-root.is-preview {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 16px;
+  padding: 24px;
+  overflow: auto;
   background: radial-gradient(circle at 20% 20%, rgba(148, 163, 184, 0.14), transparent 60%), #ebe6da;
 }
 .dw-root.is-preview[data-scheme='dark'] {
   background: #141720;
+}
+.dw-root.is-preview .dw-stage {
+  flex: none;
+  max-width: calc(100vw - 48px);
+}
+.dw-preview-popover {
+  flex: none;
 }
 
 .tnum {
@@ -34,156 +71,223 @@
   display: flex;
   flex-direction: column;
   align-items: stretch;
-  justify-content: center;
+  justify-content: stretch;
   cursor: grab;
+  outline: none;
+  touch-action: none;
+  -webkit-user-drag: none;
 }
-.dw-board:active {
-  cursor: grabbing;
+.dw-board:active,
+.dw-board.is-dragging,
+.dw-board.is-dragging * {
+  cursor: grabbing !important;
 }
-
-/* 우상단 컨트롤 버튼 — 호버·초점·핀 시 완전 불투명, dragRegion 탈취 방어를 위해 히트 영역과 z-index를 보강 */
-.dw-win-controls {
-  position: relative;
-  z-index: 30;
-  display: flex;
-  align-items: center;
-  gap: 1px;
-  padding: 1px;
-  flex-shrink: 0;
-  opacity: 0.78;
-  cursor: default;
-  transition: opacity 150ms ease;
+.dw-board button {
+  touch-action: none;
+  -webkit-user-drag: none;
 }
-.dw-board:hover .dw-win-controls,
-.dw-win-controls:focus-within,
-.dw-win-controls.pinned {
-  opacity: 1;
-}
-.dw-icon-btn {
-  width: var(--dw-ctrl-sz, 26px);
-  height: var(--dw-ctrl-sz, 26px);
-  border: 0;
-  border-radius: 7px;
-  background: transparent;
-  color: inherit;
-  display: grid;
-  place-items: center;
-  padding: 0;
-  cursor: pointer;
-  transition: background-color 120ms ease, color 120ms ease;
-}
-.dw-icon-btn svg {
-  pointer-events: none;
-}
-.dw-icon-btn:active {
+.dw-board.is-dragging button:active {
   transform: none !important;
 }
-.dw-icon-btn:hover {
-  background: rgba(15, 23, 42, 0.1);
-}
-.dw-root[data-scheme='dark'] .dw-icon-btn:hover {
-  background: rgba(255, 255, 255, 0.14);
-}
-.dw-icon-btn.dw-close-btn:hover {
-  background: rgba(225, 29, 72, 0.14);
-  color: #e11d48;
-}
-.dw-root[data-scheme='dark'] .dw-icon-btn.dw-close-btn:hover {
-  background: rgba(251, 113, 133, 0.22);
-  color: #fda4af;
-}
-.dw-icon-btn.pin-on {
-  color: var(--dw-tone, #d97706);
-  background: color-mix(in srgb, var(--dw-tone, #d97706) 15%, transparent);
-}
 
-/* ═══════════════════════════════════════════════════════════════════════
-   SKIN 1 (w1): 데스크 플립 캘린더 (트윈 금속 링 · 반원 노치 · 절취선)
-   ═══════════════════════════════════════════════════════════════════════ */
-.w1-wrap {
+/* Zero-Halo 일체형 카드 셸: 외부 그림자·여백 0px, 내측 ::after 불투명 1px 림 */
+.dw-shell {
   position: relative;
   width: 100%;
   height: 100%;
-  padding-top: 9px;
+  border: 0;
+  border-radius: 18px;
+  background: var(--dw-card-bg, #fdfaf3);
+  background-clip: padding-box;
+  box-shadow: none;
+  overflow: hidden;
+  isolation: isolate;
+  color: var(--dw-ink, #1e2430);
   display: flex;
   flex-direction: column;
 }
-.w1-rings {
+.dw-shell::after {
+  content: '';
   position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: 20px;
-  display: flex;
-  justify-content: space-around;
-  padding: 0 18%;
+  inset: 0;
+  z-index: 40;
+  border-radius: inherit;
   pointer-events: none;
-  z-index: 4;
-}
-.w1-ring-svg {
-  width: 16px;
-  height: 20px;
-  filter: drop-shadow(0 1px 1px rgba(15, 23, 42, 0.18));
+  box-shadow:
+    inset 0 0 0 1px var(--dw-border, #e8ddb7),
+    inset 0 1px 0 var(--dw-highlight, #ffffff);
 }
 
+/* ═══════════════════════════════════════════════════════════════════════
+   통합 우측 상단 macOS 감성 호버 컨트롤 (평소 완전 숨김 · 구역 호버/초점/메뉴 시 활성화)
+   ═══════════════════════════════════════════════════════════════════════ */
+.dw-ctrl-zone {
+  position: absolute;
+  top: 0;
+  right: 0;
+  z-index: 35;
+  width: 96px;
+  height: 42px;
+  padding: 8px 8px 0 0;
+  display: flex;
+  align-items: flex-start;
+  justify-content: flex-end;
+  pointer-events: auto;
+}
+.dw-mac-dock {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px;
+  border-radius: 999px;
+  background: var(--dw-dock-bg, rgba(255, 255, 255, 0.88));
+  border: 1px solid var(--dw-dock-line, rgba(15, 23, 42, 0.11));
+  backdrop-filter: blur(8px);
+  cursor: default;
+  opacity: 0;
+  transform: translateY(-2px) scale(0.96);
+  pointer-events: none;
+  transition:
+    opacity 160ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    transform 160ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.dw-ctrl-zone:hover .dw-mac-dock,
+.dw-ctrl-zone:focus-within .dw-mac-dock,
+.dw-ctrl-zone.is-open .dw-mac-dock {
+  opacity: 1;
+  transform: none;
+  pointer-events: auto;
+}
+
+@media (hover: none), (pointer: coarse) {
+  .dw-mac-dock {
+    opacity: 0.88;
+    transform: none;
+    pointer-events: auto;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .dw-mac-dock {
+    transform: none;
+    transition: opacity 80ms linear;
+  }
+}
+
+.dw-mac-btn {
+  width: 20px;
+  height: 20px;
+  border: 0;
+  border-radius: 999px;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  transition: background-color 120ms ease, color 120ms ease, transform 120ms ease;
+}
+.dw-mac-btn svg {
+  pointer-events: none;
+}
+.dw-root .dw-mac-btn:hover:not(:disabled) {
+  transform: scale(1.06);
+}
+.dw-root .dw-mac-btn:active:not(:disabled) {
+  transform: scale(0.92);
+}
+
+/* 1) 고정 버튼: 웜 골드 틴트 → 호버/활성 시 macOS #febc2e */
+.dw-mac-pin {
+  background: #fef3c7;
+  color: #b45309;
+}
+.dw-root[data-scheme='dark'] .dw-mac-pin {
+  background: rgba(254, 188, 46, 0.24);
+  color: #fbbf24;
+}
+.dw-mac-pin:hover,
+.dw-mac-pin.is-active {
+  background: #febc2e;
+  color: #78350f;
+}
+
+/* 2) 설정 버튼: 현재 메모 테마 강조색 틴트 → 호버/열림 시 테마 채움 */
+.dw-mac-menu {
+  background: var(--dw-accent-soft, #f9eed2);
+  color: var(--dw-accent-ink, #9a4f04);
+}
+.dw-mac-menu:hover,
+.dw-mac-menu.is-active {
+  background: var(--dw-accent-fill, #d97706);
+  color: var(--dw-on-accent, #ffffff);
+}
+
+/* 3) 닫기 버튼: 코랄 레드 틴트 → 호버 시 macOS #ff5f57 */
+.dw-mac-close {
+  background: #fee2e2;
+  color: #be123c;
+}
+.dw-root[data-scheme='dark'] .dw-mac-close {
+  background: rgba(255, 95, 87, 0.24);
+  color: #fda4af;
+}
+.dw-mac-close:hover {
+  background: #ff5f57;
+  color: #450a0a;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   SKIN 1 (w1): 인-프레임 데스크 플립 캘린더
+   ═══════════════════════════════════════════════════════════════════════ */
 .w1-card {
   position: relative;
   flex: 1;
   min-height: 0;
-  border-radius: 17px;
-  background: #fffdf8;
-  color: #1e2430;
-  border: 1px solid rgba(15, 23, 42, 0.1);
-  box-shadow:
-    0 2px 0 #ede5d4,
-    0 4px 0 #e3d9c5,
-    0 10px 22px rgba(15, 23, 42, 0.16);
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  background: var(--dw-card-bg, #fdfaf3);
+  color: var(--dw-ink, #1e2430);
 }
-.dw-root[data-scheme='dark'] .w1-card {
-  background: #232734;
-  color: #f1f5f9;
-  border-color: rgba(255, 255, 255, 0.12);
-  box-shadow:
-    0 2px 0 #1b1e29,
-    0 4px 0 #141720,
-    0 12px 26px rgba(0, 0, 0, 0.44);
-}
-
 .w1-topband {
+  position: relative;
   display: flex;
   align-items: center;
-  justify-content: space-between;
   gap: 6px;
-  padding: 11px 10px 7px;
-  background: linear-gradient(180deg, color-mix(in srgb, var(--dw-tone) 16%, #ffffff), color-mix(in srgb, var(--dw-tone) 6%, #fffdf8));
-  border-bottom: 1px solid color-mix(in srgb, var(--dw-tone) 18%, rgba(15, 23, 42, 0.06));
+  padding: 15px 11px 7px;
+  background: var(--dw-card-section, #f4ebce);
+  border-bottom: 1px solid var(--dw-menu-sec-border, #e8ddb7);
   flex-shrink: 0;
 }
-.dw-root[data-scheme='dark'] .w1-topband {
-  background: linear-gradient(180deg, color-mix(in srgb, var(--dw-tone) 24%, #252938), #232734);
-  border-bottom-color: rgba(255, 255, 255, 0.08);
-  color: #e2e8f0;
+.w1-rings {
+  position: absolute;
+  top: 2px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 58%;
+  height: 13px;
+  display: flex;
+  justify-content: space-between;
+  padding: 0 8px;
+  pointer-events: none;
+  z-index: 2;
+}
+.w1-ring-svg {
+  width: 15px;
+  height: 13px;
 }
 .w1-top-left {
   display: flex;
   align-items: center;
-  gap: 5px;
+  gap: 6px;
   min-width: 0;
   flex: 1;
 }
 .w1-scope-tag {
   font-size: 9.5px;
   font-weight: 800;
-  color: color-mix(in srgb, var(--dw-tone) 85%, #111827);
+  color: var(--dw-accent-ink, #9a4f04);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-}
-.dw-root[data-scheme='dark'] .w1-scope-tag {
-  color: color-mix(in srgb, var(--dw-tone) 80%, #ffffff);
 }
 
 .w1-body {
@@ -192,26 +296,26 @@
   display: flex;
   flex-direction: column;
   justify-content: center;
-  gap: clamp(5px, 2cqh, 11px);
-  padding: clamp(7px, 3cqh, 13px) clamp(9px, 4cqw, 14px) clamp(6px, 2cqh, 10px);
+  gap: clamp(4px, 2cqh, 10px);
+  padding: clamp(6px, 2.8cqh, 12px) clamp(10px, 4cqw, 14px) clamp(5px, 2cqh, 9px);
 }
 
 .w1-flap-btn {
   position: relative;
   width: 100%;
   flex: 1;
-  min-height: 54px;
-  max-height: 112px;
+  min-height: 52px;
+  max-height: 110px;
   border-radius: 12px;
-  border: 1px solid color-mix(in srgb, var(--dw-tone) 24%, rgba(15, 23, 42, 0.08));
+  border: 1px solid var(--dw-tone-line, #e8ddb7);
   background: linear-gradient(
     180deg,
-    color-mix(in srgb, var(--dw-tone) 10%, #ffffff) 0%,
-    #ffffff 49%,
-    color-mix(in srgb, var(--dw-tone) 6%, #faf6ee) 51%,
-    #ffffff 100%
+    var(--dw-flap-top, #fffaf0) 0%,
+    var(--dw-card-surface, #ffffff) 49%,
+    var(--dw-flap-bottom, #f8f2e4) 51%,
+    var(--dw-card-surface, #ffffff) 100%
   );
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.9), 0 2px 6px rgba(15, 23, 42, 0.06);
+  box-shadow: inset 0 1px 0 var(--dw-highlight, #ffffff);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -221,22 +325,12 @@
   transition: transform 120ms ease, border-color 140ms ease;
 }
 .w1-flap-btn:hover {
-  border-color: var(--dw-tone);
+  border-color: var(--dw-tone, #d97706);
 }
 .w1-flap-btn:active {
   transform: scale(0.985);
 }
-.dw-root[data-scheme='dark'] .w1-flap-btn {
-  background: linear-gradient(
-    180deg,
-    color-mix(in srgb, var(--dw-tone) 20%, #2a3040) 0%,
-    #272c3a 49%,
-    #212532 51%,
-    #252a38 100%
-  );
-  border-color: color-mix(in srgb, var(--dw-tone) 34%, rgba(255, 255, 255, 0.1));
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06), 0 3px 10px rgba(0, 0, 0, 0.3);
-}
+
 /* 중앙 절취선 + 좌우 반원 노치 */
 .w1-hinge {
   position: absolute;
@@ -244,11 +338,8 @@
   right: 0;
   top: 50%;
   height: 1px;
-  background: rgba(15, 23, 42, 0.08);
+  background: var(--dw-hinge-line, rgba(15, 23, 42, 0.1));
   pointer-events: none;
-}
-.dw-root[data-scheme='dark'] .w1-hinge {
-  background: rgba(0, 0, 0, 0.38);
 }
 .w1-hinge::before,
 .w1-hinge::after {
@@ -257,13 +348,8 @@
   top: -4px;
   width: 5px;
   height: 9px;
-  background: #fffdf8;
-  border: 1px solid rgba(15, 23, 42, 0.1);
-}
-.dw-root[data-scheme='dark'] .w1-hinge::before,
-.dw-root[data-scheme='dark'] .w1-hinge::after {
-  background: #232734;
-  border-color: rgba(255, 255, 255, 0.12);
+  background: var(--dw-card-bg, #fdfaf3);
+  border: 1px solid var(--dw-tone-line, #e8ddb7);
 }
 .w1-hinge::before {
   left: 0;
@@ -282,23 +368,14 @@
   font-size: calc(clamp(20px, min(19cqw, 19cqh), 46px) * var(--dw-num-scale, 1));
   font-weight: 800;
   line-height: 1;
-  color: color-mix(in srgb, var(--dw-tone) 88%, #111827);
+  color: var(--dw-tone-ink, #9a4f04);
   white-space: nowrap;
 }
 .w1-number.imminent {
-  color: #e11d48;
+  color: var(--dw-imminent-ink, #be123c);
 }
 .w1-number.overdue {
-  color: #64748b;
-}
-.dw-root[data-scheme='dark'] .w1-number {
-  color: color-mix(in srgb, var(--dw-tone) 82%, #ffffff);
-}
-.dw-root[data-scheme='dark'] .w1-number.imminent {
-  color: #fda4af;
-}
-.dw-root[data-scheme='dark'] .w1-number.overdue {
-  color: #cbd5e1;
+  color: var(--dw-overdue-ink, #475569);
 }
 
 .w1-caption {
@@ -314,11 +391,11 @@
   padding: 1px 4px;
   border-radius: 6px;
   background: transparent;
-  color: inherit;
+  color: var(--dw-ink, #1e2430);
   cursor: pointer;
 }
 .w1-title-btn:hover {
-  background: color-mix(in srgb, var(--dw-tone) 10%, transparent);
+  background: var(--dw-tone-soft, #fef3c7);
 }
 .w1-title {
   display: block;
@@ -333,11 +410,8 @@
 .w1-date {
   font-size: clamp(9.5px, 4.2cqw, 12px);
   font-weight: 600;
-  color: #64748b;
+  color: var(--dw-muted, #526074);
   white-space: nowrap;
-}
-.dw-root[data-scheme='dark'] .w1-date {
-  color: #94a3b8;
 }
 
 .w1-extra {
@@ -349,17 +423,14 @@
 .w1-bar {
   height: 5px;
   border-radius: 99px;
-  background: color-mix(in srgb, var(--dw-tone) 15%, rgba(15, 23, 42, 0.06));
+  background: var(--dw-menu-track, #edeff4);
   overflow: hidden;
-}
-.dw-root[data-scheme='dark'] .w1-bar {
-  background: rgba(255, 255, 255, 0.08);
 }
 .w1-bar > i {
   display: block;
   height: 100%;
   border-radius: 99px;
-  background: linear-gradient(90deg, color-mix(in srgb, var(--dw-tone) 68%, #ffffff), var(--dw-tone));
+  background: linear-gradient(90deg, var(--dw-tone-line, #f59e0b), var(--dw-tone, #d97706));
 }
 .w1-extra-row {
   display: flex;
@@ -368,10 +439,7 @@
   gap: 6px;
   font-size: 10px;
   font-weight: 700;
-  color: #64748b;
-}
-.dw-root[data-scheme='dark'] .w1-extra-row {
-  color: #94a3b8;
+  color: var(--dw-muted, #526074);
 }
 .w1-next-peek {
   min-width: 0;
@@ -385,80 +453,75 @@
   align-items: center;
   justify-content: center;
   gap: 6px;
-  padding: 0 10px 8px;
+  padding: 0 10px 6px;
   flex-shrink: 0;
 }
 
-/* ═══════════════════════════════════════════════════════════════════════
-   SKIN 2 (w4): 마스킹테이프 폴라로이드 스티커
-   ═══════════════════════════════════════════════════════════════════════ */
-.w4-wrap {
-  position: relative;
-  width: 100%;
-  height: 100%;
-  padding-top: 10px;
+/* 카드 내부 하단 종이 적층 2단선 — 테두리 밖 그림자 없이 입체감 표현 */
+.w1-paper-stack {
+  flex: none;
   display: flex;
   flex-direction: column;
+  width: 100%;
+}
+.w1-stack-1,
+.w1-stack-2 {
+  display: block;
+  width: 100%;
+  height: 2px;
+}
+.w1-stack-1 {
+  background: var(--dw-stack-1, #ebe2cf);
+}
+.w1-stack-2 {
+  background: var(--dw-stack-2, #e1d5bc);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   SKIN 2 (w4): 인-프레임 마스킹테이프 폴라로이드
+   ═══════════════════════════════════════════════════════════════════════ */
+.w4-frame {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  background: var(--dw-w4-frame, #fffdf8);
+  color: var(--dw-ink, #1e2430);
+  padding: clamp(14px, 5.2cqh, 18px) clamp(9px, 3.6cqw, 12px) clamp(8px, 3cqw, 11px);
+  display: flex;
+  flex-direction: column;
+  gap: clamp(5px, 2.2cqh, 9px);
+  overflow: hidden;
 }
 .w4-tape {
   position: absolute;
-  top: 0;
+  top: 4px;
   left: 50%;
-  transform: translateX(-50%) rotate(-2.4deg);
-  width: clamp(56px, 34cqw, 92px);
-  height: 20px;
+  transform: translateX(-50%) rotate(-1.8deg);
+  width: clamp(54px, 32cqw, 86px);
+  height: 17px;
   z-index: 6;
   pointer-events: none;
-  filter: drop-shadow(0 2px 3px rgba(15, 23, 42, 0.14));
-}
-
-.w4-frame {
-  flex: 1;
-  min-height: 0;
-  border-radius: 15px;
-  background: #fffdf8;
-  color: #1e2430;
-  border: 1px solid rgba(15, 23, 42, 0.1);
-  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.18), 0 2px 5px rgba(15, 23, 42, 0.08);
-  padding: clamp(7px, 3.2cqw, 12px);
-  display: flex;
-  flex-direction: column;
-  gap: clamp(5px, 2.2cqh, 10px);
-  overflow: hidden;
-}
-.dw-root[data-scheme='dark'] .w4-frame {
-  background: #232734;
-  color: #f1f5f9;
-  border-color: rgba(255, 255, 255, 0.12);
-  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.46);
 }
 
 .w4-mat {
   position: relative;
   flex: 1;
   min-height: 0;
-  border-radius: 11px;
+  border-radius: 12px;
   background:
-    radial-gradient(color-mix(in srgb, var(--dw-tone) 16%, transparent) 1px, transparent 1.2px) 0 0 / 12px 12px,
-    linear-gradient(145deg, color-mix(in srgb, var(--dw-tone) 22%, #fff8eb) 0%, color-mix(in srgb, var(--dw-tone) 10%, #ffffff) 100%);
-  border: 1px solid color-mix(in srgb, var(--dw-tone) 22%, rgba(15, 23, 42, 0.06));
+    radial-gradient(var(--dw-mat-dot, #e5c38b) 1.1px, transparent 1.3px) 0 0 / 12px 12px,
+    linear-gradient(145deg, var(--dw-mat-start, #fcecd2) 0%, var(--dw-mat-end, #fffdf8) 100%);
+  border: 1px solid var(--dw-mat-border, #e8ddb7);
   display: flex;
   flex-direction: column;
   padding: 8px;
   overflow: hidden;
 }
-.dw-root[data-scheme='dark'] .w4-mat {
-  background:
-    radial-gradient(color-mix(in srgb, var(--dw-tone) 22%, transparent) 1px, transparent 1.2px) 0 0 / 12px 12px,
-    linear-gradient(145deg, color-mix(in srgb, var(--dw-tone) 32%, #202432) 0%, #1c202c 100%);
-  border-color: color-mix(in srgb, var(--dw-tone) 36%, rgba(255, 255, 255, 0.08));
-}
-
 .w4-mat-top {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 4px;
+  justify-content: flex-start;
+  min-height: var(--dw-icon-sz, 22px);
 }
 .w4-hero-btn {
   flex: 1;
@@ -470,42 +533,31 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 3px;
+  gap: 4px;
   cursor: pointer;
 }
 .w4-number {
   font-size: calc(clamp(21px, min(20cqw, 19cqh), 46px) * var(--dw-num-scale, 1));
   font-weight: 800;
   line-height: 1;
-  color: color-mix(in srgb, var(--dw-tone) 92%, #0f172a);
+  color: var(--dw-tone-ink, #9a4f04);
   white-space: nowrap;
 }
 .w4-number.imminent {
-  color: #be123c;
+  color: var(--dw-imminent-ink, #be123c);
 }
 .w4-number.overdue {
-  color: #475569;
-}
-.dw-root[data-scheme='dark'] .w4-number {
-  color: #f8fafc;
-  text-shadow: 0 2px 10px color-mix(in srgb, var(--dw-tone) 45%, transparent);
-}
-.dw-root[data-scheme='dark'] .w4-number.imminent {
-  color: #fda4af;
+  color: var(--dw-overdue-ink, #475569);
 }
 
 .w4-mat-date {
-  padding: 2px 7px;
+  padding: 2px 8px;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.78);
-  color: #334155;
+  background: var(--dw-mat-date-bg, #ffffff);
+  color: var(--dw-mat-date-ink, #334155);
   font-size: clamp(9px, 3.8cqw, 11px);
   font-weight: 700;
   white-space: nowrap;
-}
-.dw-root[data-scheme='dark'] .w4-mat-date {
-  background: rgba(15, 23, 42, 0.55);
-  color: #cbd5e1;
 }
 
 .w4-chin {
@@ -514,7 +566,7 @@
   align-items: center;
   justify-content: space-between;
   gap: 6px;
-  padding: 2px 2px 1px;
+  padding: 1px 2px 0;
   min-width: 0;
 }
 .w4-title-btn {
@@ -524,12 +576,12 @@
   padding: 2px 4px;
   border-radius: 6px;
   background: transparent;
-  color: inherit;
+  color: var(--dw-ink, #1e2430);
   text-align: left;
   cursor: pointer;
 }
 .w4-title-btn:hover {
-  background: rgba(15, 23, 42, 0.05);
+  background: var(--dw-menu-hover, rgba(15, 23, 42, 0.05));
 }
 .w4-title {
   display: block;
@@ -555,44 +607,31 @@
   height: 20px;
   border: 0;
   border-radius: 999px;
-  background: rgba(15, 23, 42, 0.06);
-  color: #475569;
+  background: var(--dw-nav-bg, #eceef3);
+  color: var(--dw-muted, #526074);
   display: grid;
   place-items: center;
   padding: 0;
   cursor: pointer;
 }
 .dw-nav-btn:hover {
-  background: rgba(15, 23, 42, 0.12);
-  color: #0f172a;
-}
-.dw-root[data-scheme='dark'] .dw-nav-btn {
-  background: rgba(255, 255, 255, 0.09);
-  color: #cbd5e1;
-}
-.dw-root[data-scheme='dark'] .dw-nav-btn:hover {
-  background: rgba(255, 255, 255, 0.16);
-  color: #ffffff;
+  background: var(--dw-nav-hover-bg, #dfe3eb);
+  color: var(--dw-ink, #1e2430);
 }
 .dw-nav-count {
   font-size: 10px;
   font-weight: 800;
-  color: #64748b;
+  color: var(--dw-muted, #526074);
   padding: 0 2px;
   white-space: nowrap;
 }
-.dw-root[data-scheme='dark'] .dw-nav-count {
-  color: #94a3b8;
-}
 
 /* 빈 상태 카드 */
-.dw-empty-card {
-  width: 100%;
-  height: 100%;
-  border-radius: 18px;
-  background: #fffdf8;
-  color: #1e2430;
-  border: 1.5px dashed rgba(15, 23, 42, 0.18);
+.dw-empty-inner {
+  flex: 1;
+  margin: 7px;
+  border-radius: 12px;
+  border: 1.5px dashed var(--dw-menu-sec-border, #d8dde6);
   padding: 12px;
   display: flex;
   flex-direction: column;
@@ -600,35 +639,24 @@
   justify-content: center;
   text-align: center;
   gap: 7px;
-  position: relative;
-}
-.dw-root[data-scheme='dark'] .dw-empty-card {
-  background: #232734;
-  color: #f1f5f9;
-  border-color: rgba(255, 255, 255, 0.18);
-}
-.dw-empty-top {
-  position: absolute;
-  top: 8px;
-  right: 8px;
-  z-index: 30;
 }
 .dw-empty-icon {
   width: 34px;
   height: 34px;
   border-radius: 11px;
-  background: color-mix(in srgb, var(--tk-accent, #d97706) 14%, transparent);
-  color: var(--tk-accent, #d97706);
+  background: var(--dw-accent-soft, #fef3c7);
+  color: var(--dw-accent-ink, #9a4f04);
   display: grid;
   place-items: center;
 }
-.dw-empty-card strong {
+.dw-empty-inner strong {
   font-size: 12px;
   font-weight: 800;
+  color: var(--dw-ink, #1e2430);
 }
-.dw-empty-card small {
+.dw-empty-inner small {
   font-size: 10px;
-  color: #64748b;
+  color: var(--dw-muted, #526074);
   line-height: 1.4;
   word-break: keep-all;
 }
@@ -637,8 +665,8 @@
   padding: 0 12px;
   border: 0;
   border-radius: 999px;
-  background: var(--tk-accent, #d97706);
-  color: #ffffff;
+  background: var(--dw-accent-fill, #d97706);
+  color: var(--dw-on-accent, #ffffff);
   font-size: 11px;
   font-weight: 800;
   display: inline-flex;
@@ -655,17 +683,25 @@
     display: none;
   }
   .w1-topband {
-    padding: 10px 7px 5px;
+    padding: 13px 8px 5px;
   }
   .w1-body {
-    padding: 5px 8px 5px;
+    padding: 5px 8px 4px;
     gap: 4px;
   }
   .w1-flap-btn {
     min-height: 44px;
   }
   .w1-pager {
-    padding-bottom: 5px;
+    padding-bottom: 4px;
+  }
+  .w4-frame {
+    padding: 13px 8px 7px;
+    gap: 5px;
+  }
+  .w4-tape {
+    top: 3px;
+    height: 15px;
   }
   .w4-mat {
     padding: 6px 7px;
@@ -676,7 +712,7 @@
     display: none;
   }
   .w1-topband {
-    padding-inline: 6px;
+    padding-inline: 7px;
   }
   .w4-chin {
     gap: 3px;
@@ -684,447 +720,21 @@
   .w4-mat {
     padding-inline: 6px;
   }
+  .dw-ctrl-zone {
+    width: 84px;
+    height: 36px;
+    padding: 7px 7px 0 0;
+  }
+  .dw-mac-dock {
+    gap: 4px;
+  }
+  .dw-mac-btn {
+    width: 18px;
+    height: 18px;
+  }
 }
-@container widget (min-width: 260px) and (min-height: 260px) {
+@container widget (min-width: 252px) and (min-height: 252px) {
   .w1-extra {
     display: flex;
   }
-}
-
-/* ═══════════════════════════════════════════════════════════════════════
-   도트 그리드 설정 팝오버 (ThermometerDisplay 디자인 언어 계승)
-   ═══════════════════════════════════════════════════════════════════════ */
-.dw-dismiss {
-  position: fixed;
-  inset: 0;
-  z-index: 24;
-  border: 0;
-  background: rgba(15, 23, 42, 0.16);
-}
-.dw-menu {
-  position: fixed;
-  z-index: 25;
-  display: grid;
-  gap: 4px;
-  width: min(256px, calc(100vw - 14px));
-  max-height: calc(100dvh - 14px);
-  overflow-y: auto;
-  overflow-x: hidden;
-  scrollbar-width: thin;
-  padding: 6px;
-  border-radius: 13px;
-  color: #2d3440;
-  border: 1px solid rgba(30, 41, 59, 0.13);
-  background: #fdfaf3;
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.65),
-    0 10px 26px -6px rgba(15, 23, 42, 0.18),
-    0 2px 6px -1px rgba(15, 23, 42, 0.08);
-}
-.tk-root .dw-menu :is(button, select, input):focus-visible {
-  outline: 1.5px solid var(--tk-accent, #d97706);
-  outline-offset: -1px;
-}
-.dw-menu[data-scheme='dark'] {
-  --dw-dark-accent: color-mix(in srgb, var(--tk-accent, #fbbf24) 60%, #ffffff);
-  color: #eceff6;
-  border-color: rgba(255, 255, 255, 0.14);
-  background: #242730;
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.07),
-    0 14px 32px -6px rgba(0, 0, 0, 0.50);
-}
-
-.dw-menu-head {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  height: 26px;
-  padding: 0 3px 0 6px;
-  border-radius: 8px;
-  background: color-mix(in srgb, var(--tk-accent, #d97706) 10%, transparent);
-}
-.dw-menu[data-scheme='dark'] .dw-menu-head {
-  background: color-mix(in srgb, var(--tk-accent, #fbbf24) 17%, transparent);
-}
-.dw-menu-head .dday-bubble {
-  width: 18px !important;
-  height: 18px !important;
-}
-.dw-menu-head strong {
-  flex: 1;
-  font-size: 11px;
-  font-weight: 800;
-  letter-spacing: -0.015em;
-}
-.dw-menu-close {
-  width: 20px;
-  height: 20px;
-  border: 0;
-  border-radius: 6px;
-  background: transparent;
-  color: inherit;
-  opacity: 0.72;
-  display: grid;
-  place-items: center;
-  cursor: pointer;
-}
-.dw-menu-close:hover {
-  opacity: 1;
-  background: rgba(30, 41, 59, 0.08);
-}
-.dw-menu[data-scheme='dark'] .dw-menu-close:hover {
-  background: rgba(255, 255, 255, 0.1);
-}
-
-.dw-menu-sec {
-  display: grid;
-  gap: 4px;
-  padding: 5px;
-  border-radius: 8px;
-  background: rgba(255, 255, 255, 0.72);
-  border: 1px solid rgba(30, 41, 59, 0.09);
-}
-.dw-menu[data-scheme='dark'] .dw-menu-sec {
-  background: rgba(255, 255, 255, 0.045);
-  border-color: rgba(255, 255, 255, 0.09);
-}
-.dw-menu-sec h3 {
-  justify-self: start;
-  margin: 0;
-  padding: 1px 6px;
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--tk-accent, #d97706) 11%, transparent);
-  color: var(--tk-accent, #d97706);
-  font-size: 9.5px;
-  font-weight: 800;
-  letter-spacing: -0.015em;
-}
-.dw-menu[data-scheme='dark'] .dw-menu-sec h3 {
-  background: color-mix(in srgb, var(--dw-dark-accent) 18%, transparent);
-  color: var(--dw-dark-accent);
-}
-
-.dw-skin-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 4px;
-}
-.dw-skin-card {
-  padding: 4px 5px;
-  border-radius: 7px;
-  border: 1px solid rgba(30, 41, 59, 0.1);
-  background: #ffffff;
-  color: inherit;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 2.5px;
-  font-size: 10px;
-  font-weight: 700;
-  white-space: nowrap;
-  cursor: pointer;
-}
-.dw-skin-card.on {
-  border-color: color-mix(in srgb, var(--tk-accent, #d97706) 42%, transparent);
-  background: color-mix(in srgb, var(--tk-accent, #d97706) 10%, #ffffff);
-  color: var(--tk-accent, #d97706);
-}
-.dw-skin-thumb {
-  position: relative;
-  width: 38px;
-  height: 25px;
-  border-radius: 6px;
-  border: 1px solid rgba(15, 23, 42, 0.14);
-  background: #fffdf8;
-  display: grid;
-  place-items: center;
-  color: #1e2430;
-  font-size: 8.5px;
-  font-weight: 800;
-}
-.dw-menu[data-scheme='dark'] .dw-skin-thumb {
-  background: #1b1f2b;
-  border-color: rgba(255, 255, 255, 0.16);
-  color: #f1f5f9;
-}
-.dw-skin-thumb.w1-thumb > i {
-  position: absolute;
-  top: -3px;
-  left: 9px;
-  right: 9px;
-  height: 4px;
-  border-left: 2.5px solid #64748b;
-  border-right: 2.5px solid #64748b;
-}
-.dw-skin-thumb.w4-thumb > i {
-  position: absolute;
-  top: -3px;
-  left: 11px;
-  right: 11px;
-  height: 4px;
-  border-radius: 2px;
-  background: #fcd34d;
-  transform: rotate(-3deg);
-}
-.dw-menu[data-scheme='dark'] .dw-skin-card {
-  background: #272c3a;
-  border-color: rgba(255, 255, 255, 0.1);
-}
-.dw-menu[data-scheme='dark'] .dw-skin-card.on {
-  border-color: color-mix(in srgb, var(--tk-accent, #fbbf24) 44%, transparent);
-  background: color-mix(in srgb, var(--tk-accent, #fbbf24) 18%, #272c3a);
-  color: #ffffff;
-}
-
-.dw-mode-row {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 2px;
-  padding: 2px;
-  border-radius: 6px;
-  background: rgba(30, 41, 59, 0.055);
-}
-.dw-menu[data-scheme='dark'] .dw-mode-row {
-  background: rgba(255, 255, 255, 0.06);
-}
-.dw-mode-chip {
-  height: 21px;
-  border-radius: 4.5px;
-  border: 1px solid transparent;
-  background: transparent;
-  color: #64748b;
-  font-size: 10px;
-  font-weight: 700;
-  white-space: nowrap;
-  cursor: pointer;
-}
-.dw-mode-chip.on {
-  border-color: color-mix(in srgb, var(--tk-accent, #d97706) 28%, transparent);
-  background: #ffffff;
-  color: var(--tk-accent, #d97706);
-  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.08);
-}
-.dw-menu[data-scheme='dark'] .dw-mode-chip {
-  color: #9aa3b4;
-}
-.dw-menu[data-scheme='dark'] .dw-mode-chip.on {
-  border-color: color-mix(in srgb, var(--dw-dark-accent) 42%, transparent);
-  background: #242730;
-  color: var(--dw-dark-accent);
-}
-
-.dw-scope-row {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 4px 6px;
-  border-radius: 6px;
-  background: rgba(30, 41, 59, 0.045);
-  font-size: 10px;
-  font-weight: 700;
-}
-.dw-menu[data-scheme='dark'] .dw-scope-row {
-  background: rgba(255, 255, 255, 0.055);
-}
-.dw-scope-row select {
-  flex: 1;
-  min-width: 0;
-  height: 23px;
-  padding: 0 6px;
-  border-radius: 5px;
-  border: 1px solid rgba(30, 41, 59, 0.12);
-  background: #ffffff;
-  color: #1e2430;
-  font: inherit;
-  font-size: 10px;
-  font-weight: 700;
-}
-.dw-menu[data-scheme='dark'] .dw-scope-row select {
-  background: #1a1d26;
-  border-color: rgba(255, 255, 255, 0.14);
-  color: #f1f5f9;
-}
-
-.dw-tiles {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
-  gap: 3px;
-}
-.dw-tile {
-  position: relative;
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  min-width: 0;
-  padding: 5px 20px 5px 7px;
-  border-radius: 7px;
-  border: 1px solid color-mix(in srgb, var(--dw-tone) 34%, rgba(30, 41, 59, 0.1));
-  background: color-mix(in srgb, var(--dw-tone) 9%, #ffffff);
-  color: inherit;
-  text-align: left;
-  cursor: pointer;
-}
-.dw-tile[aria-checked='false'] {
-  border-style: dashed;
-  border-color: rgba(100, 116, 139, 0.36);
-  background: #ffffff;
-  opacity: 0.66;
-}
-.dw-menu[data-scheme='dark'] .dw-tile {
-  background: color-mix(in srgb, var(--dw-tone) 17%, #262b38);
-}
-.dw-menu[data-scheme='dark'] .dw-tile[aria-checked='false'] {
-  background: #1f232e;
-  border-color: rgba(255, 255, 255, 0.16);
-}
-.dw-tile-name {
-  flex: 1;
-  min-width: 0;
-  font-size: 10px;
-  font-weight: 700;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.dw-tile-check {
-  position: absolute;
-  right: 5px;
-  top: 50%;
-  transform: translateY(-50%);
-  width: 13px;
-  height: 13px;
-  border-radius: 50%;
-  border: 1.5px solid rgba(100, 116, 139, 0.45);
-  display: grid;
-  place-items: center;
-  color: #ffffff;
-}
-.dw-tile[aria-checked='true'] .dw-tile-check {
-  border-color: var(--dw-tone);
-  background: var(--dw-tone);
-}
-
-.dw-switch {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  width: 100%;
-  padding: 5px 6px;
-  border: 0;
-  border-radius: 6px;
-  background: transparent;
-  color: inherit;
-  font: inherit;
-  font-size: 10.5px;
-  font-weight: 700;
-  text-align: left;
-  cursor: pointer;
-}
-.dw-switch:hover {
-  background: rgba(30, 41, 59, 0.055);
-}
-.dw-menu[data-scheme='dark'] .dw-switch:hover {
-  background: rgba(255, 255, 255, 0.07);
-}
-.dw-switch-text {
-  flex: 1;
-  min-width: 0;
-}
-.dw-switch-text small {
-  display: block;
-  font-size: 9px;
-  font-weight: 500;
-  opacity: 0.72;
-  line-height: 1.25;
-}
-.dw-knob {
-  position: relative;
-  flex-shrink: 0;
-  width: 26px;
-  height: 15px;
-  border-radius: 99px;
-  background: rgba(100, 116, 139, 0.35);
-}
-.dw-menu[data-scheme='dark'] .dw-knob {
-  background: #475569;
-}
-.dw-knob i {
-  position: absolute;
-  top: 2px;
-  left: 2px;
-  width: 11px;
-  height: 11px;
-  border-radius: 50%;
-  background: #ffffff;
-  transition: transform 150ms ease;
-}
-.dw-switch[aria-checked='true'] .dw-knob {
-  background: var(--tk-accent, #d97706);
-}
-.dw-switch[aria-checked='true'] .dw-knob i {
-  transform: translateX(11px);
-}
-
-.dw-startup-helper {
-  width: 100%;
-  height: 24px;
-  border-radius: 6px;
-  border: 1px solid rgba(217, 119, 6, 0.35);
-  background: #fef3c7;
-  color: #92400e;
-  font-size: 9.5px;
-  font-weight: 800;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 4px;
-  white-space: nowrap;
-  cursor: pointer;
-}
-.dw-menu[data-scheme='dark'] .dw-startup-helper {
-  background: rgba(217, 119, 6, 0.2);
-  color: #fcd34d;
-}
-
-.dw-actions {
-  display: grid;
-  grid-template-columns: 1fr 1.25fr;
-  gap: 4px;
-  padding-top: 4px;
-  border-top: 1px solid rgba(30, 41, 59, 0.1);
-}
-.dw-menu[data-scheme='dark'] .dw-actions {
-  border-top-color: rgba(255, 255, 255, 0.1);
-}
-.dw-actions button {
-  min-width: 0;
-  height: 27px;
-  padding: 0 7px;
-  border-radius: 7px;
-  border: 1px solid rgba(30, 41, 59, 0.11);
-  background: rgba(255, 255, 255, 0.78);
-  color: inherit;
-  font-size: 10px;
-  font-weight: 700;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 4px;
-  white-space: nowrap;
-  cursor: pointer;
-}
-.dw-actions .dw-action-pri {
-  border-color: color-mix(in srgb, var(--tk-accent, #d97706) 34%, transparent);
-  background: color-mix(in srgb, var(--tk-accent, #d97706) 11%, transparent);
-  color: var(--tk-accent, #d97706);
-}
-.dw-menu[data-scheme='dark'] .dw-actions button {
-  background: rgba(255, 255, 255, 0.055);
-  border-color: rgba(255, 255, 255, 0.12);
-}
-.dw-menu[data-scheme='dark'] .dw-actions .dw-action-pri {
-  border-color: color-mix(in srgb, var(--dw-dark-accent) 42%, transparent);
-  background: color-mix(in srgb, var(--dw-dark-accent) 18%, transparent);
-  color: var(--dw-dark-accent);
 }

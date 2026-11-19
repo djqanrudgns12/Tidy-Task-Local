@@ -9,7 +9,9 @@ import { track } from '../analytics.js';
 import { createSerialQueue } from '../storage/serialQueue.js';
 import { hasWindowContent } from '../storage/windowDataCodec.js';
 import { ensureWindowOnScreen, getMonitorGeometries } from '../windows/windowRegistry.js';
+import { pickPrimaryMonitor } from '../windows/windowPlacement.js';
 import { isDataWindowLabel, isTinyNoteLabel } from '../windows/windowLabels.js';
+import { resolveControlSizeLimits } from './ddayWindowBounds.js';
 import {
   DDAY_BANNER_MODES,
   DDAY_CONTROL_BOUNDS,
@@ -378,6 +380,23 @@ export async function collectAllNoteWindowsDdays() {
     .map((l) => /** @type {DdayWindowSnapshot} */ (collected.get(l)));
 }
 
+function readPreviewIpcConfig() {
+  if (typeof window === 'undefined') return { delayMs: 0, fail: false, frozen: false };
+  const override = /** @type {any} */ (window).__ddayPreviewIpc || {};
+  const params = new URLSearchParams(window.location?.search || '');
+  const delayRaw = override.delayMs ?? Number(params.get('ipc-delay') || 0);
+  const delayMs = Number.isFinite(delayRaw) && delayRaw > 0 ? Math.min(5000, delayRaw) : 0;
+  const fail = Boolean(
+    override.fail ??
+      (params.get('ipc-fail') === '1' || (params.has('ipc-fail') && params.get('ipc-fail') !== '0')),
+  );
+  const frozen = Boolean(
+    override.frozen ??
+      (params.get('ipc-frozen') === '1' || (params.has('ipc-frozen') && params.get('ipc-frozen') !== '0')),
+  );
+  return { delayMs, fail, frozen };
+}
+
 /**
  * 특정 메모 창(`targetLabel`)에 D-Day 상태 변경 명령을 전달합니다.
  * 열려 있는 창은 IPC로 직접 반영하고(Undo 히스토리 보존), 닫혀 있는 창은 직렬 큐로 안전하게 저장합니다.
@@ -389,9 +408,19 @@ export async function collectAllNoteWindowsDdays() {
  */
 export async function dispatchDdayCommand(targetLabel, action, payload, settings) {
   if (!isTauri()) {
+    const ipc = readPreviewIpcConfig();
+    if (ipc.delayMs > 0) {
+      await new Promise((r) => setTimeout(r, ipc.delayMs));
+    }
     const windows = loadPreviewWindows();
     const idx = windows.findIndex((w) => w.label === targetLabel);
     const current = idx >= 0 ? windows[idx] : buildWindowDdaySnapshot(targetLabel, {});
+    if (ipc.fail) {
+      return { ok: false };
+    }
+    if (ipc.frozen) {
+      return { ok: true, snapshot: current };
+    }
     const applied = applyDdayCommandToState(current, action, payload, settings);
     const updated = buildWindowDdaySnapshot(targetLabel, { ...current, ...applied });
     if (idx >= 0) windows[idx] = updated;
@@ -500,13 +529,13 @@ export async function openDdayControlWindow(opts = {}) {
   const existing = await WebviewWindow.getByLabel(DDAY_CONTROL_LABEL);
   if (existing) {
     try {
+      // C1: 기존 창 재표시 전 대상 창·외관(setTarget)을 먼저 전달해 이전 창 화면 번쩍임을 막습니다.
+      await emitTo(DDAY_CONTROL_LABEL, DDAY_EVENTS.setTarget, payload).catch(() => {});
+      await new Promise((r) => setTimeout(r, 32));
       await ensureWindowOnScreen(existing);
       await existing.unminimize();
       await existing.show();
       await existing.setFocus();
-      setTimeout(() => {
-        void emitTo(DDAY_CONTROL_LABEL, DDAY_EVENTS.setTarget, payload).catch(() => {});
-      }, 50);
     } catch (e) {
       console.error('[DdayControl] 기존 창 포커스 실패:', e);
     }
@@ -529,21 +558,31 @@ export async function openDdayControlWindow(opts = {}) {
   });
 
   const monitors = await getMonitorGeometries();
-  const minWorkH = monitors.length
-    ? Math.min(...monitors.map((m) => m.work.height / (m.scale || 1)))
-    : 720;
-  const height = Math.max(
-    DDAY_CONTROL_BOUNDS.minHeight,
-    Math.min(DDAY_CONTROL_BOUNDS.defaultHeight, Math.floor(minWorkH - 36)),
-  );
+  const targetMonitor = pickPrimaryMonitor(monitors) || monitors[0] || null;
+  const limits = resolveControlSizeLimits(targetMonitor, DDAY_CONTROL_BOUNDS, 36);
+  const width = Math.max(limits.minWidth, Math.min(limits.maxWidth, DDAY_CONTROL_BOUNDS.defaultWidth));
+  const height = Math.max(limits.minHeight, Math.min(limits.maxHeight, DDAY_CONTROL_BOUNDS.defaultHeight));
+
+  const boot = new URLSearchParams();
+  boot.set('ddayCtrlTarget', payload.targetLabel);
+  const ap = payload.appearance;
+  if (ap) {
+    if (ap.themeColor) boot.set('theme', String(ap.themeColor));
+    if (typeof ap.isDarkMode === 'boolean') boot.set('dark', ap.isDarkMode ? '1' : '0');
+    if (ap.uiFontFamily) boot.set('uifont', String(ap.uiFontFamily));
+    if (Number.isFinite(Number(ap.uiFontSize))) boot.set('fs', String(ap.uiFontSize));
+  }
 
   const win = new WebviewWindow(DDAY_CONTROL_LABEL, {
-    url: 'index.html',
+    url: `index.html?${boot.toString()}`,
     title: 'D-Day 컨트롤',
-    width: DDAY_CONTROL_BOUNDS.defaultWidth,
+    width,
     height,
-    minWidth: DDAY_CONTROL_BOUNDS.minWidth,
-    minHeight: DDAY_CONTROL_BOUNDS.minHeight,
+    minWidth: limits.minWidth,
+    minHeight: limits.minHeight,
+    maxWidth: limits.maxWidth,
+    maxHeight: limits.maxHeight,
+    maximizable: false,
     resizable: true,
     decorations: false,
     transparent: true,

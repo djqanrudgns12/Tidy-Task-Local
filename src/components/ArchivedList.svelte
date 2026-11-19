@@ -4,7 +4,7 @@
   import { sanitizeForDisplay } from '../lib/editable.js';
   import { ARCHIVE_LIST_ROWS } from '../lib/layout/memoLayout.js';
   import { REMOVAL_GUARD_MS, createRemovalGuard, isXArmed } from '../lib/todos/rowGestures.js';
-  import SoftX from './todo/SoftX.svelte';
+  import EraserButton from './todo/EraserButton.svelte';
   import { onDestroy } from 'svelte';
   import { slide } from 'svelte/transition';
 
@@ -213,7 +213,7 @@
           ondblclickcapture={swallowWhileSettling}
         >
           {#each appState.filteredArchivedTodos as todo (todo.id)}
-            <!-- 줄 = 되돌리기 단추 + 겹쳐 뜨는 말랑 X. X는 자리를 차지하지 않아 글이 끝까지 보입니다. -->
+            <!-- 줄 = 되돌리기 단추 + 겹쳐 뜨는 노트북 지우개. 지우개는 자리를 차지하지 않아 글이 끝까지 보입니다. -->
             <div
               class="archived-row group flex items-center text-xs py-1 rounded px-1 transition-colors shrink-0"
               class:is-restored={appState.recentlyRestoredIds.includes(todo.id)}
@@ -234,7 +234,7 @@
               <span class="archived-float">
                 <span class="archived-veil" aria-hidden="true"></span>
                 <span class="archived-x-pop">
-                  <SoftX
+                  <EraserButton
                     dark={appState.isDarkMode}
                     canPress={(e) => canPressX(e, todo.id)}
                     onremove={(e) => handleRemove(e, todo.id)}
@@ -262,8 +262,8 @@
     scrollbar-color: rgba(0, 0, 0, 0.15) transparent;
   }
 
-  /* ── 마감된 일 줄과 말랑 X (docs/PRD-todo-row-gestures.md §8) ──
-     줄 배경 = 영역 배경(--global-section-bg) 위에 마우스 올림 덧칠. X 뒤 흐림 받침도 같은 색으로 만듭니다. */
+  /* ── 마감된 일 줄과 노트북 지우개 (docs/PRD-todo-row-gestures.md §8) ──
+     줄 배경 = 영역 배경(--global-section-bg) 위에 마우스 올림 덧칠. 지우개 뒤 흐림 받침도 같은 색으로 만듭니다. */
   .archived-items {
     --row-hover: rgba(0, 0, 0, 0.05);
     --row-surface-rest: var(--global-section-bg);
@@ -309,7 +309,7 @@
     position: relative;
     display: grid;
     pointer-events: none;
-    transform: scale(0.6);
+    transform: scale(0.72);
     transition: transform 220ms cubic-bezier(0.34, 1.56, 0.64, 1), opacity 140ms ease-out;
   }
   .archived-row:hover .archived-float,
@@ -319,11 +319,11 @@
     transform: none;
     pointer-events: auto;
   }
-  /* 연타 보호 중에는 포인터 밑으로 올라온 줄의 X를 숨깁니다. */
+  /* 연타 보호 중에는 포인터 밑으로 올라온 줄의 지우개를 숨깁니다. */
   .archived-items.is-settling .archived-row .archived-float { opacity: 0; }
   .archived-items.is-settling .archived-row .archived-x-pop {
     opacity: 0;
-    transform: scale(0.6);
+    transform: scale(0.72);
     pointer-events: none;
   }
 
@@ -336,7 +336,7 @@
   @media (hover: none) {
     .archived-float { opacity: 1; }
     .archived-x-pop { transform: none; pointer-events: auto; }
-    .archived-restore { padding-right: 24px; }
+    .archived-restore { padding-right: 28px; }
   }
   @media (prefers-reduced-motion: reduce) {
     .archived-x-pop,

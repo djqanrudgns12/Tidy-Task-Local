@@ -79,8 +79,8 @@
   {:else if role === "focus-bell"}{#await import('../focus-bell/FocusBellApp.svelte')}<p>집중벨을 준비하고 있어요…</p>{:then module}<module.default />{:catch}<p role="alert">집중벨을 불러오지 못했어요. 창을 다시 열어주세요.</p>{/await}
   {:else if role === "tournament"}{#await import('../tournament/TournamentApp.svelte')}<p>토너먼트를 준비하고 있어요…</p>{:then module}<module.default />{:catch}<p role="alert">토너먼트를 불러오지 못했어요.</p>{/await}
   {:else if role.startsWith("scoreboard-")}{#await import('../scoreboard/ScoreboardApp.svelte')}<p>점수판을 준비하고 있어요…</p>{:then module}<module.default kind={role.slice("scoreboard-".length)} />{:catch}<p role="alert">점수판을 불러오지 못했어요. 창을 다시 열어 주세요.</p>{/await}
-  {:else if role === "dday"}{#await import('../dday/DdayWidget.svelte')}<p>D-Day 위젯을 준비하고 있어요…</p>{:then module}<module.default />{:catch}<p role="alert">D-Day 위젯을 불러오지 못했어요.</p>{/await}
   {:else if role === "thermometer-display"}{#await import('../thermometer/ThermometerDisplay.svelte')}<p>미니 온도계를 준비하고 있어요…</p>{:then module}<module.default />{:catch}<p role="alert">미니 온도계를 불러오지 못했어요.</p>{/await}
+  {:else if role === "dday"}{#await import('../dday/DdayWidget.svelte')}<p>D-Day 위젯을 준비하고 있어요…</p>{:then module}<module.default />{:catch}<p role="alert">D-Day 위젯을 불러오지 못했어요.</p>{/await}
   {:else if role === "thermometer"}{#await import('../thermometer/ThermometerApp.svelte')}<p>학급 온도계를 준비하고 있어요…</p>{:then module}<module.default />{:catch}<p role="alert">학급 온도계를 불러오지 못했어요. 창을 다시 열어 주세요.</p>{/await}
   {:else if role === "vote"}{#await import('../vote/VoteApp.svelte')}<p>학급 투표를 준비하고 있어요…</p>{:then module}<module.default />{:catch}<p role="alert">학급 투표를 불러오지 못했어요. 창을 다시 열어 주세요.</p>{/await}
   {:else if role === "seating" || role === "seating-teacher"}{#await import('../seating/SeatingApp.svelte')}<p>교실을 준비하고 있어요…</p>{:then module}<module.default teacherOnly={role === 'seating-teacher'} />{:catch}<p role="alert">자리 배치를 불러오지 못했어요.</p>{/await}

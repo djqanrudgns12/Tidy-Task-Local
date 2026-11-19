@@ -48,19 +48,18 @@ export function evenPartition(n, g, remainderSide = 'head') {
   });
 }
 
-/** 참여 인원 N 기준 추천 모둠 구성 Top 3 (규모 구간 sig 중복 제거 · 소수 인원 가드 포함).
- * 왜 sig로 중복을 거르는가: N=29처럼 '5~6명'(5모둠)과 '4~5명'(6모둠) 외에 같은 구간 두 조합이 경쟁할 때
- *   교사가 체감하는 다른 규모 대안을 3개 보여 주기 위해서입니다.
+/** 참여 인원 N 기준 연속 최대 4개 추천 모둠 구성 탐색(소수 인원 가드 + 점수순 [0]=1위 보존).
+ *  UI 표시 단계에서는 groupCount 오름차순으로 정렬해 보여 주지만, createDefaultIntent()[0] 계약을 위해
+ *  반환 배열은 점수 내림차순([0] === topG) + isTop 메타데이터를 유지합니다.
  * @param {number} n
- * @returns {{id:string, groupCount:number, capacities:number[], label:string, sig:string, remainder:number, score:number}[]} */
+ * @returns {{id:string, groupCount:number, capacities:number[], label:string, shortSize:string, sig:string, remainder:number, score:number, isTop:boolean}[]} */
 export function recommendAllocations(n) {
   if (!Number.isInteger(n) || n <= 3) return [];
-  const limit = n <= 5 ? 1 : n <= 7 ? 2 : 3;
   const maxG = Math.min(GROUP_MAX, Math.floor(n / 2));
   if (maxG < GROUP_MIN) return [];
 
-  /** @type {Map<string, {id:string, groupCount:number, capacities:number[], label:string, sig:string, remainder:number, score:number, spread:number, dist4:number}>} */
-  const bestBySig = new Map();
+  /** @type {{id:string, groupCount:number, capacities:number[], label:string, shortSize:string, sig:string, remainder:number, score:number, spread:number, dist4:number}[]} */
+  const all = [];
 
   for (let g = GROUP_MIN; g <= maxG; g++) {
     const caps = evenPartition(n, g);
@@ -71,27 +70,51 @@ export function recommendAllocations(n) {
     const spread = r === 0 ? 0 : 1;
     const dist4 = Math.abs(n / g - 4);
     const sig = r === 0 ? `${q}` : `${q}~${q + 1}`;
-    const candidate = {
+    const shortSize = r === 0 ? `${q}명씩` : `${q}~${q + 1}명`;
+    all.push({
       id: `${g}x${sig}`,
       groupCount: g,
       capacities: caps,
-      label: r === 0 ? `${g}모둠 · ${q}명씩` : `${g}모둠 · ${q}~${q + 1}명`,
+      label: `${g}모둠 · ${shortSize}`,
+      shortSize,
       sig,
       remainder: r,
       score,
       spread,
       dist4,
-    };
-    const prev = bestBySig.get(sig);
-    if (!prev || compareRecommendation(candidate, prev) < 0) {
-      bestBySig.set(sig, candidate);
+    });
+  }
+
+  const sortedByScore = [...all].sort(compareRecommendation);
+  const topG = sortedByScore[0].groupCount;
+
+  const winLen = Math.min(4, all.length);
+  let bestWindow = all.slice(0, winLen);
+  let bestScoreSum = -Infinity;
+  let bestCenterDist = Infinity;
+
+  for (let i = 0; i <= all.length - winLen; i++) {
+    const slice = all.slice(i, i + winLen);
+    if (!slice.some((item) => item.groupCount === topG)) continue;
+    const sum = slice.reduce((acc, item) => acc + item.score, 0);
+    const center = (slice[0].groupCount + slice[winLen - 1].groupCount) / 2;
+    const centerDist = Math.abs(center - topG);
+    if (
+      sum > bestScoreSum + 1e-6 ||
+      (Math.abs(sum - bestScoreSum) <= 1e-6 && centerDist < bestCenterDist - 1e-6)
+    ) {
+      bestScoreSum = sum;
+      bestCenterDist = centerDist;
+      bestWindow = slice;
     }
   }
 
-  return [...bestBySig.values()]
+  return bestWindow
     .sort(compareRecommendation)
-    .slice(0, limit)
-    .map(({ spread: _s, dist4: _d, ...rest }) => rest);
+    .map(({ spread: _s, dist4: _d, ...rest }) => ({
+      ...rest,
+      isTop: rest.groupCount === topG,
+    }));
 }
 
 /** @param {any} a @param {any} b */

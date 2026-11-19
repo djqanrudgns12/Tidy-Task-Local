@@ -466,8 +466,9 @@ export function resolveLabelOverlaps(
           if (!avoidPt.preferY && aox < aoy) {
             placed[i].x += (aox + 1) * (adx >= 0 ? 1 : -1);
           } else if (avoidPt.preferY) {
-            const dir = avoidPt.preferDir ?? (ady >= 0 ? 1 : -1);
-            placed[i].y = avoidPt.y + dir * (avoidPt.ry + 1);
+            // 페데스탈 위/아래 여유 공간으로 자연 분배 (중심 ±20px 이내만 preferDir 사용)
+            const dir = Math.abs(ady) <= 20 && avoidPt.preferDir != null ? avoidPt.preferDir : (ady >= 0 ? 1 : -1);
+            placed[i].y = avoidPt.y + dir * (avoidPt.ry + 2);
           } else {
             placed[i].y += (aoy + 1) * (ady >= 0 ? 1 : -1);
           }
@@ -491,8 +492,11 @@ export function resolveLabelOverlaps(
 }
 
 /** 정확히 G개의 정원 비례 공유-곡선 맞물림 얼음섬 + 안전 다각형 + 공유변 이웃 그래프 생성.
- * @param {number[]} capacities @param {number} [width] @param {number} [height] @param {number} [seed] */
-export function partitionGlacierBSP(capacities, width = GLACIER_W, height = GLACIER_H, seed = 101) {
+ * @param {number[]} capacities @param {number} [width] @param {number} [height] @param {number} [seed] @param {number[]} [weights] */
+export function partitionGlacierBSP(capacities, width = GLACIER_W, height = GLACIER_H, seed = 101, weights = capacities) {
+  const safeWeights = Array.isArray(weights) && weights.length === capacities.length
+    ? weights.map((w) => Math.max(0.1, Number(w) || 1))
+    : capacities;
   const padX = Math.round(width * 0.068);
   const padTop = Math.max(92, Math.round(height * 0.102));
   const padBottom = Math.round(height * 0.124);
@@ -526,9 +530,9 @@ export function partitionGlacierBSP(capacities, width = GLACIER_W, height = GLAC
     const half = Math.ceil(groupIndices.length / 2);
     const leftIds = groupIndices.slice(0, half);
     const rightIds = groupIndices.slice(half);
-    const sumL = leftIds.reduce((s, gi) => s + capacities[gi], 0);
-    const sumR = rightIds.reduce((s, gi) => s + capacities[gi], 0);
-    const ratioA = sumL / Math.max(1, sumL + sumR);
+    const sumL = leftIds.reduce((s, gi) => s + safeWeights[gi], 0);
+    const sumR = rightIds.reduce((s, gi) => s + safeWeights[gi], 0);
+    const ratioA = sumL / Math.max(1e-4, sumL + sumR);
     const { polyA, polyB, cutLine } = splitPolygonBalanced(poly, ratioA, depth * 7 + leftIds[0] + (seed % 11));
     if (cutLine.length === 2) rawCracks.push(/** @type {any} */ (cutLine));
     recurse(leftIds, polyA, depth + 1);
@@ -571,7 +575,7 @@ export function partitionGlacierBSP(capacities, width = GLACIER_W, height = GLAC
 
   // 변위장 D(P) + ±3% 면적 오차 가드(최대 3회 0.8x 진폭 감쇠)
   const fieldFn = createDisplacementField(seed);
-  const totalCap = Math.max(1, capacities.reduce((a, b) => a + b, 0));
+  const totalCap = Math.max(1e-4, safeWeights.reduce((a, b) => a + b, 0));
   let ampScale = 1.0;
   /** @type {{x:number,y:number}[][]} */
   let curvedPolys = alignedPolys;
@@ -592,7 +596,7 @@ export function partitionGlacierBSP(capacities, width = GLACIER_W, height = GLAC
     });
     const totalCurvedArea = curvedPolys.reduce((s, p) => s + polygonArea(p), 0);
     const maxErr = curvedPolys.reduce((mx, p, idx) => {
-      const err = Math.abs(polygonArea(p) / Math.max(1, totalCurvedArea) - capacities[idx] / totalCap);
+      const err = Math.abs(polygonArea(p) / Math.max(1, totalCurvedArea) - safeWeights[idx] / totalCap);
       return Math.max(mx, err);
     }, 0);
     if (maxErr <= 0.03) break;
@@ -646,11 +650,11 @@ export function partitionGlacierBSP(capacities, width = GLACIER_W, height = GLAC
     const driftX = Number(((dx / dist) * driftMag).toFixed(2));
     const driftY = Number(((dy / dist) * driftMag * 0.82).toFixed(2));
 
-    // 모둠 깃발 뱃지는 각 섬 상단 안전 다각형 안쪽에 배치 (위쪽 섬 하단 이름표와 충분한 이격 유지)
-    const topPad = minY <= 135
-      ? Math.min(54, Math.max(40, (maxY - minY) * 0.13))
-      : Math.min(78, Math.max(72, (maxY - minY) * 0.21));
-    const badgeRaw = { x: c.x, y: Math.min(c.y - 42, minY + topPad) };
+    // 상단행 섬은 윗 절벽에 깃발을 살짝 걸쳐 +70px 회수, 하단행 섬은 위쪽 섬 이름표와 충돌 0% 유지
+    const topPad = minY <= 145
+      ? Math.min(46, Math.max(34, (maxY - minY) * 0.11))
+      : Math.min(62, Math.max(52, (maxY - minY) * 0.16));
+    const badgeRaw = { x: c.x, y: Math.min(c.y - 38, minY + topPad) };
     const badge = clampPointInsidePoly(badgeRaw, safePoly, safeCentroid);
 
     return {
@@ -702,7 +706,7 @@ export function nearestPointOnPolyEdge(poly, target) {
   return bestPt;
 }
 
-/** Stage 2: 빙하 갈라지기 전체 연출 계획 생성 (~20.62s 고정 예산).
+/** Stage 2: 북극 분열 전체 연출 계획 생성 (~20.62s 고정 예산 · 2-Pass P50 균일 학생 크기).
  * @param {object} params
  * @param {{index:number, name:string, color:string, symbol:string, studentIds:string[]}[]} params.groups
  * @param {string[]} params.allStudentIds
@@ -711,28 +715,12 @@ export function nearestPointOnPolyEdge(poly, target) {
 export function createGlacierPlan({ groups, allStudentIds, reduced = false, word }) {
   const capacities = groups.map((g) => g.studentIds.length);
   const runSeed = Math.floor((word ? word() : 0.42) * 10000);
-  const {
-    floes,
-    cracks,
-    sharedNeighbors,
-    sheetCenter,
-    rootPoly,
-    rootPathD,
-    rootCliffEdges,
-  } = partitionGlacierBSP(capacities, GLACIER_W, GLACIER_H, runSeed);
-
   const totalN = allStudentIds.length;
-  const baseHeight = totalN <= 16 ? 130 : totalN <= 30 ? 106 : 86;
+  const baseHeight = totalN <= 16 ? 148 : totalN <= 30 ? 124 : 100;
 
-  // 섬별 밀도 ρ ≤ 0.60 적응형 학생 크기 + 라벨 모드 계산 + 4-모서리 safePoly 클램핑
-  /** @type {Record<string, {x:number, y:number, groupIndex:number, heightPx:number, showLabel:boolean, labelAlign:'below'|'above'}>} */
-  const targetSlots = {};
-  /** @type {Record<number, {studentHeight:number, rho:number, labelMode:string}>} */
-  const floeMetrics = {};
-
-  groups.forEach((grp, gPos) => {
-    const floe = floes[gPos];
-    const count = grp.studentIds.length;
+  /** 각 섬 안전 다각형 내부에서 가장 큰 학생 신장을 허용하는 최적 cols 탐색.
+   * @param {any} floe @param {number} count */
+  function evaluateFloeFit(floe, count) {
     let minFx = Infinity;
     let maxFx = -Infinity;
     for (const p of floe.safePoly) {
@@ -741,19 +729,6 @@ export function createGlacierPlan({ groups, allStudentIds, reduced = false, word
     }
     const safeW = Math.max(90, maxFx - minFx);
     const safeH = Math.max(90, floe.maxY - floe.minY - GLACIER_SAFE_INSET * 2);
-    const cols = count <= 2 ? count : count <= 9 && safeW >= safeH * 0.85 ? 3 : count <= 6 ? 2 : count <= 12 ? 3 : 4;
-    const rows = Math.ceil(count / Math.max(1, cols));
-
-    const baseW = baseHeight * 0.62;
-    const baseFootprint = (baseW + 24) * (baseHeight + 28);
-    let hPx = baseHeight;
-    let rho = (count * baseFootprint) / Math.max(1, floe.safeArea);
-
-    // ① 밀도 ρ ≤ 0.60 균일 축소 (최소 64px)
-    if (rho > 0.6) {
-      const targetScale = Math.sqrt((0.6 * floe.safeArea) / Math.max(1, count * baseFootprint));
-      hPx = Math.max(64, Math.round(baseHeight * targetScale));
-    }
     const c = floe.safeCentroid;
     let colMaxY = floe.maxY - GLACIER_SAFE_INSET;
     for (let ei = 0; ei < floe.safePoly.length; ei++) {
@@ -766,34 +741,125 @@ export function createGlacierPlan({ groups, allStudentIds, reduced = false, word
         if (iy > c.y) colMaxY = Math.min(colMaxY, iy);
       }
     }
-
     const hasLowerNeighbor = floe.maxY < GLACIER_H - 150;
     const downH = safeH >= 240 ? (hasLowerNeighbor ? 34 : 26) : 18;
-    // 세로 깃발 뱃지(badge.y + 34) 아래 여백 내 다중 행 수용 크기 보정 (1행 이름표 ↔ 2행 머리카락 겹침 0%)
-    const availSpan = Math.max(76, colMaxY - downH - (floe.badge.y + 34));
-    const maxRowHeight = Math.floor((availSpan - (rows - 1) * 54) / Math.max(0.96, rows * 0.96));
-    if (maxRowHeight < hPx) {
-      hPx = Math.max(64, maxRowHeight);
+    const badgeClearY = floe.badge.y + 28;
+    const availSpan = Math.max(76, colMaxY - downH - badgeClearY);
+
+    let bestFit = 64;
+    let bestCols = Math.max(1, Math.min(count, 3));
+    const maxCols = Math.max(1, count);
+
+    for (let cols = 1; cols <= maxCols; cols++) {
+      const rows = Math.ceil(count / cols);
+      // 1) 밀도 ρ <= 0.62 한계 신장
+      const kRho = Math.sqrt((0.62 * floe.safeArea) / Math.max(1, count * (0.62 * 1.15 + 24 / baseHeight) * baseHeight));
+      let cand = Math.min(baseHeight, Math.round(Math.sqrt((0.62 * floe.safeArea) / Math.max(1, count * 0.92))));
+      // 정확한 footprint 기반 rho 상한 보정
+      const fpAtBase = (baseHeight * 0.62 + 22) * (baseHeight + 26);
+      const rhoBase = (count * fpAtBase) / Math.max(1, floe.safeArea);
+      cand = rhoBase > 0.62
+        ? Math.min(baseHeight, Math.round(baseHeight * Math.sqrt(0.62 / rhoBase)))
+        : baseHeight;
+      void kRho;
+
+      // 2) 행 높이 제한 (이름표 + 2행 머리 비겹침)
+      const rowLimit = Math.floor((availSpan - (rows - 1) * 52) / Math.max(0.96, rows * 0.96));
+      cand = Math.min(cand, rowLimit);
+
+      // 3) 열 폭 제한: cols * max(labelEst, fw * 1.62) <= 0.90 * safeW
+      const estLabelW = totalN >= 20 ? 94 : 104;
+      if (cols > 1) {
+        const perColMax = (0.90 * safeW) / cols;
+        if (perColMax < estLabelW) continue;
+        const maxHByWidth = Math.floor(perColMax / (0.62 * 1.62));
+        cand = Math.min(cand, Math.max(64, maxHByWidth));
+      }
+
+      if (cand > bestFit || (cand === bestFit && rows < Math.ceil(count / bestCols))) {
+        bestFit = cand;
+        bestCols = cols;
+      }
     }
 
+    return {
+      cols: bestCols,
+      rows: Math.ceil(count / Math.max(1, bestCols)),
+      fitPx: Math.max(64, Math.min(baseHeight, bestFit)),
+      safeW,
+      safeH,
+      colMaxY,
+      downH,
+      availSpan,
+      badgeClearY,
+    };
+  }
+
+  // Pass 1: 고정 비용(+1.2) 반영 BSP 분할 및 섬별 최대 수용 신장 측정
+  const weights1 = capacities.map((c) => c + 1.2);
+  let bsp = partitionGlacierBSP(capacities, GLACIER_W, GLACIER_H, runSeed, weights1);
+  let fits = groups.map((grp, idx) => evaluateFloeFit(bsp.floes[idx], grp.studentIds.length));
+
+  // Pass 2: 중앙값 P50 대비 90% 미만 협소 섬만 부드러운 면적 가중치 보상 (실제 minFit 개선 시에만 채택)
+  const sortedFits = fits.map((f) => f.fitPx).sort((a, b) => a - b);
+  const p50 = sortedFits[Math.floor(sortedFits.length / 2)] ?? baseHeight;
+  const minFitPass1 = Math.min(...fits.map((f) => f.fitPx));
+  if (fits.some((f) => f.fitPx < 0.90 * p50)) {
+    const weights2 = fits.map((f, i) => {
+      if (f.fitPx >= 0.90 * p50) return weights1[i];
+      const boost = clamp((p50 / Math.max(36, f.fitPx)) ** 1.35, 1, 1.65);
+      return Number((weights1[i] * boost).toFixed(3));
+    });
+    const bsp2 = partitionGlacierBSP(capacities, GLACIER_W, GLACIER_H, runSeed, weights2);
+    const fits2 = groups.map((grp, idx) => evaluateFloeFit(bsp2.floes[idx], grp.studentIds.length));
+    const minFitPass2 = Math.min(...fits2.map((f) => f.fitPx));
+    if (minFitPass2 >= minFitPass1) {
+      bsp = bsp2;
+      fits = fits2;
+    }
+  }
+
+  const {
+    floes,
+    cracks,
+    sharedNeighbors,
+    sheetCenter,
+    rootPoly,
+    rootPathD,
+    rootCliffEdges,
+  } = bsp;
+
+  // 전역 통일 신장: 가장 좁은 정상 섬을 기준으로 ±8% 미세 오차 내에서 모둠 간 키 균일화!
+  const minFit = Math.min(...fits.map((f) => f.fitPx));
+  const globalFloorH = clamp(minFit, 70, baseHeight);
+
+  /** @type {Record<string, {x:number, y:number, groupIndex:number, heightPx:number, showLabel:boolean, labelAlign:'below'|'above'}>} */
+  const targetSlots = {};
+  /** @type {Record<number, {studentHeight:number, rho:number, labelMode:string}>} */
+  const floeMetrics = {};
+
+  groups.forEach((grp, gPos) => {
+    const floe = floes[gPos];
+    const count = grp.studentIds.length;
+    const fit = fits[gPos];
+    const { cols, rows, safeW, colMaxY, downH, availSpan, badgeClearY } = fit;
+
+    const hPx = Math.round(
+      clamp(fit.fitPx, Math.max(64, globalFloorH * 0.94), Math.min(fit.fitPx, globalFloorH * 1.08)),
+    );
     const fw = hPx * 0.62;
     const halfW = fw * 0.48;
     const upH = hPx * 0.92;
-    rho = (count * ((fw + 16) * (hPx + 22))) / Math.max(1, floe.safeArea);
+    const rho = (count * ((fw + 16) * (hPx + 22))) / Math.max(1, floe.safeArea);
 
-    const stepX = Math.max(96, Math.min(156, Math.round(fw * 1.68)));
-    const neededStepY = Math.round(hPx * 0.96 + 54);
-    const stepY = Math.max(92, Math.min(156, neededStepY));
+    const stepX = Math.max(92, Math.min(164, Math.max(Math.round(fw * 1.68), Math.floor((safeW * 0.86) / Math.max(1, cols)))));
+    const neededStepY = Math.round(hPx * 0.96 + 52);
+    const stepY = Math.max(90, Math.min(162, neededStepY));
     const minH = rows > 1
-      ? Math.min(neededStepY, Math.max(88, Math.floor((availSpan - hPx * 0.96) / (rows - 1))))
+      ? Math.min(neededStepY, Math.max(86, Math.floor((availSpan - hPx * 0.96) / (rows - 1))))
       : neededStepY;
 
-    // ②~④ 라벨 밀집 완화 모드
-    const labelMode = rho <= 0.6 && count <= 8
-      ? (stepX < 138 && count >= 3 ? 'staggered' : 'all')
-      : count <= 14
-        ? 'staggered'
-        : 'summary-2';
+    const labelMode = rho <= 0.62 && count <= 14 ? 'all' : 'summary-2';
 
     floeMetrics[grp.index] = {
       studentHeight: hPx,
@@ -801,7 +867,8 @@ export function createGlacierPlan({ groups, allStudentIds, reduced = false, word
       labelMode,
     };
 
-    const minFootBelowBadge = floe.badge.y + 34 + upH;
+    const c = floe.safeCentroid;
+    const minFootBelowBadge = badgeClearY + upH;
     const clampFallbackCenter = {
       x: c.x,
       y: Math.max(c.y, Math.min(colMaxY - downH, minFootBelowBadge + 18)),
@@ -816,8 +883,16 @@ export function createGlacierPlan({ groups, allStudentIds, reduced = false, word
       const row = Math.floor(idx / cols);
       const ix = c.x + (col - (cols - 1) / 2) * stepX;
       let iy = Math.max(minFootBelowBadge, bodyMidY + (row - (rows - 1) / 2) * stepY);
-      if (avoidPedestal && Math.abs(ix - sheetCenter.x) < 168 && Math.abs(iy - pedY) < 92) {
-        iy = preferDir > 0 ? pedY + 94 : Math.max(minFootBelowBadge, pedY - 94);
+      if (avoidPedestal && Math.abs(ix - sheetCenter.x) < 174 && Math.abs(iy - pedY) < 98) {
+        const upCand = pedY - 100;
+        const dnCand = pedY + 100;
+        iy = upCand >= minFootBelowBadge + 8 && iy <= pedY + 12
+          ? upCand
+          : dnCand <= colMaxY - downH
+            ? dnCand
+            : preferDir > 0
+              ? dnCand
+              : Math.max(minFootBelowBadge, upCand);
       }
       return {
         id: sid,
@@ -828,7 +903,7 @@ export function createGlacierPlan({ groups, allStudentIds, reduced = false, word
 
     const safePlaced = resolveLabelOverlaps(
       rawItems,
-      Math.max(136, fw * 1.72),
+      Math.max(132, fw * 1.72),
       minH,
       floe.safePoly,
       clampFallbackCenter,
@@ -836,15 +911,12 @@ export function createGlacierPlan({ groups, allStudentIds, reduced = false, word
       upH,
       downH,
       minFootBelowBadge,
-      avoidPedestal ? { x: sheetCenter.x, y: pedY, rx: 168, ry: 92, preferY: true, preferDir } : null,
+      avoidPedestal ? { x: sheetCenter.x, y: pedY, rx: 174, ry: 98, preferY: true, preferDir } : null,
     );
 
     safePlaced.forEach((item, idx) => {
       const isLast2 = idx >= safePlaced.length - 2;
-      const showLabel =
-        labelMode === 'all' ||
-        labelMode === 'staggered' ||
-        isLast2;
+      const showLabel = labelMode === 'all' || isLast2;
       targetSlots[item.id] = {
         x: item.x,
         y: item.y,
@@ -1080,7 +1152,7 @@ export function glacierPoseAt(plan, elapsedMs) {
         };
       }),
       committedIds,
-      activeSpeech: '모둠별로 빙하 섬이 나뉘었어요!',
+      activeSpeech: '북극 분열 완료',
       progressRatio: clamp(t / plan.totalDurationMs),
     };
   }
@@ -1239,13 +1311,13 @@ export function glacierPoseAt(plan, elapsedMs) {
     };
   });
 
-  let activeSpeech = '거대한 북극 눈꽃 빙하 위에 모였어요!';
-  if (t >= 5200 && t < 9200) activeSpeech = '어어? 발밑에 반짝이는 얼음 금이 가고 있어요!';
-  else if (t >= 9200 && t < 12000) activeSpeech = '어느 모둠 얼음섬으로 갈까요?';
-  else if (t >= 12000 && t < 12600) activeSpeech = '중앙 얼음 다리가 반짝이며 놓였어요!';
-  else if (t >= 12600 && t < 17800) activeSpeech = '얼음섬들이 스르륵 갈라져 떠내려가요!';
-  else if (t >= 17800 && t < 19650) activeSpeech = '마지막 얼음 다리에서… 폴짝!!';
-  else if (t >= 19650) activeSpeech = `${plan.groups[climaxSlot?.groupIndex ?? 0]?.name ?? '모둠'} 착지 성공!`;
+  let activeSpeech = '북극 분열 시작 · 모둠별로 배정 중';
+  if (t >= 5200 && t < 9200) activeSpeech = '얼음 금이 갈라지고 있어요';
+  else if (t >= 9200 && t < 12000) activeSpeech = '모둠 얼음섬으로 이동 중';
+  else if (t >= 12000 && t < 12600) activeSpeech = '중앙 얼음 다리 연결';
+  else if (t >= 12600 && t < 17800) activeSpeech = '모둠 얼음섬 분리';
+  else if (t >= 17800 && t < 19650) activeSpeech = '마지막 친구 합류';
+  else if (t >= 19650) activeSpeech = `${plan.groups[climaxSlot?.groupIndex ?? 0]?.name ?? '모둠'} 착지 완료`;
 
   const flagScale =
     t < 5200 ? 0 :

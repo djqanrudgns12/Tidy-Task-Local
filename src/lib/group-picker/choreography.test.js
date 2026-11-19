@@ -1,6 +1,14 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { squashStretch, groundShadow, fluidEase, missedTicketEvents, REDUCED_DURATION_MS } from './choreography/suspense.js';
+import {
+  ACTIVE_STAGE_MAX_MS,
+  SETTLING_MS,
+  squashStretch,
+  groundShadow,
+  fluidEase,
+  missedTicketEvents,
+  REDUCED_DURATION_MS,
+} from './choreography/suspense.js';
 import { computeStageViewport } from './choreography/viewport.js';
 import { createTrainPlan, trainPoseAt } from './choreography/train.js';
 import {
@@ -52,13 +60,36 @@ test('squashStretch preserves volume (~1.0) and groundShadow shrinks monotonical
   assert.equal(fluidEase(1), 1);
 });
 
-test('[Stage 1 열차] 28명/6모둠 예산 · 전원 1회 확정 · reduced 모드 · 불변식2(미탑승 라이벌 & 2인 포토피니시)', () => {
+test('[Stage 1 열차] 28명/6모둠·50명/12모둠 60초 예산 · ??? 공개 홀드 · reduced 모드 · 불변식2', () => {
   const groups = sampleGroups28();
   const allStudentIds = groups.flatMap((g) => g.studentIds);
   const plan = createTrainPlan({ groups, allStudentIds });
-  assert.ok(plan.totalDurationMs >= 19000 && plan.totalDurationMs <= 27000, `duration=${plan.totalDurationMs}`);
+  assert.ok(plan.totalDurationMs >= 19000 && plan.totalDurationMs <= 48000, `duration=${plan.totalDurationMs}`);
   assert.equal(plan.ticketEvents.length, 28);
   assert.equal(new Set(plan.ticketEvents.map((e) => e.studentId)).size, 28);
+
+  // 50명/12모둠 + settling(1400ms) <= 60000ms 엄수 확인
+  const groups50 = sampleGroups50_12();
+  const plan50 = createTrainPlan({ groups: groups50, allStudentIds: groups50.flatMap((g) => g.studentIds) });
+  assert.ok(plan50.totalDurationMs <= ACTIVE_STAGE_MAX_MS, `T1 50/12=${plan50.totalDurationMs} > ${ACTIVE_STAGE_MAX_MS}`);
+  assert.ok(plan50.totalDurationMs + SETTLING_MS <= 60000);
+
+  // revealMs < startMs 분리 & ??? -> 공개 상태 전이 + 라이벌 ??? 비노출 확인
+  for (const car of plan.cars) {
+    for (const b of car.boardings) {
+      assert.ok(b.revealMs < b.startMs, `T1 ${b.studentId} revealMs>=startMs`);
+      const beforeRev = trainPoseAt(plan, Math.max(0, b.revealMs - 2));
+      const wBefore = beforeRev.waitingPositions.find((w) => w.studentId === b.studentId);
+      assert.equal(wBefore?.revealed, false, `T1 ${b.studentId} revealed too early`);
+      const afterRev = trainPoseAt(plan, b.revealMs + 2);
+      const wAfter = afterRev.waitingPositions.find((w) => w.studentId === b.studentId);
+      assert.equal(wAfter?.revealed, true, `T1 ${b.studentId} not revealed at revealMs`);
+      if (b.rivalId) {
+        const rivalRevMs = plan.revealMsByStudent[b.rivalId];
+        assert.ok(b.endMs < rivalRevMs, `라이벌 ${b.rivalId}가 주행 도중 미리 공개됨`);
+      }
+    }
+  }
 
   // 우→좌 진행 방향 확인: 진입 carX > 정차 800 > 출발 carX
   const car0 = plan.cars[0];
@@ -157,7 +188,7 @@ test('[Stage 2 빙하] 불변식3(공유변 비트일치 + ±3% 면적 + Act1 �
   assert.ok(glacierPoseAt(plan28, 19650).bridgeAlpha < 0.01);
   assert.equal(glacierPoseAt(plan28, plan28.totalDurationMs).committedIds.size, 28);
 
-  // 불변식4: 극한 밀집 50명/12모둠 포함 4개 모서리 모두 safePoly 내부 및 최소 키 64px 보장
+  // 불변식4: 극한 밀집 50명/12모둠 포함 4개 모서리 모두 safePoly 내부 및 최소 키 64px 보장 + 2-Pass P50 균일성
   const groups50 = sampleGroups50_12();
   const plan50 = createGlacierPlan({ groups: groups50, allStudentIds: groups50.flatMap((g) => g.studentIds) });
   for (const [sid, slot] of Object.entries(plan50.targetSlots)) {
@@ -177,9 +208,20 @@ test('[Stage 2 빙하] 불변식3(공유변 비트일치 + ±3% 면적 + Act1 �
       assert.ok(pointInPoly(c, grp.floe.safePoly), `50명/12모둠 ${sid} 모서리 이탈: (${c.x.toFixed(1)}, ${c.y.toFixed(1)})`);
     }
   }
+
+  // 13명/12모둠 & 30명/12모둠 균일성: 섬 간 학생 신장 편차가 과도하게 벌어지지 않는지(max/min <= 1.25) 검증
+  for (const sizes of [[2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1], [3, 3, 3, 3, 3, 3, 2, 2, 2, 2, 2, 2]]) {
+    const gs = makeGroups(sizes);
+    const pl = createGlacierPlan({ groups: gs, allStudentIds: gs.flatMap((g) => g.studentIds) });
+    const hs = Object.values(pl.targetSlots).map((s) => s.heightPx);
+    const minH = Math.min(...hs);
+    const maxH = Math.max(...hs);
+    assert.ok(minH >= 64, `sizes=[${sizes}] minH=${minH} < 64`);
+    assert.ok(maxH / Math.max(1, minH) <= 1.22, `sizes=[${sizes}] height spread ${minH}..${maxH} too wide`);
+  }
 });
 
-test('[Stage 3 엘리베이터] 다이얼 각도표 + 불변식6(러그 중앙통로 개방 · 하차끝점=러그슬롯 · peekHeadX 연속성)', () => {
+test('[Stage 3 엘리베이터] 다이얼 각도표 + 50/12 60초 예산 · 문턱 홀드 + 불변식6', () => {
   // 다이얼 각도 범위 검증 (4F -67.5° -> 1F +67.5°)
   assert.equal(computeDialPose(0).angleDeg, -67.5);
   assert.equal(computeDialPose(0).floor, '4F');
@@ -196,8 +238,19 @@ test('[Stage 3 엘리베이터] 다이얼 각도표 + 불변식6(러그 중앙�
 
   const groups = sampleGroups28();
   const plan = createElevatorPlan({ groups, allStudentIds: groups.flatMap((g) => g.studentIds) });
-  assert.ok(plan.totalDurationMs >= 21000 && plan.totalDurationMs <= 29000, `duration=${plan.totalDurationMs}`);
+  assert.ok(plan.totalDurationMs >= 21000 && plan.totalDurationMs <= 48000, `duration=${plan.totalDurationMs}`);
   assert.equal(plan.ticketEvents.length, 28);
+
+  // 50명/12모둠 + settling(1400ms) <= 60000ms 엄수 확인
+  const groups50 = sampleGroups50_12();
+  const plan50 = createElevatorPlan({ groups: groups50, allStudentIds: groups50.flatMap((g) => g.studentIds) });
+  assert.ok(plan50.totalDurationMs <= ACTIVE_STAGE_MAX_MS, `E1 50/12=${plan50.totalDurationMs} > ${ACTIVE_STAGE_MAX_MS}`);
+
+  // 첫 번째 학생 문턱 스포트라이트 홀드 확인
+  const firstEx = plan.cars[0].exits[0];
+  const holdPose = elevatorPoseAt(plan, firstEx.revealAt + Math.floor(firstEx.holdMs / 2));
+  assert.equal(holdPose.exiting?.isHolding, true);
+  assert.equal(holdPose.exiting?.y, 776);
 
   const lastCar = plan.cars[plan.cars.length - 1];
   const lastExit = lastCar.exits[lastCar.exits.length - 1];

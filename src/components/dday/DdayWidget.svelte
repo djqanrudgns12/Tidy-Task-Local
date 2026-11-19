@@ -1,40 +1,40 @@
 <script lang="ts">
-  import { onMount, tick } from 'svelte';
+  import { onMount } from 'svelte';
   import {
-    ArrowUpRight,
-    Check,
     ChevronLeft,
     ChevronRight,
     Ellipsis,
     Flag,
-    LocateFixed,
     Pin,
     PinOff,
     Plus,
-    Power,
     Repeat,
-    Rocket,
     X,
   } from 'lucide-svelte';
   import { getCurrentWindow } from '@tauri-apps/api/window';
-  import { listen } from '@tauri-apps/api/event';
-  import { PhysicalPosition } from '@tauri-apps/api/dpi';
+  import { emit, listen } from '@tauri-apps/api/event';
+  import { DDAY_WIDGET_STATE_EVENT } from '../../lib/dday/ddayWidgetWindow.js';
+  import { LogicalSize, PhysicalPosition } from '@tauri-apps/api/dpi';
   import { native } from '../../lib/toolkit/store.js';
   import { closeWindow } from '../../lib/toolkit/windows.js';
-  import { watchAppearance } from '../../lib/toolkit/appearance.js';
+  import { watchCustomFonts } from '../../lib/toolkit/appearance.js';
+  import { registerFontFace } from '../../lib/fonts.js';
   import { ensureWindowOnScreen, getMonitorGeometries } from '../../lib/windows/windowRegistry.js';
-  import { dragRegion } from '../../lib/dragRegion.js';
+  import { toolkitDrag } from '../../lib/toolkit/drag.js';
   import { readLaunchAtStartup, setLaunchAtStartup } from '../../lib/autostart.js';
   import { track } from '../../lib/analytics.js';
+  import { resolveMenuWidth } from '../../lib/windows/contextMenuLayout.js';
+  import { normalizeThemeId } from '../../lib/themes.js';
   import {
+    DDAY_APPEARANCE_MODES,
     DDAY_WIDGET_BOUNDS,
     computeProgressPercent,
     formatDotDate,
     normalizeDdayWidgetPrefs,
-    resolveToneColor,
     savedDdayGeometry,
     stripHtmlToTitle,
     todayDateKey,
+    type DdayAppearanceMode,
     type DdaySkin,
     type DdayWidgetPrefs,
   } from '../../lib/dday/ddayModel.js';
@@ -53,33 +53,52 @@
     subscribeDdayStore,
     type DdayWindowSnapshot,
   } from '../../lib/dday/ddaySync.js';
+  import {
+    resolveWidgetThemeSource,
+    resolveWidgetThemeTokens,
+    widgetThemeToStyle,
+  } from '../../lib/dday/ddayWidgetTheme.js';
+  import { ddayWidgetMenu } from '../../lib/dday/ddayWidgetMenuClient.svelte.js';
+  import {
+    normalizeMenuState,
+    returnsFocusToWidget,
+  } from '../../lib/dday/ddayWidgetMenuProtocol.js';
   import DdayIcon from './DdayIcon.svelte';
   import DdayResizeHandles from './DdayResizeHandles.svelte';
+  import DdayWidgetSettingsPanel from './DdayWidgetSettingsPanel.svelte';
   import './dday-widget.css';
 
   let windows = $state<DdayWindowSnapshot[]>([]);
   let prefs = $state.raw(normalizeDdayWidgetPrefs(undefined));
-  let systemDark = $state(false);
   let ready = $state(false);
   let closing = $state(false);
   let today = $state(todayDateKey());
   let currentIndex = $state(0);
 
+  // 개발 미리보기 전용 URL 파라미터 오버라이드
   let previewSkinOverride = $state<DdaySkin | null>(null);
   let previewSchemeOverride = $state<'light' | 'dark' | null>(null);
+  let previewThemeOverride = $state<string | null>(null);
+  let previewW = $state(DDAY_WIDGET_BOUNDS.defaultWidth);
+  let previewH = $state(DDAY_WIDGET_BOUNDS.defaultHeight);
+  let previewEmpty = $state(false);
+  let previewMenuOpen = $state(false);
+  let previewPanelRef = $state<DdayWidgetSettingsPanel | null>(null);
 
-  let menu = $state<{ x: number; y: number } | null>(null);
-  let menuOpenedAt = 0;
-  let menuEl = $state<HTMLDivElement>();
   let boardEl = $state<HTMLElement>();
-  let boardW = $state(224);
-  let boardH = $state(244);
+  let menuBtnEl = $state<HTMLButtonElement | null>(null);
+  let boardW = $state(DDAY_WIDGET_BOUNDS.defaultWidth);
+  let boardH = $state(DDAY_WIDGET_BOUNDS.defaultHeight);
   let committedTier = $state<'micro' | 'standard' | 'expanded' | null>(null);
 
   let pinBusy = $state(false);
+  let isDragging = $state(false);
   let isSnapping = false;
+  let dragCommitSeq = 0;
   let startupEnabled = $state(true);
   let startupBusy = $state(false);
+  let programmaticMoveUntil = 0;
+  let customFonts: { name: string; path: string }[] = [];
 
   const widgetSection = createDdayWidgetSection({
     onChange: (next: DdayWidgetPrefs) => {
@@ -87,17 +106,10 @@
     },
   });
 
-  const draggable = (node: HTMLElement) => (native ? dragRegion(node) : { destroy() {} });
-
   const effectiveSkin = $derived<DdaySkin>(previewSkinOverride ?? prefs.skin);
-  const effectiveDark = $derived.by(() => {
-    if (previewSchemeOverride) return previewSchemeOverride === 'dark';
-    if (prefs.appearanceMode === 'dark') return true;
-    if (prefs.appearanceMode === 'light') return false;
-    return systemDark || Boolean(windows[0]?.isDarkMode);
-  });
-
-  const inScopeEntries = $derived(flattenWidgetItems(windows, prefs.displayScope, today));
+  const inScopeEntries = $derived(
+    previewEmpty ? [] : flattenWidgetItems(windows, prefs.displayScope, today),
+  );
   const visibleEntries = $derived(
     inScopeEntries.filter((entry) => !prefs.hiddenIds.includes(entry.key)),
   );
@@ -113,9 +125,23 @@
       ? visibleEntries[(currentIndex + 1) % visibleEntries.length]
       : null,
   );
-  const currentTone = $derived(
-    currentEntry ? resolveToneColor(currentEntry.item.tone, '#d97706') : '#d97706',
+
+  const themeSource = $derived(
+    resolveWidgetThemeSource(windows, prefs.displayScope, currentEntry),
   );
+  const themeTokens = $derived(
+    resolveWidgetThemeTokens({
+      themeColor: previewThemeOverride ?? themeSource.themeColor,
+      isDarkMode: themeSource.isDarkMode,
+      appearanceMode: prefs.appearanceMode,
+      itemTone: currentEntry?.item.tone ?? 'accent',
+      previewDarkOverride: previewSchemeOverride ? previewSchemeOverride === 'dark' : null,
+    }),
+  );
+  const themeStyle = $derived(widgetThemeToStyle(themeTokens));
+  const effectiveDark = $derived(themeTokens.effectiveDark);
+  const uiFontCss = $derived(`"${themeSource.uiFontFamily.replace(/[";{}<>\\]/g, '')}", "Malgun Gothic", sans-serif`);
+
   const currentProgress = $derived(
     currentEntry ? computeProgressPercent(currentEntry.item, today) : 0,
   );
@@ -128,16 +154,84 @@
     }),
   );
 
-  function blockDrag(node: HTMLElement) {
-    const stop = (e: Event) => e.stopPropagation();
-    node.addEventListener('pointerdown', stop);
-    node.addEventListener('mousedown', stop);
-    return {
-      destroy() {
-        node.removeEventListener('pointerdown', stop);
-        node.removeEventListener('mousedown', stop);
-      },
-    };
+  const menuOpen = $derived(native ? ddayWidgetMenu.isOpen : previewMenuOpen);
+
+  const menuStatePayload = $derived.by(() => ({
+    prefs,
+    effectiveSkin,
+    effectiveDark,
+    startupEnabled,
+    startupBusy,
+    pinBusy,
+    themeStyle,
+    accentHex: themeTokens.accent,
+    fontFamily: uiFontCss,
+    uiFontSize: themeSource.uiFontSize,
+    menuWidth: resolveMenuWidth('dw-menu', themeSource.uiFontSize),
+    windows: windows.map((w) => ({
+      label: w.label,
+      title: stripHtmlToTitle(w.title, 20) || (w.label === 'main' ? '기본 할 일' : w.label),
+    })),
+    entries: inScopeEntries.map((entry) => ({
+      key: entry.key,
+      title: entry.item.title,
+      tone: entry.item.tone,
+      checked: !prefs.hiddenIds.includes(entry.key),
+      counterLabel: entry.counter.label,
+      windowTitle: entry.windowTitle,
+    })),
+  }));
+
+  const normalizedPreviewMenuState = $derived(
+    !native ? normalizeMenuState(menuStatePayload) : null,
+  );
+
+  $effect(() => {
+    if (native && ddayWidgetMenu.isOpen) {
+      ddayWidgetMenu.sync(menuStatePayload);
+    }
+  });
+
+  // 메모 창이 사용자 등록 글꼴을 쓰는 경우 위젯 창 웹뷰에도 즉시 불러옵니다.
+  $effect(() => {
+    if (!native) return;
+    const match = customFonts.find((cf) => cf.name === themeSource.uiFontFamily);
+    if (match) void registerFontFace(match.name, match.path);
+  });
+
+  function resolveDragThreshold(target: Element | null, pointerType: string): number {
+    const touch = pointerType === 'touch';
+    if (target?.closest('.dw-mac-btn')) return touch ? 14 : 10;
+    if (target?.closest('.dw-nav-btn, .dw-empty-btn')) return touch ? 12 : 8;
+    if (target?.closest('.w4-hero-btn, .w1-flap-btn, .w4-title-btn, .w1-title-btn')) {
+      return touch ? 10 : 5;
+    }
+    return touch ? 8 : 4;
+  }
+
+  function shouldIgnoreDragTarget(target: Element | null): boolean {
+    return Boolean(target?.closest('input, textarea, select, [contenteditable="true"]'));
+  }
+
+  function handleDragStart() {
+    isDragging = true;
+    dragCommitSeq += 1;
+    menuToggleIntent = false;
+    clearTimeout(saveTimer);
+    clearTimeout(snapTimer);
+    if (menuOpen) closeMenu('widget-moved', false);
+  }
+
+  function handleDragEnd(payload: import('../../lib/toolkit/dragMachine.js').DragEndEvent) {
+    isDragging = false;
+    clearTimeout(saveTimer);
+    clearTimeout(snapTimer);
+    if (!native) return;
+    if (payload.reason === 'os-fallback') return;
+    programmaticMoveUntil = Math.max(programmaticMoveUntil, performance.now() + 300);
+    if (payload.moved && !payload.cancelled) {
+      void commitDragPosition();
+    }
   }
 
   function patch(value: Partial<typeof prefs>) {
@@ -172,7 +266,7 @@
 
   let wheelLockUntil = 0;
   function handleWheel(e: WheelEvent) {
-    if (menu || visibleEntries.length < 2) return;
+    if (menuOpen || visibleEntries.length < 2) return;
     const now = performance.now();
     if (now < wheelLockUntil) return;
     if (Math.abs(e.deltaY) < 18 && Math.abs(e.deltaX) < 18) return;
@@ -198,6 +292,8 @@
       );
       if (res !== 'saved') {
         await getCurrentWindow().setAlwaysOnTop(previous).catch(() => {});
+      } else if (ddayWidgetMenu.isOpen) {
+        await ddayWidgetMenu.raiseAboveHost();
       }
     } catch {
       await getCurrentWindow().setAlwaysOnTop(previous).catch(() => {});
@@ -208,8 +304,19 @@
 
   async function toggleStay() {
     const nextVal = !prefs.autoOpen;
-    patch({ autoOpen: nextVal });
-    if (nextVal) await saveGeometry(true);
+    if (!nextVal) {
+      patch({ autoOpen: false });
+      return;
+    }
+    if (!native) {
+      patch({ autoOpen: true });
+      return;
+    }
+    const captured = await captureWindowGeometry(getCurrentWindow(), DDAY_WIDGET_BOUNDS).catch(() => null);
+    await widgetSection.mutateAndConfirm(
+      (cur) => ({ ...cur, autoOpen: true, geometry: captured ?? cur.geometry }),
+      (cur) => cur.autoOpen === true,
+    );
   }
 
   async function enableStartupNow() {
@@ -225,10 +332,7 @@
   }
 
   async function centerOnScreen() {
-    if (!native) {
-      dismiss();
-      return;
-    }
+    if (!native) return;
     const w = getCurrentWindow();
     const monitors = await getMonitorGeometries();
     const pos = await w.outerPosition();
@@ -244,10 +348,13 @@
     if (m) {
       const targetX = Math.round(m.work.x + (m.work.width - size.width) / 2);
       const targetY = Math.round(m.work.y + (m.work.height - size.height) / 2);
+      programmaticMoveUntil = performance.now() + 450;
       await w.setPosition(new PhysicalPosition(targetX, targetY));
       await saveGeometry(prefs.autoOpen);
+      if (ddayWidgetMenu.isOpen) {
+        await ddayWidgetMenu.reposition();
+      }
     }
-    dismiss();
   }
 
   async function openControl(focusId: string | null = null, winLabel?: string, openCreate = false) {
@@ -264,68 +371,129 @@
     });
   }
 
-  async function openMenu(e?: MouseEvent | KeyboardEvent) {
-    e?.preventDefault?.();
-    e?.stopPropagation?.();
-    if (menu && e && e.type === 'click') {
-      dismiss();
+  function handleMenuAction(action: string, payload: Record<string, any> = {}) {
+    switch (action) {
+      case 'select-skin':
+        if (payload.skin === 'w1' || payload.skin === 'w4') selectSkin(payload.skin);
+        break;
+      case 'set-appearance':
+        if (DDAY_APPEARANCE_MODES.includes(payload.appearanceMode)) {
+          patch({ appearanceMode: payload.appearanceMode as DdayAppearanceMode });
+        }
+        break;
+      case 'set-scope':
+        if (typeof payload.displayScope === 'string' && payload.displayScope.trim()) {
+          patch({ displayScope: payload.displayScope.trim() });
+          currentIndex = 0;
+        }
+        break;
+      case 'toggle-hidden':
+        if (typeof payload.entryKey === 'string') toggleHiddenEntry(payload.entryKey);
+        break;
+      case 'toggle-top':
+        void toggleTop();
+        break;
+      case 'toggle-stay':
+        void toggleStay();
+        break;
+      case 'enable-startup':
+        void enableStartupNow();
+        break;
+      case 'center':
+        void centerOnScreen();
+        break;
+      case 'open-control':
+        closeMenu('action');
+        void openControl(currentEntry?.item.id ?? null, currentEntry?.windowLabel);
+        break;
+      default:
+        break;
+    }
+  }
+
+  let menuToggleIntent = false;
+  function handleMenuBtnPointerDown(e: PointerEvent) {
+    if (e.button !== 0) return;
+    menuToggleIntent = native ? ddayWidgetMenu.isToggleTarget() : previewMenuOpen;
+  }
+
+  function handleMenuBtnClick(e: MouseEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+    const viaKeyboard = e.detail === 0;
+    const intent = menuToggleIntent;
+    menuToggleIntent = false;
+    if (intent && !viaKeyboard) {
+      closeMenu('toggle');
       return;
     }
-    menuOpenedAt = performance.now();
-    const x = e instanceof MouseEvent ? e.clientX : Math.max(12, innerWidth - 40);
-    const y = e instanceof MouseEvent ? e.clientY : 36;
-    menu = { x, y };
-    await tick();
-    if (menu && menuEl) {
-      const r = menuEl.getBoundingClientRect();
-      menu = {
-        x: Math.max(7, Math.min(menu.x, innerWidth - r.width - 7)),
-        y: Math.max(7, Math.min(menu.y, innerHeight - r.height - 7)),
-      };
-      menuEl.querySelector<HTMLButtonElement>('button')?.focus();
+    void openSettingsPopup({ viaKeyboard });
+  }
+
+  function handleContextMenu(e: MouseEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+    if (isDragging) return;
+    void openSettingsPopup({ viaKeyboard: false });
+  }
+
+  async function openSettingsPopup({ viaKeyboard = false } = {}) {
+    if (!native) {
+      previewMenuOpen = true;
+      return;
     }
+    await ddayWidgetMenu.open({
+      viaKeyboard,
+      triggerEl: menuBtnEl,
+      state: menuStatePayload,
+      onAction: handleMenuAction,
+      onClosed: (reason) => {
+        if (returnsFocusToWidget(reason)) {
+          boardEl?.focus({ preventScroll: true });
+        }
+      },
+    });
   }
 
-  function handleWindowBlur() {
-    if (menu && performance.now() - menuOpenedAt < 220) return;
-    menu = null;
-  }
-
-  function dismiss() {
-    menu = null;
-    boardEl?.focus();
+  function closeMenu(reason = 'requester', toggleGrace = true) {
+    if (!native) {
+      previewMenuOpen = false;
+      if (returnsFocusToWidget(reason)) boardEl?.focus({ preventScroll: true });
+      return;
+    }
+    ddayWidgetMenu.close(reason, { toggleGrace });
   }
 
   function keydown(e: KeyboardEvent) {
-    if (e.key === 'Escape' && menu) {
+    if (e.key === 'Escape' && menuOpen && !native) {
+      if (previewPanelRef?.handleEscape()) {
+        e.preventDefault();
+        return;
+      }
       e.preventDefault();
-      dismiss();
+      closeMenu('escape');
       return;
     }
     if (e.key === 'ContextMenu' || (e.shiftKey && e.key === 'F10')) {
-      void openMenu(e);
+      e.preventDefault();
+      void openSettingsPopup({ viaKeyboard: true });
       return;
     }
-    if (!menu && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) {
+    if (!menuOpen && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) {
       cycleEntry(e.key === 'ArrowLeft' ? -1 : 1);
-      return;
-    }
-    if (menu && menuEl && e.key === 'Tab') {
-      const nodes = [...menuEl.querySelectorAll<HTMLElement>('button:not(:disabled), select')];
-      const first = nodes[0];
-      const last = nodes.at(-1);
-      if (e.shiftKey && document.activeElement === first) {
-        e.preventDefault();
-        last?.focus();
-      } else if (!e.shiftKey && document.activeElement === last) {
-        e.preventDefault();
-        first?.focus();
-      }
     }
   }
 
   let saveTimer: ReturnType<typeof setTimeout>;
   let snapTimer: ReturnType<typeof setTimeout>;
+
+  async function commitDragPosition() {
+    const seq = ++dragCommitSeq;
+    if (!native || !ready || closing || isDragging) return;
+    await snapToEdgeIfNear(seq);
+    if (seq !== dragCommitSeq || isDragging || closing) return;
+    if (prefs.autoOpen) await saveGeometry();
+  }
 
   async function saveGeometry(force = false) {
     if (!native || !ready || !(force || prefs.autoOpen)) return;
@@ -335,8 +503,8 @@
     } catch {}
   }
 
-  async function snapToEdgeIfNear() {
-    if (!native || !ready || isSnapping || closing) return;
+  async function snapToEdgeIfNear(commitSeq?: number): Promise<boolean> {
+    if (!native || !ready || isSnapping || isDragging || closing) return false;
     try {
       const w = getCurrentWindow();
       const [minimized, maximized, fullscreen] = await Promise.all([
@@ -344,27 +512,37 @@
         w.isMaximized().catch(() => false),
         w.isFullscreen().catch(() => false),
       ]);
-      if (minimized || maximized || fullscreen) return;
+      if (minimized || maximized || fullscreen || isDragging || closing) return false;
+      if (commitSeq !== undefined && commitSeq !== dragCommitSeq) return false;
       const [pos, size, monitors] = await Promise.all([
         w.outerPosition(),
         w.outerSize(),
         getMonitorGeometries(),
       ]);
+      if (isDragging || closing) return false;
+      if (commitSeq !== undefined && commitSeq !== dragCommitSeq) return false;
       const snapped = snapWidgetRectToEdges(
         { x: pos.x, y: pos.y, width: size.width, height: size.height },
         monitors,
       );
       if (snapped.snapped) {
+        if (isDragging || closing) return false;
+        if (commitSeq !== undefined && commitSeq !== dragCommitSeq) return false;
         isSnapping = true;
+        programmaticMoveUntil = Math.max(programmaticMoveUntil, performance.now() + 300);
         try {
           await w.setPosition(new PhysicalPosition(snapped.x, snapped.y));
+          return true;
         } finally {
           setTimeout(() => {
             isSnapping = false;
           }, 120);
         }
       }
-    } catch {}
+      return false;
+    } catch {
+      return false;
+    }
   }
 
   async function closeWidget() {
@@ -372,6 +550,7 @@
     closing = true;
     clearTimeout(saveTimer);
     clearTimeout(snapTimer);
+    closeMenu('widget-closed', false);
     try {
       const withTimeout = (p: Promise<unknown>, ms = 400) =>
         Promise.race([p.catch(() => {}), new Promise((resolve) => setTimeout(resolve, ms))]);
@@ -381,6 +560,7 @@
       // 저장 실패나 타임아웃이 위젯 닫기를 막지 않도록 무시합니다.
     } finally {
       if (native) {
+        await emit(DDAY_WIDGET_STATE_EVENT, false).catch(() => {});
         try {
           await closeWindow();
         } catch {
@@ -417,6 +597,17 @@
       const schemeParam = params.get('scheme');
       if (schemeParam === 'dark' || schemeParam === 'light') previewSchemeOverride = schemeParam;
       if (params.has('dark')) previewSchemeOverride = params.get('dark') === '0' ? 'light' : 'dark';
+      const themeParam = params.get('theme');
+      if (themeParam) previewThemeOverride = normalizeThemeId(themeParam);
+      const wParam = Number(params.get('w'));
+      const hParam = Number(params.get('h'));
+      if (Number.isFinite(wParam) && wParam >= DDAY_WIDGET_BOUNDS.minWidth && wParam <= DDAY_WIDGET_BOUNDS.maxWidth) {
+        previewW = Math.round(wParam);
+      }
+      if (Number.isFinite(hParam) && hParam >= DDAY_WIDGET_BOUNDS.minHeight && hParam <= DDAY_WIDGET_BOUNDS.maxHeight) {
+        previewH = Math.round(hParam);
+      }
+      if (params.has('empty')) previewEmpty = true;
     }
 
     const onPreviewSync = (ev: Event) => {
@@ -440,8 +631,8 @@
           prevTier: committedTier,
         }).tier;
         committedTier = nextTier;
-        if (menu && (Math.abs(w - prevW) >= 2 || Math.abs(h - prevH) >= 2)) {
-          menu = null;
+        if (native && ddayWidgetMenu.isOpen && (Math.abs(w - prevW) >= 2 || Math.abs(h - prevH) >= 2)) {
+          closeMenu('widget-resized', false);
         }
       };
       const initRect = boardEl.getBoundingClientRect();
@@ -456,13 +647,15 @@
 
     void (async () => {
       try {
-        try {
-          register(
-            await watchAppearance((a) => {
-              if (!disposed && typeof a.darkMode === 'boolean') systemDark = a.darkMode;
-            }),
-          );
-        } catch {}
+        if (native) {
+          try {
+            register(
+              await watchCustomFonts((fonts) => {
+                customFonts = fonts;
+              }),
+            );
+          } catch {}
+        }
 
         try {
           register(
@@ -504,7 +697,7 @@
             if (g) {
               await applyDdayWindowBounds(w, g, DDAY_WIDGET_BOUNDS);
             } else {
-              await w.setMinSize(new (await import('@tauri-apps/api/dpi')).LogicalSize(DDAY_WIDGET_BOUNDS.minWidth, DDAY_WIDGET_BOUNDS.minHeight)).catch(() => {});
+              await w.setMinSize(new LogicalSize(DDAY_WIDGET_BOUNDS.minWidth, DDAY_WIDGET_BOUNDS.minHeight)).catch(() => {});
               await ensureWindowOnScreen(w);
             }
           } catch {}
@@ -512,13 +705,24 @@
           await w.setAlwaysOnTop(prefs.alwaysOnTop).catch(() => {});
 
           const scheduleSave = () => {
+            if (isDragging) return;
             clearTimeout(saveTimer);
-            saveTimer = setTimeout(() => void saveGeometry(), 350);
+            saveTimer = setTimeout(() => {
+              if (!isDragging) void saveGeometry();
+            }, 350);
           };
           const scheduleMove = () => {
+            // 직접 드래그 중에는 종료 시점(handleDragEnd)에 스냅·저장을 1회만 수행하므로 중도 인터럽트를 차단합니다.
+            if (isDragging) return;
+            if (performance.now() < programmaticMoveUntil) return;
+            if (ddayWidgetMenu.isOpen) {
+              closeMenu('widget-moved', false);
+            }
             scheduleSave();
             clearTimeout(snapTimer);
-            snapTimer = setTimeout(() => void snapToEdgeIfNear(), 240);
+            snapTimer = setTimeout(() => {
+              if (!isDragging) void snapToEdgeIfNear();
+            }, 240);
           };
 
           try {
@@ -526,7 +730,7 @@
             register(
               await w.onResized(() => {
                 scheduleSave();
-                if (menu) menu = null;
+                if (ddayWidgetMenu.isOpen) closeMenu('widget-resized', false);
               }),
             );
             register(
@@ -540,11 +744,12 @@
           ready = true;
           await w.show().catch(() => {});
           await w.setFocus().catch(() => {});
+          await emit(DDAY_WIDGET_STATE_EVENT, true).catch(() => {});
+          ddayWidgetMenu.schedulePrewarm(1200);
         } else {
           ready = true;
           if (new URLSearchParams(location.search).has('menu')) {
-            await tick();
-            void openMenu();
+            previewMenuOpen = true;
           }
         }
       } finally {
@@ -562,6 +767,7 @@
     return () => {
       disposed = true;
       ro?.disconnect();
+      ddayWidgetMenu.dispose();
       offs.forEach((fn) => fn());
       clearInterval(interval);
       clearTimeout(saveTimer);
@@ -573,169 +779,224 @@
   });
 </script>
 
-<svelte:window onkeydown={keydown} onblur={handleWindowBlur} />
+<svelte:window onkeydown={keydown} />
 
 <div
   class="dw-root"
   class:is-preview={!native}
   data-scheme={effectiveDark ? 'dark' : 'light'}
   data-tier={widgetLayout.tier}
-  style="--dw-tone: {currentTone}; --dw-num-scale: {widgetLayout.numScale}; --dw-ctrl-sz: {widgetLayout.ctrlBtnSize}px; --dw-icon-sz: {widgetLayout.iconSize}px;"
+  style="{themeStyle};--dw-num-scale:{widgetLayout.numScale};--dw-icon-sz:{widgetLayout.iconSize}px;font-family:{uiFontCss};"
 >
-  <main
-    bind:this={boardEl}
-    class="dw-board"
-    tabindex="-1"
-    aria-label="D-Day 위젯"
-    oncontextmenu={(e) => void openMenu(e)}
-    onwheel={handleWheel}
-    use:draggable
-  >
-    {#if !currentEntry}
-      <div class="dw-empty-card">
-        <div class="dw-empty-top">
-          <div
-            class="dw-win-controls"
-            class:pinned={prefs.alwaysOnTop}
-            role="group"
-            aria-label="창 제어"
-            data-no-drag
-            use:blockDrag
-          >
+  <div class="dw-stage" style={!native ? `width:${previewW}px;height:${previewH}px;` : undefined}>
+    <main
+      bind:this={boardEl}
+      class="dw-board"
+      class:is-dragging={isDragging}
+      tabindex="-1"
+      aria-label="D-Day 위젯"
+      oncontextmenu={handleContextMenu}
+      onwheel={handleWheel}
+      ondragstart={(e) => e.preventDefault()}
+      use:toolkitDrag={{
+        onDragStart: handleDragStart,
+        onDragEnd: handleDragEnd,
+        thresholdForTarget: resolveDragThreshold,
+        shouldIgnore: shouldIgnoreDragTarget,
+      }}
+    >
+      <div
+        class="dw-shell"
+        class:is-w1={Boolean(currentEntry) && effectiveSkin !== 'w4'}
+        class:is-w4={Boolean(currentEntry) && effectiveSkin === 'w4'}
+        class:is-empty={!currentEntry}
+      >
+        {#if !currentEntry}
+          <div class="dw-empty-inner">
+            <span class="dw-empty-icon"><Flag size={16} strokeWidth={2.2} /></span>
+            <strong>위젯에 표시할 D-Day 없음</strong>
+            <small>컨트롤 타워에서 위젯 채널을 켜거나 새 일정을 추가해 보세요.</small>
             <button
               type="button"
-              class="dw-icon-btn"
-              aria-label="위젯 설정"
-              title="위젯 설정"
-              onclick={(e) => void openMenu(e)}
+              class="dw-empty-btn"
+              onclick={() => void openControl(null, 'main', true)}
             >
-              <Ellipsis size={13} />
-            </button>
-            <button
-              type="button"
-              class="dw-icon-btn"
-              aria-label="닫기"
-              title="닫기"
-              onclick={(e) => { e.stopPropagation(); void closeWidget(); }}
-            >
-              <X size={13} />
+              <Plus size={12} strokeWidth={2.5} />
+              <span>D-Day 추가</span>
             </button>
           </div>
-        </div>
-        <span class="dw-empty-icon"><Flag size={16} strokeWidth={2.2} /></span>
-        <strong>위젯에 표시할 D-Day 없음</strong>
-        <small>컨트롤 타워에서 위젯 채널을 켜거나 새 일정을 추가해 보세요.</small>
-        <button
-          type="button"
-          class="dw-empty-btn"
-          data-no-drag
-          onclick={() => void openControl(null, 'main', true)}
-        >
-          <Plus size={12} strokeWidth={2.5} />
-          <span>D-Day 추가</span>
-        </button>
-      </div>
-    {:else if effectiveSkin === 'w4'}
-      <!-- SKIN W-4: 마스킹테이프 폴라로이드 스티커 -->
-      <div class="w4-wrap">
-        <svg class="w4-tape" viewBox="0 0 88 22" aria-hidden="true">
-          <defs>
-            <pattern id="dw-washi-stripe" width="6" height="6" patternTransform="rotate(28)" patternUnits="userSpaceOnUse">
-              <rect width="3" height="6" fill="rgba(255,255,255,0.34)" />
-            </pattern>
-          </defs>
-          <path
-            d="M2,2 L5,5.5 L1,9 L5,12.5 L1,16 L4,19.5 L84,19.5 L87,16 L83,12.5 L87,9 L83,5.5 L86,2 Z"
-            fill={effectiveDark ? '#d97706' : '#fcd34d'}
-            fill-opacity={effectiveDark ? '0.68' : '0.78'}
-          />
-          <path
-            d="M2,2 L5,5.5 L1,9 L5,12.5 L1,16 L4,19.5 L84,19.5 L87,16 L83,12.5 L87,9 L83,5.5 L86,2 Z"
-            fill="url(#dw-washi-stripe)"
-          />
-        </svg>
-
-        <div class="w4-frame">
-          <div class="w4-mat">
-            <div class="w4-mat-top">
-              <DdayIcon
-                icon={currentEntry.item.icon}
-                tone={currentEntry.item.tone}
-                size="var(--dw-icon-sz, 22px)"
-                dark={effectiveDark}
+        {:else if effectiveSkin === 'w4'}
+          <!-- SKIN W-4: 인-프레임 마스킹테이프 폴라로이드 -->
+          <div class="w4-frame">
+            <svg class="w4-tape" viewBox="0 0 88 22" aria-hidden="true">
+              <defs>
+                <pattern id="dw-washi-stripe" width="6" height="6" patternTransform="rotate(28)" patternUnits="userSpaceOnUse">
+                  <rect width="3" height="6" fill="var(--dw-tape-stripe)" />
+                </pattern>
+              </defs>
+              <path
+                d="M2,2 L5,5.5 L1,9 L5,12.5 L1,16 L4,19.5 L84,19.5 L87,16 L83,12.5 L87,9 L83,5.5 L86,2 Z"
+                fill="var(--dw-tape-fill)"
               />
-              <div
-                class="dw-win-controls"
-                class:pinned={prefs.alwaysOnTop}
-                role="group"
-                aria-label="창 제어"
-                data-no-drag
-                use:blockDrag
+              <path
+                d="M2,2 L5,5.5 L1,9 L5,12.5 L1,16 L4,19.5 L84,19.5 L87,16 L83,12.5 L87,9 L83,5.5 L86,2 Z"
+                fill="url(#dw-washi-stripe)"
+              />
+            </svg>
+
+            <div class="w4-mat">
+              <div class="w4-mat-top">
+                <DdayIcon
+                  icon={currentEntry.item.icon}
+                  tone={currentEntry.item.tone}
+                  accent={themeTokens.accent}
+                  size="var(--dw-icon-sz, 22px)"
+                  dark={effectiveDark}
+                />
+              </div>
+
+              <button
+                type="button"
+                class="w4-hero-btn"
+                onclick={() => void openControl(currentEntry.item.id, currentEntry.windowLabel)}
+                title="클릭하여 D-Day 컨트롤 열기 · 잡고 끌면 이동"
               >
-                <button
-                  type="button"
-                  class="dw-icon-btn"
-                  class:pin-on={prefs.alwaysOnTop}
-                  aria-label={prefs.alwaysOnTop ? '항상 위 고정 해제' : '항상 위에 고정'}
-                  title={prefs.alwaysOnTop ? '고정 해제' : '항상 위에'}
-                  onclick={(e) => { e.stopPropagation(); void toggleTop(); }}
+                <span
+                  class="w4-number tnum"
+                  class:imminent={currentEntry.counter.state === 'today' || currentEntry.counter.state === 'imminent'}
+                  class:overdue={currentEntry.counter.state === 'overdue'}
                 >
-                  {#if prefs.alwaysOnTop}<Pin size={12} />{:else}<PinOff size={12} />{/if}
-                </button>
-                <button
-                  type="button"
-                  class="dw-icon-btn"
-                  aria-label="위젯 설정"
-                  title="스킨 · 표시 설정"
-                  onclick={(e) => void openMenu(e)}
-                >
-                  <Ellipsis size={13} />
-                </button>
-                <button
-                  type="button"
-                  class="dw-icon-btn dw-close-btn"
-                  aria-label="위젯 닫기"
-                  title="닫기"
-                  onclick={(e) => { e.stopPropagation(); void closeWidget(); }}
-                >
-                  <X size={13} />
-                </button>
+                  {currentEntry.counter.label}
+                </span>
+                <span class="w4-mat-date tnum">
+                  {#if currentEntry.item.repeatYearly}매년 {/if}{formatDotDate(currentEntry.counter.effectiveDate)}
+                </span>
+              </button>
+            </div>
+
+            <div class="w4-chin">
+              <button
+                type="button"
+                class="w4-title-btn"
+                onclick={() => void openControl(currentEntry.item.id, currentEntry.windowLabel)}
+                title={`${currentEntry.item.title} (${currentEntry.windowTitle})`}
+              >
+                <span class="w4-title">{currentEntry.item.title}</span>
+              </button>
+
+              {#if visibleEntries.length >= 2}
+                <div class="w4-pager" role="group" aria-label="D-Day 전환">
+                  <button
+                    type="button"
+                    class="dw-nav-btn"
+                    aria-label="이전 D-Day"
+                    onclick={(e) => { e.stopPropagation(); cycleEntry(-1); }}
+                  >
+                    <ChevronLeft size={11} />
+                  </button>
+                  <span class="dw-nav-count tnum">{currentIndex + 1}/{visibleEntries.length}</span>
+                  <button
+                    type="button"
+                    class="dw-nav-btn"
+                    aria-label="다음 D-Day"
+                    onclick={(e) => { e.stopPropagation(); cycleEntry(1); }}
+                  >
+                    <ChevronRight size={11} />
+                  </button>
+                </div>
+              {/if}
+            </div>
+          </div>
+        {:else}
+          <!-- SKIN W-1: 인-프레임 데스크 플립 캘린더 -->
+          <div class="w1-card">
+            <div class="w1-topband">
+              <div class="w1-rings" aria-hidden="true">
+                {#each [0, 1] as _ring}
+                  <svg class="w1-ring-svg" viewBox="0 0 16 14">
+                    <circle cx="8" cy="10.5" r="2.5" fill="var(--dw-ring-hole)" />
+                    <path
+                      d="M4.5,10.5 C4.5,3.5 6,1.5 8,1.5 C10,1.5 11.5,3.5 11.5,10.5"
+                      fill="none"
+                      stroke="var(--dw-ring-stroke)"
+                      stroke-width="2.2"
+                      stroke-linecap="round"
+                    />
+                    <path
+                      d="M6.2,9.2 C6.2,4.5 7,2.8 8,2.8"
+                      fill="none"
+                      stroke="var(--dw-ring-highlight)"
+                      stroke-opacity="0.72"
+                      stroke-width="0.9"
+                      stroke-linecap="round"
+                    />
+                  </svg>
+                {/each}
+              </div>
+
+              <div class="w1-top-left">
+                <DdayIcon
+                  icon={currentEntry.item.icon}
+                  tone={currentEntry.item.tone}
+                  accent={themeTokens.accent}
+                  size="var(--dw-icon-sz, 20px)"
+                  dark={effectiveDark}
+                />
+                <span class="w1-scope-tag">
+                  {#if currentEntry.item.repeatYearly}
+                    <Repeat size={9} style="display:inline;vertical-align:-1px;margin-right:2px;" />
+                  {/if}
+                  {currentEntry.windowTitle}
+                </span>
               </div>
             </div>
 
-            <button
-              type="button"
-              class="w4-hero-btn"
-              data-no-drag
-              onclick={() => void openControl(currentEntry.item.id, currentEntry.windowLabel)}
-              title="클릭하여 D-Day 컨트롤 열기"
-            >
-              <span
-                class="w4-number tnum"
-                class:imminent={currentEntry.counter.state === 'today' || currentEntry.counter.state === 'imminent'}
-                class:overdue={currentEntry.counter.state === 'overdue'}
+            <div class="w1-body">
+              <button
+                type="button"
+                class="w1-flap-btn"
+                onclick={() => void openControl(currentEntry.item.id, currentEntry.windowLabel)}
+                title="클릭하여 D-Day 컨트롤 열기 · 잡고 끌면 이동"
               >
-                {currentEntry.counter.label}
-              </span>
-              <span class="w4-mat-date tnum">
-                {#if currentEntry.item.repeatYearly}매년 {/if}{formatDotDate(currentEntry.counter.effectiveDate)}
-              </span>
-            </button>
-          </div>
+                <span class="w1-hinge" aria-hidden="true"></span>
+                <span
+                  class="w1-number tnum"
+                  class:imminent={currentEntry.counter.state === 'today' || currentEntry.counter.state === 'imminent'}
+                  class:overdue={currentEntry.counter.state === 'overdue'}
+                >
+                  {currentEntry.counter.label}
+                </span>
+              </button>
 
-          <div class="w4-chin">
-            <button
-              type="button"
-              class="w4-title-btn"
-              data-no-drag
-              onclick={() => void openControl(currentEntry.item.id, currentEntry.windowLabel)}
-              title={`${currentEntry.item.title} (${currentEntry.windowTitle})`}
-            >
-              <span class="w4-title">{currentEntry.item.title}</span>
-            </button>
+              <div class="w1-caption">
+                <button
+                  type="button"
+                  class="w1-title-btn"
+                  onclick={() => void openControl(currentEntry.item.id, currentEntry.windowLabel)}
+                  title={currentEntry.item.title}
+                >
+                  <span class="w1-title">{currentEntry.item.title}</span>
+                </button>
+                <span class="w1-date tnum">
+                  {#if currentEntry.item.repeatYearly}매년 {/if}{formatDotDate(currentEntry.counter.effectiveDate)}
+                </span>
+              </div>
+
+              <div class="w1-extra">
+                <div class="w1-bar" aria-hidden="true">
+                  <i style="width: {currentProgress}%;"></i>
+                </div>
+                <div class="w1-extra-row">
+                  <span class="tnum">진행률 {currentProgress}%</span>
+                  {#if nextEntry}
+                    <span class="w1-next-peek tnum">다음: {nextEntry.item.title} ({nextEntry.counter.label})</span>
+                  {/if}
+                </div>
+              </div>
+            </div>
 
             {#if visibleEntries.length >= 2}
-              <div class="w4-pager" role="group" aria-label="D-Day 전환" data-no-drag>
+              <div class="w1-pager" role="group" aria-label="D-Day 전환">
                 <button
                   type="button"
                   class="dw-nav-btn"
@@ -744,7 +1005,7 @@
                 >
                   <ChevronLeft size={11} />
                 </button>
-                <span class="dw-nav-count tnum">{currentIndex + 1}/{visibleEntries.length}</span>
+                <span class="dw-nav-count tnum">{currentIndex + 1} / {visibleEntries.length}</span>
                 <button
                   type="button"
                   class="dw-nav-btn"
@@ -755,351 +1016,83 @@
                 </button>
               </div>
             {/if}
-          </div>
-        </div>
-      </div>
-    {:else}
-      <!-- SKIN W-1: 데스크 플립 캘린더 -->
-      <div class="w1-wrap">
-        <div class="w1-rings" aria-hidden="true">
-          {#each [0, 1] as _ring}
-            <svg class="w1-ring-svg" viewBox="0 0 18 22">
-              <circle cx="9" cy="17" r="3" fill={effectiveDark ? '#141720' : '#d6ccb8'} />
-              <path
-                d="M5,17 C5,7 6.5,2 9,2 C11.5,2 13,7 13,17"
-                fill="none"
-                stroke={effectiveDark ? '#94a3b8' : '#64748b'}
-                stroke-width="2.6"
-                stroke-linecap="round"
-              />
-              <path
-                d="M7,15 C7,8 7.8,3.8 9,3.8"
-                fill="none"
-                stroke="#ffffff"
-                stroke-opacity="0.7"
-                stroke-width="1"
-                stroke-linecap="round"
-              />
-            </svg>
-          {/each}
-        </div>
 
-        <div class="w1-card">
-          <div class="w1-topband">
-            <div class="w1-top-left">
-              <DdayIcon
-                icon={currentEntry.item.icon}
-                tone={currentEntry.item.tone}
-                size="var(--dw-icon-sz, 20px)"
-                dark={effectiveDark}
-              />
-              <span class="w1-scope-tag">
-                {#if currentEntry.item.repeatYearly}
-                  <Repeat size={9} style="display:inline;vertical-align:-1px;margin-right:2px;" />
-                {/if}
-                {currentEntry.windowTitle}
-              </span>
-            </div>
-
-            <div
-              class="dw-win-controls"
-              class:pinned={prefs.alwaysOnTop}
-              role="group"
-              aria-label="창 제어"
-              data-no-drag
-              use:blockDrag
-            >
-              <button
-                type="button"
-                class="dw-icon-btn"
-                class:pin-on={prefs.alwaysOnTop}
-                aria-label={prefs.alwaysOnTop ? '항상 위 고정 해제' : '항상 위에 고정'}
-                title={prefs.alwaysOnTop ? '고정 해제' : '항상 위에'}
-                onclick={(e) => { e.stopPropagation(); void toggleTop(); }}
-              >
-                {#if prefs.alwaysOnTop}<Pin size={12} />{:else}<PinOff size={12} />{/if}
-              </button>
-              <button
-                type="button"
-                class="dw-icon-btn"
-                aria-label="위젯 설정"
-                title="스킨 · 표시 설정"
-                onclick={(e) => void openMenu(e)}
-              >
-                <Ellipsis size={13} />
-              </button>
-              <button
-                type="button"
-                class="dw-icon-btn dw-close-btn"
-                aria-label="위젯 닫기"
-                title="닫기"
-                onclick={(e) => { e.stopPropagation(); void closeWidget(); }}
-              >
-                <X size={13} />
-              </button>
+            <div class="w1-paper-stack" aria-hidden="true">
+              <span class="w1-stack-1"></span>
+              <span class="w1-stack-2"></span>
             </div>
           </div>
+        {/if}
 
-          <div class="w1-body">
+        <!-- 통합 우측 상단 macOS 감성 호버 컨트롤 (평소 완전 숨김 · 구역 호버/초점/메뉴 열림 시 활성화) -->
+        <div class="dw-ctrl-zone" class:is-open={menuOpen}>
+          <div
+            class="dw-mac-dock"
+            role="group"
+            aria-label="창 제어"
+          >
             <button
               type="button"
-              class="w1-flap-btn"
-              data-no-drag
-              onclick={() => void openControl(currentEntry.item.id, currentEntry.windowLabel)}
-              title="클릭하여 D-Day 컨트롤 열기"
+              class="dw-mac-btn dw-mac-pin"
+              class:is-active={prefs.alwaysOnTop}
+              aria-pressed={prefs.alwaysOnTop}
+              aria-label={prefs.alwaysOnTop ? '항상 위 고정 해제' : '항상 위에 고정'}
+              title={prefs.alwaysOnTop ? '고정 해제' : '항상 위에'}
+              disabled={pinBusy}
+              onclick={(e) => { e.stopPropagation(); void toggleTop(); }}
             >
-              <span class="w1-hinge" aria-hidden="true"></span>
-              <span
-                class="w1-number tnum"
-                class:imminent={currentEntry.counter.state === 'today' || currentEntry.counter.state === 'imminent'}
-                class:overdue={currentEntry.counter.state === 'overdue'}
-              >
-                {currentEntry.counter.label}
-              </span>
+              {#if prefs.alwaysOnTop}
+                <Pin size={10} strokeWidth={2.4} />
+              {:else}
+                <PinOff size={10} strokeWidth={2.2} />
+              {/if}
             </button>
-
-            <div class="w1-caption">
-              <button
-                type="button"
-                class="w1-title-btn"
-                data-no-drag
-                onclick={() => void openControl(currentEntry.item.id, currentEntry.windowLabel)}
-                title={currentEntry.item.title}
-              >
-                <span class="w1-title">{currentEntry.item.title}</span>
-              </button>
-              <span class="w1-date tnum">
-                {#if currentEntry.item.repeatYearly}매년 {/if}{formatDotDate(currentEntry.counter.effectiveDate)}
-              </span>
-            </div>
-
-            <div class="w1-extra">
-              <div class="w1-bar" aria-hidden="true">
-                <i style="width: {currentProgress}%;"></i>
-              </div>
-              <div class="w1-extra-row">
-                <span class="tnum">진행률 {currentProgress}%</span>
-                {#if nextEntry}
-                  <span class="w1-next-peek tnum">다음: {nextEntry.item.title} ({nextEntry.counter.label})</span>
-                {/if}
-              </div>
-            </div>
+            <button
+              bind:this={menuBtnEl}
+              type="button"
+              class="dw-mac-btn dw-mac-menu"
+              class:is-active={menuOpen}
+              aria-haspopup="dialog"
+              aria-expanded={menuOpen}
+              aria-label="위젯 설정"
+              title="위젯 설정"
+              onpointerdown={handleMenuBtnPointerDown}
+              onclick={handleMenuBtnClick}
+            >
+              <Ellipsis size={11} strokeWidth={2.5} />
+            </button>
+            <button
+              type="button"
+              class="dw-mac-btn dw-mac-close"
+              aria-label="위젯 닫기"
+              title="닫기"
+              onclick={(e) => { e.stopPropagation(); void closeWidget(); }}
+            >
+              <X size={10.5} strokeWidth={2.5} />
+            </button>
           </div>
-
-          {#if visibleEntries.length >= 2}
-            <div class="w1-pager" role="group" aria-label="D-Day 전환" data-no-drag>
-              <button
-                type="button"
-                class="dw-nav-btn"
-                aria-label="이전 D-Day"
-                onclick={(e) => { e.stopPropagation(); cycleEntry(-1); }}
-              >
-                <ChevronLeft size={11} />
-              </button>
-              <span class="dw-nav-count tnum">{currentIndex + 1} / {visibleEntries.length}</span>
-              <button
-                type="button"
-                class="dw-nav-btn"
-                aria-label="다음 D-Day"
-                onclick={(e) => { e.stopPropagation(); cycleEntry(1); }}
-              >
-                <ChevronRight size={11} />
-              </button>
-            </div>
-          {/if}
         </div>
       </div>
-    {/if}
-  </main>
+    </main>
+  </div>
 
-  <!-- container: size 바깥(형제)에 두어 바깥 투명 6px 테두리만 리사이즈 입력을 받고 상단 우측 버튼과 절대 겹치지 않게 합니다 -->
+  {#if !native && previewMenuOpen && normalizedPreviewMenuState}
+    <div class="dw-preview-popover" data-scheme={effectiveDark ? 'dark' : 'light'}>
+      <DdayWidgetSettingsPanel
+        bind:this={previewPanelRef}
+        state={normalizedPreviewMenuState}
+        maxHeight={520}
+        onaction={handleMenuAction}
+        onclose={() => closeMenu('close-btn')}
+      />
+    </div>
+  {/if}
+
+  <!-- 8방향 창 크기 조절 핸들: cornerSize=10(0..9px)으로 닫기 버튼(12px+)과 0px 충돌 보장 -->
   <DdayResizeHandles
     {native}
     edgeSize={5}
-    cornerSize={12}
-    onResizeStart={() => {
-      menu = null;
-    }}
+    cornerSize={10}
+    onResizeStart={() => closeMenu('widget-resized', false)}
   />
-
-  {#if menu}
-    <button
-      type="button"
-      class="dw-dismiss"
-      aria-label="설정 메뉴 닫기"
-      onclick={dismiss}
-    ></button>
-    <div
-      bind:this={menuEl}
-      class="dw-menu"
-      data-scheme={effectiveDark ? 'dark' : 'light'}
-      role="dialog"
-      aria-label="D-Day 위젯 설정"
-      style="left: {menu.x}px; top: {menu.y}px;"
-    >
-      <header class="dw-menu-head">
-        <DdayIcon icon="flag" tone="accent" size={24} dark={effectiveDark} />
-        <strong>D-Day 위젯</strong>
-        <button type="button" class="dw-menu-close" aria-label="닫기" onclick={dismiss}>
-          <X size={13} />
-        </button>
-      </header>
-
-      <section class="dw-menu-sec" aria-label="위젯 스킨">
-        <h3>스킨</h3>
-        <div class="dw-skin-grid" role="radiogroup" aria-label="위젯 스킨 고르기">
-          <button
-            type="button"
-            role="radio"
-            aria-checked={effectiveSkin === 'w1'}
-            class="dw-skin-card"
-            class:on={effectiveSkin === 'w1'}
-            onclick={() => selectSkin('w1')}
-          >
-            <span class="dw-skin-thumb w1-thumb" aria-hidden="true"><i></i><b>D-5</b></span>
-            <span>플립 캘린더</span>
-          </button>
-          <button
-            type="button"
-            role="radio"
-            aria-checked={effectiveSkin === 'w4'}
-            class="dw-skin-card"
-            class:on={effectiveSkin === 'w4'}
-            onclick={() => selectSkin('w4')}
-          >
-            <span class="dw-skin-thumb w4-thumb" aria-hidden="true"><i></i><b>D-5</b></span>
-            <span>폴라로이드</span>
-          </button>
-        </div>
-      </section>
-
-      <section class="dw-menu-sec" aria-label="위젯 배경">
-        <h3>배경</h3>
-        <div class="dw-mode-row" role="radiogroup" aria-label="배경 테마">
-          <button
-            type="button"
-            role="radio"
-            aria-checked={prefs.appearanceMode === 'auto'}
-            class="dw-mode-chip"
-            class:on={prefs.appearanceMode === 'auto'}
-            onclick={() => patch({ appearanceMode: 'auto' })}
-          >자동</button>
-          <button
-            type="button"
-            role="radio"
-            aria-checked={prefs.appearanceMode === 'light'}
-            class="dw-mode-chip"
-            class:on={prefs.appearanceMode === 'light'}
-            onclick={() => patch({ appearanceMode: 'light' })}
-          >크림</button>
-          <button
-            type="button"
-            role="radio"
-            aria-checked={prefs.appearanceMode === 'dark'}
-            class="dw-mode-chip"
-            class:on={prefs.appearanceMode === 'dark'}
-            onclick={() => patch({ appearanceMode: 'dark' })}
-          >더스크</button>
-        </div>
-      </section>
-
-      <section class="dw-menu-sec" aria-label="표시할 D-Day">
-        <h3>표시 항목</h3>
-        <label class="dw-scope-row">
-          <span>창 범위</span>
-          <select
-            value={prefs.displayScope}
-            onchange={(e) => patch({ displayScope: e.currentTarget.value })}
-          >
-            <option value="all">모든 메모 창</option>
-            {#each windows as win (win.label)}
-              <option value={win.label}>{stripHtmlToTitle(win.title, 18)}</option>
-            {/each}
-          </select>
-        </label>
-
-        {#if inScopeEntries.length > 0}
-          <div class="dw-tiles">
-            {#each inScopeEntries as entry (entry.key)}
-              {@const checked = !prefs.hiddenIds.includes(entry.key)}
-              {@const tileTone = resolveToneColor(entry.item.tone, '#d97706')}
-              <button
-                type="button"
-                role="checkbox"
-                aria-checked={checked}
-                class="dw-tile"
-                style="--dw-tone: {tileTone};"
-                onclick={() => toggleHiddenEntry(entry.key)}
-              >
-                <span class="dw-tile-name">{entry.item.title}</span>
-                <span class="dw-tile-check">
-                  {#if checked}<Check size={9} strokeWidth={3} />{/if}
-                </span>
-              </button>
-            {/each}
-          </div>
-        {/if}
-      </section>
-
-      <section class="dw-menu-sec" aria-label="창 동작">
-        <h3>창 동작</h3>
-        <button
-          type="button"
-          role="switch"
-          aria-checked={prefs.alwaysOnTop}
-          class="dw-switch"
-          onclick={() => void toggleTop()}
-        >
-          {#if prefs.alwaysOnTop}<Pin size={14} />{:else}<PinOff size={14} />{/if}
-          <span class="dw-switch-text">
-            항상 위에 고정
-            <small>다른 창 위로 위젯을 띄워 둡니다</small>
-          </span>
-          <span class="dw-knob" aria-hidden="true"><i></i></span>
-        </button>
-
-        <button
-          type="button"
-          role="switch"
-          aria-checked={prefs.autoOpen}
-          class="dw-switch"
-          onclick={() => void toggleStay()}
-        >
-          <Rocket size={14} />
-          <span class="dw-switch-text">
-            Tidy Task와 함께 열기
-            <small>앱 실행 시 이 자리와 크기로 다시 띄웁니다</small>
-          </span>
-          <span class="dw-knob" aria-hidden="true"><i></i></span>
-        </button>
-
-        {#if prefs.autoOpen && !startupEnabled}
-          <button
-            type="button"
-            class="dw-startup-helper"
-            disabled={startupBusy}
-            onclick={() => void enableStartupNow()}
-          >
-            <Power size={12} />
-            <span>{startupBusy ? '등록 중…' : 'Windows 시작 프로그램 함께 켜기'}</span>
-          </button>
-        {/if}
-      </section>
-
-      <div class="dw-actions">
-        <button type="button" onclick={() => void centerOnScreen()}>
-          <LocateFixed size={13} />
-          <span>가운데로</span>
-        </button>
-        <button
-          type="button"
-          class="dw-action-pri"
-          onclick={() => { dismiss(); void openControl(currentEntry?.item.id ?? null, currentEntry?.windowLabel); }}
-        >
-          <span>D-Day 컨트롤</span>
-          <ArrowUpRight size={13} />
-        </button>
-      </div>
-    </div>
-  {/if}
 </div>

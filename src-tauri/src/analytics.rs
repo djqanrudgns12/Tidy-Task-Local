@@ -107,7 +107,7 @@ fn window_kind(label: &str) -> &'static str {
             "dice" => "dice",
             "clock" => "clock",
             "thermometer" | "thermometer-display" => "thermometer",
-            "dday" | "dday-control" => "dday",
+            "dday" | "dday-control" | "dday-widget-menu" => "dday",
             "vote" | "vote-teacher" => "vote",
             "seating" | "seating-teacher" | "seating-display" => "seating",
             "scoreboard-personal" | "scoreboard-group" | "scoreboard-custom" => "scoreboard",
@@ -618,6 +618,7 @@ mod tests {
         }
         assert_ne!(window_kind("picker"), window_kind("picker-group"));
         assert_eq!(window_kind("dday"), window_kind("dday-control"));
+        assert_eq!(window_kind("dday"), window_kind("dday-widget-menu"));
         for id in crate::toolkit::TOOL_IDS {
             if id != "timer" && id != "scoreboard" {
                 assert_ne!(window_kind(id), "other", "통계 분류가 빠진 도구: {id}");

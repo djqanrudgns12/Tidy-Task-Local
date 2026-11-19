@@ -32,6 +32,9 @@
     walkLeanDeg = 0,
     idleCssAnim = false,
     celebrateBurst = false,
+    mysterySealed = false,
+    justRevealed = false,
+    fixedPlateSize = undefined,
     renderMode = 'both',
     onMarkBroken,
   } = $props<{
@@ -63,6 +66,9 @@
     walkLeanDeg?: number;
     idleCssAnim?: boolean;
     celebrateBurst?: boolean;
+    mysterySealed?: boolean;
+    justRevealed?: boolean;
+    fixedPlateSize?: { width: number; height: number };
     renderMode?: 'both' | 'body' | 'plate';
     onMarkBroken?: (src: string) => void;
   }>();
@@ -87,9 +93,24 @@
       : Math.min(isHero ? 36 : 32, (isHero ? 20 : 15) / Math.max(0.34, vpScale)),
   );
   const labelMaxFont = $derived(Math.max(baseLogical, screenMinFloor));
-  const rawMaxW = $derived(labelMaxWOverride ?? Math.max(132, Math.min(240, Math.round(heightPx * 1.48))));
-  const labelMaxW = $derived(Math.max(rawMaxW, Math.round(labelMaxFont * 3.6 + 18)));
-  const labelFontSize = $derived(fitStageLabelSize(label, labelMaxW, labelMaxFont, fontFamily, 14));
+  const rawMaxW = $derived(
+    fixedPlateSize
+      ? Math.max(96, fixedPlateSize.width - 24)
+      : (labelMaxWOverride ?? Math.max(132, Math.min(240, Math.round(heightPx * 1.48)))),
+  );
+  const labelMaxW = $derived(
+    fixedPlateSize
+      ? rawMaxW
+      : Math.max(rawMaxW, Math.round(labelMaxFont * 3.6 + 18)),
+  );
+  const labelFontSize = $derived(
+    fixedPlateSize
+      ? fitStageLabelSize(label, fixedPlateSize.width - 24, 28, fontFamily, 14)
+      : fitStageLabelSize(label, labelMaxW, labelMaxFont, fontFamily, 14),
+  );
+  const effectivePlateOffset = $derived(
+    labelAlign === 'above' ? `${Math.round(heightPx + 14)}px` : `${labelOffsetY}px`,
+  );
   const shadowW = $derived(Math.max(42, Math.round(heightPx * 0.56)));
   const effectiveGroundY = $derived(groundY ?? y);
 </script>
@@ -159,18 +180,35 @@
       </div>
     {/if}
 
-    <!-- 이름표: 호흡 모션 · 다크 톤 보정 바깥 최상위 (잘림·slice·말줄임 0%) -->
+    <!-- 이름표: 호흡 모션 · 다크 톤 보정 바깥 최상위 (잘림·slice·말줄임 0%, 시안 2A 고정 규격 ??? 플립 지원) -->
     {#if renderMode !== 'body' && showLabel && !silhouette}
-      <div
-        class="gp-stage-nameplate"
-        class:above={labelAlign === 'above'}
-        class:hero={isHero}
-        style:--plate-offset={labelAlign === 'above' ? `${Math.round(heightPx + 14)}px` : `${labelOffsetY}px`}
-        style:border-color={accentHex}
-        style:font-size={`${labelFontSize.toFixed(1)}px`}
-      >
-        {label}
-      </div>
+      {#if mysterySealed}
+        <div
+          class="gp-stage-nameplate gp-mystery-plate"
+          class:above={labelAlign === 'above'}
+          style:--plate-offset={effectivePlateOffset}
+          style:width={fixedPlateSize ? `${fixedPlateSize.width}px` : '150px'}
+          style:height={fixedPlateSize ? `${fixedPlateSize.height}px` : '49px'}
+          aria-label="비공개 학생"
+        >
+          ? ? ?
+        </div>
+      {:else}
+        <div
+          class="gp-stage-nameplate"
+          class:above={labelAlign === 'above'}
+          class:hero={isHero}
+          class:gp-plate-flip-reveal={justRevealed}
+          class:fixed-plate={Boolean(fixedPlateSize)}
+          style:--plate-offset={effectivePlateOffset}
+          style:border-color={accentHex}
+          style:width={fixedPlateSize ? `${fixedPlateSize.width}px` : undefined}
+          style:min-height={fixedPlateSize ? `${fixedPlateSize.height}px` : undefined}
+          style:font-size={`${labelFontSize.toFixed(1)}px`}
+        >
+          {label}
+        </div>
+      {/if}
     {/if}
   </div>
 {/if}

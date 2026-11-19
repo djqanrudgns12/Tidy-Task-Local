@@ -13,6 +13,7 @@
 
   let {
     native = false,
+    debugShow = false,
     disabled = false,
     edgeSize = 5,
     cornerSize = 12,
@@ -20,6 +21,7 @@
     onError,
   }: {
     native?: boolean;
+    debugShow?: boolean;
     disabled?: boolean;
     edgeSize?: number;
     cornerSize?: number;
@@ -105,11 +107,12 @@
   }
 </script>
 
-{#if native && !disabled}
+{#if (native || debugShow) && !disabled}
   {#each edges as edge}
     <div
       class="dd-resize-edge {edge.className}"
-      style="--dd-edge: {edgeSize}px;"
+      class:debug-show={debugShow}
+      style="--dd-edge: {edgeSize}px; --dd-corner: {cornerSize}px;"
       aria-hidden="true"
       data-no-drag
       onpointerdown={(e) => resizeEdge(e, edge.direction)}
@@ -119,6 +122,7 @@
   {#each corners as corner}
     <div
       class="dd-resize-corner {corner.className}"
+      class:debug-show={debugShow}
       style="--dd-corner: {cornerSize}px;"
       aria-hidden="true"
       data-no-drag
@@ -140,29 +144,29 @@
   }
   .dd-edge-n {
     top: 0;
-    left: 14px;
-    right: 14px;
+    left: var(--dd-corner, 12px);
+    right: var(--dd-corner, 12px);
     height: var(--dd-edge, 5px);
     cursor: ns-resize;
   }
   .dd-edge-s {
     bottom: 0;
-    left: 14px;
-    right: 14px;
+    left: var(--dd-corner, 12px);
+    right: var(--dd-corner, 12px);
     height: var(--dd-edge, 5px);
     cursor: ns-resize;
   }
   .dd-edge-w {
     left: 0;
-    top: 14px;
-    bottom: 14px;
+    top: var(--dd-corner, 12px);
+    bottom: var(--dd-corner, 12px);
     width: var(--dd-edge, 5px);
     cursor: ew-resize;
   }
   .dd-edge-e {
     right: 0;
-    top: 14px;
-    bottom: 14px;
+    top: var(--dd-corner, 12px);
+    bottom: var(--dd-corner, 12px);
     width: var(--dd-edge, 5px);
     cursor: ew-resize;
   }
@@ -174,6 +178,12 @@
     height: var(--dd-corner, 12px);
     background: transparent;
     touch-action: none;
+  }
+  .dd-resize-edge.debug-show {
+    background: rgba(79, 70, 229, 0.22);
+  }
+  .dd-resize-corner.debug-show {
+    background: rgba(225, 29, 72, 0.28);
   }
   .dd-corner-nw {
     top: 0;

@@ -15,14 +15,14 @@
     X,
   } from 'lucide-svelte';
   import { LogicalSize, PhysicalPosition } from '@tauri-apps/api/dpi';
-  import { WebviewWindow } from '@tauri-apps/api/webviewWindow';
   import { dragRegion } from '../../lib/dragRegion.js';
-  import { getThemeAccent, getTidyTheme } from '../../lib/themes.js';
-  import { openTool } from '../../lib/toolkit/windows.js';
+  import { BUILTIN_FONTS } from '../../lib/builtinFonts.js';
+  import { registerFontFace } from '../../lib/fonts.js';
+  import { watchCustomFonts } from '../../lib/toolkit/appearance.js';
   import { ensureWindowOnScreen, getMonitorGeometries } from '../../lib/windows/windowRegistry.js';
+  import { pickPrimaryMonitor } from '../../lib/windows/windowPlacement.js';
   import {
     DDAY_CONTROL_BOUNDS,
-    DDAY_WIDGET_BOUNDS,
     computeDdayCounter,
     normalizeDdaySettings,
     normalizeDdayWidgetPrefs,
@@ -31,23 +31,47 @@
   } from '../../lib/dday/ddayModel.js';
   import {
     classifyControlLayout,
+    clamp,
     computeControlMetrics,
     controlMetricsToStyle,
   } from '../../lib/dday/ddayLayout.js';
   import {
+    applyControlWindowLimits,
     applyDdayWindowBounds,
     captureWindowGeometry,
     computeDoubleClickTarget,
-    computeWidgetSidePlacement,
+    findMonitorAtPoint,
+    resolveControlSizeLimits,
   } from '../../lib/dday/ddayWindowBounds.js';
+  import {
+    toggleDdayWidget,
+    watchDdayWidgetOpen,
+  } from '../../lib/dday/ddayWidgetWindow.js';
+  import {
+    controlThemeToStyle,
+    resolveControlThemeTokens,
+    resolveUiFontStack,
+  } from '../../lib/dday/ddayControlTheme.js';
+  import {
+    applyTodoOrder,
+    beginOrderOverlay,
+    createOrderOverlayState,
+    createRemovalGuard,
+    projectActiveDdays,
+    reconcileOverlayWithSnapshot,
+    settleOrderOverlay,
+  } from '../../lib/dday/ddaySort.js';
+  import { createVerticalDdaySort } from '../../lib/dday/ddayVerticalSort.js';
   import { formatDeadlineChip } from '../../lib/editor/richTextFormat.js';
   import { resolveMenuWidth } from '../../lib/windows/contextMenuLayout.js';
   import {
     DDAY_EVENTS,
+    buildWindowDdaySnapshot,
     collectAllNoteWindowsDdays,
     createDdaySettingsSection,
     createDdayWidgetSection,
     dispatchDdayCommand,
+    savePreviewWindows,
     subscribeDdayStore,
   } from '../../lib/dday/ddaySync.js';
   import ContextRibbonHeader from '../context-menu/ContextRibbonHeader.svelte';
@@ -66,10 +90,39 @@
   /** @type {{ preview?: boolean }} */
   let { preview = false } = $props();
 
+  /** @returns {{ target?: string, hasBootstrap: boolean, appearance: { themeColor?: string, isDarkMode?: boolean, uiFontFamily?: string, uiFontSize?: number } | null }} */
+  function parseBootstrapSearch() {
+    if (typeof location === 'undefined') return { hasBootstrap: false, appearance: null };
+    const p = new URLSearchParams(location.search);
+    const target = p.get('ddayCtrlTarget') || undefined;
+    const themeColor = p.get('theme') || undefined;
+    const darkRaw = p.get('dark');
+    const isDarkMode = darkRaw === '1' ? true : darkRaw === '0' ? false : undefined;
+    const uiFontFamily = p.get('uifont') || undefined;
+    const fsNum = Number(p.get('fs') || p.get('font'));
+    const uiFontSize = Number.isFinite(fsNum) && fsNum >= 8 ? clamp(fsNum, 9, 16) : undefined;
+    const hasAp = Boolean(themeColor || isDarkMode !== undefined || uiFontFamily || uiFontSize !== undefined);
+    return {
+      target,
+      hasBootstrap: Boolean(target || hasAp),
+      appearance: hasAp ? { themeColor, isDarkMode, uiFontFamily, uiFontSize } : null,
+    };
+  }
+
+  const bootstrap = parseBootstrapSearch();
+
   /** @type {import('../../lib/dday/ddaySync.js').DdayWindowSnapshot[]} */
   let windows = $state([]);
-  let targetLabel = $state('main');
+  let targetLabel = $state(bootstrap.target || 'main');
+  let initialAppearance = $state(
+    /** @type {{ themeColor?: string, isDarkMode?: boolean, uiFontFamily?: string, uiFontSize?: number } | null} */ (
+      bootstrap.appearance
+    ),
+  );
   let todayKey = $state(todayDateKey());
+
+  /** @type {import('../../lib/toolkit/appearance.js').CustomFont[]} */
+  let customFonts = $state([]);
 
   /** @type {import('../../lib/dday/ddayModel.js').DdaySettings} */
   let settings = $state(normalizeDdaySettings(undefined));
@@ -85,31 +138,50 @@
   /** @type {string | null} */
   let focusDdayId = $state(null);
 
+  let previewThemeOverride = $state(/** @type {string | null} */ (null));
   let previewDarkOverride = $state(/** @type {boolean | null} */ (null));
+  let previewFontFamilyOverride = $state(/** @type {string | null} */ (null));
   let previewFontOverride = $state(/** @type {number | null} */ (null));
   let previewWidthOverride = $state(/** @type {number | null} */ (null));
   let previewHeightOverride = $state(/** @type {number | null} */ (null));
+  let previewNativeFrame = $state(false);
+  let previewShowHandles = $state(false);
 
   /** @type {{ item: import('../../lib/dday/ddayModel.js').DdayItem, x: number, y: number } | null} */
   let contextMenu = $state(null);
   /** @type {HTMLDivElement | null} */
   let shellEl = $state(null);
   /** @type {HTMLDivElement | null} */
+  let scrollEl = $state(null);
+  /** @type {HTMLDivElement | null} */
   let ctxEl = $state(null);
 
-  let shellW = $state(372);
-  let shellH = $state(572);
+  let shellW = $state(DDAY_CONTROL_BOUNDS.defaultWidth);
+  let shellH = $state(DDAY_CONTROL_BOUNDS.defaultHeight);
   let committedLayout = $state(/** @type {import('../../lib/dday/ddayLayout.js').ControlLayoutState | null} */ (null));
   let ready = $state(false);
   let closing = $state(false);
   let windowTransitioning = false;
   let pinBusy = $state(false);
+  let widgetOpen = $state(false);
+  let widgetBusy = $state(false);
   /** @type {ReturnType<typeof setTimeout> | null} */
   let saveGeomTimer = null;
+  let scaleSuppressUntil = 0;
+  let prevStableGeomKey = '';
+  let lastMonitorKey = '';
 
   let noticeText = $state('');
   /** @type {ReturnType<typeof setTimeout> | null} */
   let noticeTimer = null;
+
+  // 표시 순서 오버레이 + 드래그 프리뷰 + 낙관적 완료 숨김
+  let orderOverlayState = $state(createOrderOverlayState());
+  /** @type {readonly string[] | null} */
+  let previewOrder = $state(null);
+  let completingIds = $state(/** @type {Set<string>} */ (new Set()));
+
+  const removalGuard = createRemovalGuard({ now: () => performance.now() });
 
   /** @param {string} msg */
   function showNotice(msg) {
@@ -143,10 +215,23 @@
   const currentWindowSnap = $derived(
     windows.find((w) => w.label === targetLabel) || windows[0] || null,
   );
-  const dark = $derived(previewDarkOverride ?? currentWindowSnap?.isDarkMode ?? false);
-  const themeColor = $derived(currentWindowSnap?.themeColor || 'amber');
-  const accent = $derived(getThemeAccent(themeColor, dark));
-  const uiFontSize = $derived(previewFontOverride ?? currentWindowSnap?.uiFontSize ?? 10);
+  const dark = $derived(
+    previewDarkOverride ?? currentWindowSnap?.isDarkMode ?? initialAppearance?.isDarkMode ?? false,
+  );
+  const themeColor = $derived(
+    previewThemeOverride ?? currentWindowSnap?.themeColor ?? initialAppearance?.themeColor ?? 'amber',
+  );
+  const uiFontFamily = $derived(
+    previewFontFamilyOverride ?? currentWindowSnap?.uiFontFamily ?? initialAppearance?.uiFontFamily ?? '메이플스토리 L',
+  );
+  const uiFontSize = $derived(
+    previewFontOverride ?? currentWindowSnap?.uiFontSize ?? initialAppearance?.uiFontSize ?? 10,
+  );
+
+  const themeTokens = $derived(resolveControlThemeTokens(themeColor, dark));
+  const themeStyle = $derived(controlThemeToStyle(themeTokens));
+  const accent = $derived(themeTokens.accentInk);
+  const uiFontStack = $derived(resolveUiFontStack(uiFontFamily, BUILTIN_FONTS, customFonts));
 
   const activeItems = $derived.by(() =>
     (currentWindowSnap?.ddayItems || [])
@@ -154,8 +239,15 @@
       .slice()
       .sort((a, b) => a.order - b.order),
   );
+  const visibleBaseActive = $derived(activeItems.filter((d) => !completingIds.has(d.id)));
+  const activeOverlayIds = $derived(orderOverlayState.byLabel[targetLabel]?.ids ?? null);
+  const displayedActiveItems = $derived(projectActiveDdays(visibleBaseActive, activeOverlayIds));
+  const renderActiveItems = $derived(
+    previewOrder ? projectActiveDdays(displayedActiveItems, previewOrder) : displayedActiveItems,
+  );
+
   const headerGlyphState = $derived(
-    resolveControlGlyphState(activeItems, todayKey, { themeColor, dark }),
+    resolveControlGlyphState(displayedActiveItems, todayKey, { themeColor, dark }),
   );
   const idleGlyphState = $derived(
     resolveControlGlyphState([], todayKey, { themeColor, dark }),
@@ -163,7 +255,7 @@
   const archivedItems = $derived.by(() =>
     (currentWindowSnap?.ddayItems || []).filter((d) => d.status === 'archived'),
   );
-  const bannerItems = $derived(activeItems.filter((d) => d.showInBanner));
+  const bannerItems = $derived(displayedActiveItems.filter((d) => d.showInBanner));
   const editingItem = $derived(
     editingDdayId ? activeItems.find((d) => d.id === editingDdayId) || null : null,
   );
@@ -179,7 +271,7 @@
     classifyControlLayout({
       width: shellW,
       height: shellH,
-      itemCount: activeItems.length,
+      itemCount: displayedActiveItems.length,
       archiveCount: archivedItems.length,
       prev: committedLayout,
     }),
@@ -199,13 +291,49 @@
     const h = previewHeightOverride || DDAY_CONTROL_BOUNDS.defaultHeight;
     return `width: ${previewWidthOverride}px; height: ${h}px;`;
   });
+  const hasPreviewFrame = $derived(
+    (preview || !isTauri()) && !previewNativeFrame && Boolean(previewFrameStyle),
+  );
+  const sortDisabled = $derived(
+    subView !== 'main' || activeTab !== 'list' || displayedActiveItems.length < 2,
+  );
+  const canDragSort = $derived(!sortDisabled && displayedActiveItems.length >= 2);
+
+  // 세로 스마트 정렬 엔진
+  const ddaySorter = createVerticalDdaySort({
+    getIds: () => displayedActiveItems.map((d) => d.id),
+    isDisabled: () => sortDisabled,
+    onpreview: (ids) => {
+      previewOrder = ids;
+    },
+    oncommit: (initialIds, nextIds) => {
+      void submitReorder(currentWindowSnap?.label || targetLabel, initialIds, nextIds);
+    },
+    onpointerdragstart: () => {
+      contextMenu = null;
+    },
+    getScrollContainer: () => scrollEl,
+  });
+
+  // 표시 순서·화면·모드 전환 시 진행 중이던 드래그가 어긋나면 안전하게 취소합니다.
+  $effect(() => {
+    ddaySorter.sync();
+  });
+
+  // 창별 등록 글꼴(커스텀 .ttf/.otf)이 선택되면 이 WebView 문서에도 동적으로 적재합니다.
+  $effect(() => {
+    if (!isTauri()) return;
+    const match = customFonts.find((f) => f.name === uiFontFamily);
+    if (match) {
+      void registerFontFace(match.name, match.path);
+    }
+  });
 
   // 컨텍스트 메뉴가 열려 있는 동안 최신 항목 상태로 유지
   const activeContextItem = $derived.by(() => {
     if (!contextMenu) return null;
-    return activeItems.find((d) => d.id === contextMenu?.item.id) || null;
+    return displayedActiveItems.find((d) => d.id === contextMenu?.item.id) || null;
   });
-  const ctxSurface = $derived(dark ? '#242730' : (getTidyTheme(themeColor)?.tidy?.bg || '#ffffff'));
   const ctxWidth = $derived(
     Math.min(resolveMenuWidth('ctrl-ctx', uiFontSize), Math.max(206, shellW - 16)),
   );
@@ -217,6 +345,7 @@
       editingDdayId = null;
     }
   });
+
   const activeContextCounter = $derived(
     activeContextItem ? computeDdayCounter(activeContextItem, todayKey) : null,
   );
@@ -254,7 +383,28 @@
     if (!activeContextItem) return [];
     const item = activeContextItem;
     const isLinked = item.linkedTodoId !== null;
-    return [
+    const itemIdx = displayedActiveItems.findIndex((d) => d.id === item.id);
+    /** @type {import('../context-menu/ContextTileGrid.svelte').default extends never ? any : any[]} */
+    const tiles = [];
+
+    if (itemIdx > 0) {
+      tiles.push({
+        id: 'move-top',
+        icon: /** @type {const} */ ('chevUp'),
+        label: '맨 위로',
+        tone: /** @type {const} */ ('accent'),
+        title: '대표 배너(1순위)로 올리기',
+        onclick: () => {
+          const label = currentWindowSnap?.label || targetLabel;
+          const ids = displayedActiveItems.map((d) => d.id);
+          const nextIds = [item.id, ...ids.filter((id) => id !== item.id)];
+          contextMenu = null;
+          void submitReorder(label, ids, nextIds);
+        },
+      });
+    }
+
+    tiles.push(
       {
         id: 'edit',
         icon: /** @type {const} */ ('pencil'),
@@ -274,8 +424,8 @@
         tone: /** @type {const} */ ('ok'),
         title: '완료 처리 (아카이브)',
         onclick: () => {
-          void handleComplete(item.id);
           contextMenu = null;
+          void handleComplete(item.id);
         },
       },
       {
@@ -293,7 +443,8 @@
           });
         },
       },
-    ];
+    );
+    return tiles;
   });
 
   // 컨텍스트 메뉴 안에서도 방향키·Tab·Home·End 탐색을 지원합니다.
@@ -320,9 +471,19 @@
     }
   }
 
+  /** @param {import('../../lib/dday/ddaySync.js').DdayWindowSnapshot | undefined} snap */
+  function activeIdsOfSnapshot(snap) {
+    return (snap?.ddayItems || [])
+      .filter((d) => d.status === 'active')
+      .slice()
+      .sort((a, b) => a.order - b.order)
+      .map((d) => d.id);
+  }
+
   /** @param {string} label @param {import('../../lib/dday/ddaySync.js').DdayWindowSnapshot | undefined} nextSnap */
   function mergeSnapshot(label, nextSnap) {
     if (!nextSnap) return;
+    orderOverlayState = reconcileOverlayWithSnapshot(orderOverlayState, label, activeIdsOfSnapshot(nextSnap));
     const idx = windows.findIndex((w) => w.label === label);
     if (idx >= 0) {
       windows = windows.map((w, i) => (i === idx ? nextSnap : w));
@@ -339,9 +500,64 @@
     return res;
   }
 
-  /** @param {{ targetLabel?: string, focusDdayId?: string | null, editDdayId?: string | null, initialTab?: 'list'|'settings'|'archive', openCreate?: boolean }} payload */
+  /**
+   * 비동기 reorder IPC를 표시 순서 오버레이 리듀서로 조율해 되튐·잠금·동시 편집 유실을 막습니다.
+   * @param {string} label
+   * @param {readonly string[]} initialIds
+   * @param {readonly string[]} nextIds
+   */
+  async function submitReorder(label, initialIds, nextIds) {
+    const valid = applyTodoOrder(
+      initialIds.map((id) => ({ id })),
+      initialIds,
+      nextIds,
+    );
+    if (!valid) return;
+
+    const started = beginOrderOverlay(orderOverlayState, label, nextIds);
+    orderOverlayState = started.state;
+
+    const res = await dispatchDdayCommand(label, 'reorder', { orderedIds: [...nextIds] }, settings);
+    const ackActiveIds = res.snapshot ? activeIdsOfSnapshot(res.snapshot) : null;
+
+    // settle은 mergeSnapshot 전에 실행해 최신 토큰 일치를 정확히 판정합니다.
+    const settled = settleOrderOverlay(orderOverlayState, {
+      label,
+      token: started.token,
+      ok: Boolean(res?.ok),
+      ackActiveIds,
+    });
+    orderOverlayState = settled.state;
+
+    if (res.snapshot) {
+      mergeSnapshot(label, res.snapshot);
+    }
+
+    if (settled.notifyFailure) {
+      showNotice(
+        res?.ok
+          ? '잠금 상태라 D-Day 순서를 변경하지 못했어요'
+          : '순서를 저장하지 못해 원래 순서로 표시해요',
+      );
+    }
+  }
+
+  /** @param {{ targetLabel?: string, focusDdayId?: string | null, editDdayId?: string | null, initialTab?: 'list'|'settings'|'archive', openCreate?: boolean, appearance?: { themeColor?: string, isDarkMode?: boolean, uiFontFamily?: string, uiFontSize?: number } | null }} payload */
   function applyTargetPayload(payload) {
     if (!payload) return;
+    if (payload.appearance) {
+      initialAppearance = {
+        themeColor: payload.appearance.themeColor ?? initialAppearance?.themeColor,
+        isDarkMode:
+          typeof payload.appearance.isDarkMode === 'boolean'
+            ? payload.appearance.isDarkMode
+            : initialAppearance?.isDarkMode,
+        uiFontFamily: payload.appearance.uiFontFamily ?? initialAppearance?.uiFontFamily,
+        uiFontSize: Number.isFinite(Number(payload.appearance.uiFontSize))
+          ? Number(payload.appearance.uiFontSize)
+          : initialAppearance?.uiFontSize,
+      };
+    }
     if (payload.targetLabel) targetLabel = payload.targetLabel;
     if (payload.focusDdayId !== undefined) focusDdayId = payload.focusDdayId;
     if (payload.editDdayId) {
@@ -364,11 +580,13 @@
       editingDdayId = null;
       subView = 'main';
     }
+    previewOrder = null;
     contextMenu = null;
   }
 
   /** @param {import('../../lib/dday/ddayModel.js').DdayItem} item @param {number} clientX @param {number} clientY @param {boolean} [viaKeyboard] */
   async function openRowContext(item, clientX, clientY, viaKeyboard = false) {
+    if (ddaySorter.isPointerGuardActive()) return;
     const box = shellEl?.getBoundingClientRect();
     const relX = box ? clientX - box.left : clientX;
     const relY = box ? clientY - box.top : clientY;
@@ -388,12 +606,65 @@
     }
   }
 
-  async function saveControlGeometry() {
+  /** @param {number} delayMs */
+  function scheduleSaveControlGeometry(delayMs = 350) {
+    if (windowTransitioning || closing) return;
+    if (saveGeomTimer) clearTimeout(saveGeomTimer);
+    saveGeomTimer = setTimeout(() => void saveControlGeometry(false), delayMs);
+  }
+
+  /** @param {boolean} [forceImmediate] */
+  async function saveControlGeometry(forceImmediate = false) {
+    if (!isTauri() || !ready || windowTransitioning || closing) return;
+    const now = performance.now();
+    if (!forceImmediate && now < scaleSuppressUntil) {
+      scheduleSaveControlGeometry(Math.ceil(scaleSuppressUntil - now) + 40);
+      return;
+    }
+    try {
+      const win = getCurrentWindow();
+      const captured = await captureWindowGeometry(win, DDAY_CONTROL_BOUNDS, { clampSize: true });
+      if (!captured) return;
+
+      // I11: DPI 배율 전환 직후 innerSize/scaleFactor 시점 차이로 인한 오저장을 막기 위해 2회 연속 일치 시에만 저장합니다.
+      const sizeKey = `${captured.width}x${captured.height}`;
+      if (!forceImmediate && sizeKey !== prevStableGeomKey) {
+        prevStableGeomKey = sizeKey;
+        scheduleSaveControlGeometry(140);
+        return;
+      }
+      prevStableGeomKey = sizeKey;
+      settingsSection?.mutate((cur) => ({ ...cur, controlGeometry: captured }));
+    } catch {}
+  }
+
+  async function refreshMonitorLimitsOnMove() {
     if (!isTauri() || !ready || windowTransitioning || closing) return;
     try {
-      const captured = await captureWindowGeometry(getCurrentWindow(), DDAY_CONTROL_BOUNDS);
-      if (captured) {
-        settingsSection?.mutate((cur) => ({ ...cur, controlGeometry: captured }));
+      const win = getCurrentWindow();
+      const [pos, size, scale, monitors] = await Promise.all([
+        win.outerPosition().catch(() => null),
+        win.innerSize().catch(() => null),
+        win.scaleFactor().catch(() => 1),
+        getMonitorGeometries(),
+      ]);
+      if (!pos || !size || !monitors.length) return;
+      const cx = pos.x + size.width / 2;
+      const cy = pos.y + size.height / 2;
+      const monitor = findMonitorAtPoint(cx, cy, monitors) || pickPrimaryMonitor(monitors);
+      if (!monitor) return;
+      const mKey = `${monitor.bounds.x},${monitor.bounds.y},${monitor.bounds.width}x${monitor.bounds.height}@${monitor.scale}`;
+      if (mKey !== lastMonitorKey) {
+        lastMonitorKey = mKey;
+        const limits = await applyControlWindowLimits(win, monitor, DDAY_CONTROL_BOUNDS);
+        const factor = Number(scale) > 0 ? Number(scale) : 1;
+        const logW = Math.round(size.width / factor);
+        const logH = Math.round(size.height / factor);
+        if (logW > limits.maxWidth || logH > limits.maxHeight) {
+          await win
+            .setSize(new LogicalSize(Math.min(logW, limits.maxWidth), Math.min(logH, limits.maxHeight)))
+            .catch(() => {});
+        }
       }
     } catch {}
   }
@@ -431,6 +702,7 @@
   async function toggleControlSize() {
     if (windowTransitioning || closing) return;
     contextMenu = null;
+    ddaySorter.cancel();
     if (!isTauri()) {
       if (layout.wideEdit) {
         previewWidthOverride = DDAY_CONTROL_BOUNDS.defaultWidth;
@@ -453,6 +725,10 @@
         win.scaleFactor().catch(() => 1),
         getMonitorGeometries(),
       ]);
+      const cx = pos && size ? pos.x + size.width / 2 : null;
+      const cy = pos && size ? pos.y + size.height / 2 : null;
+      const curMonitor = findMonitorAtPoint(cx, cy, monitors) || pickPrimaryMonitor(monitors);
+      await applyControlWindowLimits(win, curMonitor, DDAY_CONTROL_BOUNDS);
       const target = computeDoubleClickTarget({
         currentPos: pos ? { x: pos.x, y: pos.y } : null,
         currentSize: size ? { width: size.width, height: size.height } : null,
@@ -469,7 +745,7 @@
     } finally {
       setTimeout(() => {
         windowTransitioning = false;
-        void saveControlGeometry();
+        void saveControlGeometry(true);
       }, 100);
     }
   }
@@ -478,6 +754,7 @@
     if (closing) return;
     closing = true;
     if (saveGeomTimer) clearTimeout(saveGeomTimer);
+    ddaySorter.cancel();
     if (!isTauri()) {
       window.close();
       return;
@@ -485,11 +762,13 @@
     try {
       const withTimeout = (/** @type {Promise<unknown>} */ p, ms = 400) =>
         Promise.race([p.catch(() => {}), new Promise((resolve) => setTimeout(resolve, ms))]);
-      // closing = true 이전 순간의 크기를 저장하기 위해 직접 캡처합니다.
-      const captured = await Promise.race([
-        captureWindowGeometry(getCurrentWindow(), DDAY_CONTROL_BOUNDS).catch(() => null),
-        new Promise((resolve) => setTimeout(() => resolve(null), 250)),
-      ]);
+      const allowCapture = performance.now() >= scaleSuppressUntil;
+      const captured = allowCapture
+        ? await Promise.race([
+            captureWindowGeometry(getCurrentWindow(), DDAY_CONTROL_BOUNDS, { clampSize: true }).catch(() => null),
+            new Promise((resolve) => setTimeout(() => resolve(null), 250)),
+          ])
+        : null;
       if (captured) {
         settingsSection?.mutate((cur) => ({ ...cur, controlGeometry: captured }));
       }
@@ -501,48 +780,34 @@
     }
   }
 
-  async function launchWidget() {
+  async function handleToggleWidget() {
+    if (widgetBusy) return;
     if (!isTauri()) {
-      showNotice('프리뷰에서는 ?toolkit-preview=dday 로 위젯을 확인할 수 있어요');
+      const res = await toggleDdayWidget();
+      widgetOpen = res.open;
+      showNotice(
+        res.open
+          ? '위젯 ON (프리뷰는 ?toolkit-preview=dday 로 확인)'
+          : '데스크톱 D-Day 위젯을 닫았어요',
+      );
       return;
     }
+    widgetBusy = true;
     try {
-      const existing = await WebviewWindow.getByLabel('dday');
-      await openTool('dday');
-      const win = existing || (await WebviewWindow.getByLabel('dday'));
-      if (win) {
-        // 처음 띄울 때 컨트롤 타워(항상 위) 뒤에 가리지 않도록 옆자리에 배치하고 포커스를 줍니다.
-        if (!existing && !widgetPrefs.geometry) {
-          try {
-            const ctrlWin = getCurrentWindow();
-            const [cPos, cSize, scale, monitors] = await Promise.all([
-              ctrlWin.outerPosition(),
-              ctrlWin.outerSize(),
-              ctrlWin.scaleFactor(),
-              getMonitorGeometries(),
-            ]);
-            const widgetSize = {
-              width: Math.round(DDAY_WIDGET_BOUNDS.defaultWidth * (scale || 1)),
-              height: Math.round(DDAY_WIDGET_BOUNDS.defaultHeight * (scale || 1)),
-            };
-            const side = computeWidgetSidePlacement({
-              controlPos: { x: cPos.x, y: cPos.y },
-              controlSize: { width: cSize.width, height: cSize.height },
-              widgetSize,
-              monitors,
-            });
-            if (side) {
-              await win.setPosition(new PhysicalPosition(side.x, side.y)).catch(() => {});
-            }
-          } catch {}
-        }
-        await win.unminimize().catch(() => {});
-        await win.show().catch(() => {});
-        await win.setFocus().catch(() => {});
+      const res = await toggleDdayWidget({
+        preferSideOfCurrentWindow: true,
+        hasSavedGeometry: Boolean(widgetPrefs.geometry),
+      });
+      widgetOpen = res.open;
+      if (!res.ok) {
+        showNotice('D-Day 위젯을 전환하지 못했어요');
+      } else {
+        showNotice(res.open ? '데스크톱 D-Day 위젯을 띄웠어요' : '데스크톱 D-Day 위젯을 닫았어요');
       }
-      showNotice('데스크톱 D-Day 위젯을 띄웠어요');
     } catch {
-      showNotice('D-Day 위젯을 열지 못했어요');
+      showNotice('D-Day 위젯을 전환하지 못했어요');
+    } finally {
+      widgetBusy = false;
     }
   }
 
@@ -556,10 +821,37 @@
     widgetSection?.mutate((cur) => ({ ...cur, ...patch }));
   }
 
-  /** @param {string} id */
-  async function handleComplete(id) {
-    await sendCommand('complete', { ddayId: id });
-    showNotice('완료 아카이브로 이동했어요');
+  /** @param {string} id @param {MouseEvent} [event] */
+  async function handleComplete(id, event = undefined) {
+    const isPointerClick = Boolean(event && event.detail !== 0);
+    if (isPointerClick && event && removalGuard.active(event.clientX, event.clientY)) {
+      return;
+    }
+    if (completingIds.has(id)) return;
+
+    completingIds = new Set([...completingIds, id]);
+    if (isPointerClick && event) {
+      removalGuard.start(event.clientX, event.clientY);
+    }
+
+    try {
+      const res = await sendCommand('complete', { ddayId: id });
+      const stillActive = Boolean(res?.snapshot?.ddayItems?.some((d) => d.id === id && d.status === 'active'));
+      if (!res?.ok || stillActive) {
+        const next = new Set(completingIds);
+        next.delete(id);
+        completingIds = next;
+        showNotice(res?.ok ? '잠금 상태라 완료 처리하지 못했어요' : '완료 처리를 저장하지 못했어요');
+        return;
+      }
+      showNotice('완료 아카이브로 이동했어요');
+    } finally {
+      if (completingIds.has(id)) {
+        const next = new Set(completingIds);
+        next.delete(id);
+        completingIds = next;
+      }
+    }
   }
 
   /** @param {string} id */
@@ -572,17 +864,6 @@
   /** @param {string} id @param {'showInTodo' | 'showInBanner' | 'showInWidget'} channel @param {boolean} nextValue */
   async function handleToggleChannel(id, channel, nextValue) {
     await sendCommand('update', { ddayId: id, patch: { [channel]: nextValue } });
-  }
-
-  /** @param {string} id @param {-1 | 1} dir */
-  async function handleMove(id, dir) {
-    const ids = activeItems.map((d) => d.id);
-    const idx = ids.indexOf(id);
-    const swap = idx + dir;
-    if (idx < 0 || swap < 0 || swap >= ids.length) return;
-    const next = [...ids];
-    [next[idx], next[swap]] = [next[swap], next[idx]];
-    await sendCommand('reorder', { orderedIds: next });
   }
 
   /** @param {any} draft */
@@ -612,6 +893,12 @@
   function handleKeydown(e) {
     if (e.defaultPrevented) return;
     if (e.key === 'Escape') {
+      if (ddaySorter.isActive()) {
+        e.preventDefault();
+        e.stopPropagation();
+        ddaySorter.cancel(e);
+        return;
+      }
       if (contextMenu) {
         e.preventDefault();
         contextMenu = null;
@@ -623,8 +910,74 @@
         editingDdayId = null;
         return;
       }
+      if (ddaySorter.isPointerHeld()) {
+        e.preventDefault();
+        return;
+      }
       if (isTauri()) closeModal();
     }
+  }
+
+  /** QA 프리뷰용 결정적 시드 스냅샷 생성 (?items= & ?windows=)
+   * @param {number} itemCount
+   * @param {number} windowCount
+   */
+  function seedQaPreviewWindows(itemCount, windowCount) {
+    const base = new Date();
+    const off = (/** @type {number} */ d) => {
+      const x = new Date(base.getFullYear(), base.getMonth(), base.getDate() + d);
+      return todayDateKey(x);
+    };
+    const tones = /** @type {const} */ (['accent', 'emerald', 'sky', 'lilac', 'rose', 'gold']);
+    const icons = /** @type {const} */ (['puzzle', 'snow', 'sparkle', 'trophy', 'flag', 'book', 'star', 'clover']);
+    const items = Array.from({ length: Math.max(0, itemCount) }, (_, i) => ({
+      id: `qa-d${i + 1}`,
+      title: i === 0 ? 'AI 분야 동아리 운영일지 및 강사비 정산 보고' : `D-Day 일정 항목 ${i + 1}`,
+      date: off((i + 1) * 4 - 2),
+      startDate: off(-10),
+      countMode: 'countdown',
+      repeatYearly: i === 2,
+      icon: icons[i % icons.length],
+      tone: tones[i % tones.length],
+      status: 'active',
+      completedAt: null,
+      linkedTodoId: i % 2 === 0 ? `qa-t${i + 1}` : null,
+      showInTodo: i % 2 === 0,
+      showInBanner: true,
+      showInWidget: true,
+      order: i,
+    }));
+    const archived = [
+      {
+        id: 'qa-a1',
+        title: '완료된 기초학력 운영 계획서 제출',
+        date: off(-6),
+        startDate: off(-20),
+        countMode: 'countdown',
+        repeatYearly: false,
+        icon: 'flag',
+        tone: 'accent',
+        status: 'archived',
+        completedAt: off(-5),
+        linkedTodoId: null,
+        showInTodo: false,
+        showInBanner: true,
+        showInWidget: true,
+        order: 0,
+      },
+    ];
+    const extraSpecs = [
+      { label: 'main', title: '기본 할 일', themeColor: 'amber', isDarkMode: false },
+      { label: 'note-1', title: '1학년 프로젝트 메모', themeColor: 'green', isDarkMode: false },
+      { label: 'note-2', title: '생활지도 노트', themeColor: 'periwinkle', isDarkMode: true },
+    ];
+    return extraSpecs.slice(0, Math.max(1, windowCount)).map((spec, idx) =>
+      buildWindowDdaySnapshot(spec.label, {
+        ...spec,
+        ddayBannerMode: 'bento',
+        ddayItems: idx === 0 ? [...items, ...archived] : items.slice(0, 2),
+      }),
+    );
   }
 
   /** @type {ReturnType<typeof createDdaySettingsSection> | null} */
@@ -641,15 +994,35 @@
       else offs.push(fn);
     };
 
+    let qaSeedWindows = /** @type {import('../../lib/dday/ddaySync.js').DdayWindowSnapshot[] | null} */ (null);
+
     if (preview || !isTauri()) {
       const params = new URLSearchParams(location.search);
+      if (params.get('frame') === 'native') previewNativeFrame = true;
+      if (params.get('handles') === '1') previewShowHandles = true;
+      if (params.has('theme')) previewThemeOverride = params.get('theme') || null;
       if (params.has('dark')) previewDarkOverride = params.get('dark') !== '0';
-      const fontParam = Number(params.get('font'));
+      if (params.has('uifont')) previewFontFamilyOverride = params.get('uifont') || null;
+      const fontParam = Number(params.get('fs') || params.get('font'));
       if (Number.isFinite(fontParam) && fontParam >= 9) previewFontOverride = fontParam;
+      const limits = resolveControlSizeLimits(null, DDAY_CONTROL_BOUNDS);
       const wParam = Number(params.get('w'));
       const hParam = Number(params.get('h'));
-      if (Number.isFinite(wParam) && wParam >= 280) previewWidthOverride = Math.round(wParam);
-      if (Number.isFinite(hParam) && hParam >= 360) previewHeightOverride = Math.round(hParam);
+      if (Number.isFinite(wParam) && wParam > 0) {
+        previewWidthOverride = Math.round(clamp(wParam, limits.minWidth, limits.maxWidth));
+      }
+      if (Number.isFinite(hParam) && hParam > 0) {
+        previewHeightOverride = Math.round(clamp(hParam, limits.minHeight, limits.maxHeight));
+      }
+      if (params.has('items') || params.has('windows')) {
+        const ic = Number(params.get('items') ?? 4);
+        const wc = Number(params.get('windows') ?? 1);
+        qaSeedWindows = seedQaPreviewWindows(
+          Number.isFinite(ic) ? ic : 4,
+          Number.isFinite(wc) ? wc : 1,
+        );
+        savePreviewWindows(qaSeedWindows);
+      }
       const tabParam = params.get('tab');
       if (tabParam === 'settings') activeTab = 'settings';
       else if (tabParam === 'archive') {
@@ -660,6 +1033,55 @@
       }
     }
 
+    if (!isTauri()) {
+      /** @type {any} */ (window).__ddayControlQA = {
+        getState: () => ({
+          targetLabel,
+          themeColor,
+          dark,
+          uiFontFamily,
+          uiFontSize,
+          uiFontStack,
+          themeTokens,
+          layout,
+          shellW,
+          shellH,
+          activeIds: displayedActiveItems.map((d) => d.id),
+          renderIds: renderActiveItems.map((d) => d.id),
+          bannerFirstId: bannerItems[0]?.id ?? null,
+          overlayState: orderOverlayState,
+          subView,
+          activeTab,
+          sortDisabled,
+          sortActive: ddaySorter.isActive(),
+          guardActive: ddaySorter.isPointerGuardActive(),
+          contextMenuOpen: Boolean(contextMenu),
+        }),
+        setIpcSimulation: (/** @type {any} */ next) => {
+          /** @type {any} */ (window).__ddayPreviewIpc = next || {};
+        },
+        openContextOnIndex: (/** @type {number} */ idx = 0) => {
+          const item = displayedActiveItems[idx];
+          if (item) void openRowContext(item, 140, 220, false);
+        },
+        resetOrder: (/** @type {string[]} */ ids) => {
+          previewOrder = null;
+          orderOverlayState = createOrderOverlayState();
+          const cur = windows.find((w) => w.label === targetLabel);
+          if (cur && Array.isArray(ids)) {
+            const rank = new Map(ids.map((id, i) => [id, i]));
+            const nextItems = cur.ddayItems.map((d) =>
+              d.status === 'active' ? { ...d, order: rank.get(d.id) ?? d.order } : d,
+            );
+            const nextSnap = { ...cur, ddayItems: nextItems };
+            mergeSnapshot(targetLabel, nextSnap);
+            savePreviewWindows(windows);
+          }
+        },
+      };
+    }
+
+    // I9(c): shellW/shellH 초기값과 ResizeObserver를 모두 border-box 기준으로 단일화합니다.
     let ro = /** @type {ResizeObserver | null} */ (null);
     if (shellEl && typeof ResizeObserver !== 'undefined') {
       const syncSize = (/** @type {number} */ w, /** @type {number} */ h) => {
@@ -672,7 +1094,7 @@
         committedLayout = classifyControlLayout({
           width: w,
           height: h,
-          itemCount: activeItems.length,
+          itemCount: displayedActiveItems.length,
           archiveCount: archivedItems.length,
           prev: committedLayout,
         });
@@ -683,7 +1105,13 @@
       syncSize(initBox.width, initBox.height);
       ro = new ResizeObserver((entries) => {
         for (const entry of entries) {
-          syncSize(entry.contentRect.width, entry.contentRect.height);
+          const box = entry.borderBoxSize?.[0];
+          if (box && box.inlineSize > 0 && box.blockSize > 0) {
+            syncSize(box.inlineSize, box.blockSize);
+          } else if (shellEl) {
+            const rect = shellEl.getBoundingClientRect();
+            syncSize(rect.width, rect.height);
+          }
         }
       });
       ro.observe(shellEl);
@@ -699,6 +1127,10 @@
         if (!disposed) widgetPrefs = next;
       },
     });
+    const widgetWatcher = watchDdayWidgetOpen((open) => {
+      if (!disposed) widgetOpen = open;
+    });
+    register(() => widgetWatcher.dispose());
 
     const onFocus = () => { todayKey = todayDateKey(); };
     const dayTimer = setInterval(() => { todayKey = todayDateKey(); }, 60_000);
@@ -711,6 +1143,11 @@
     window.addEventListener('tidy-dday-preview-sync', onPreviewSync);
 
     void (async () => {
+      let resolveTarget = () => {};
+      const targetArrived = new Promise((res) => {
+        resolveTarget = () => res(undefined);
+      });
+
       try {
         await Promise.all([
           settingsSection.load().catch(() => {}),
@@ -718,13 +1155,20 @@
           collectAllNoteWindowsDdays()
             .then((list) => {
               if (!disposed && list.length > 0) {
-                windows = list;
-                if (!list.some((w) => w.label === targetLabel)) {
-                  targetLabel = list[0].label;
+                windows = qaSeedWindows || list;
+                if (!windows.some((w) => w.label === targetLabel)) {
+                  targetLabel = windows[0].label;
                 }
               }
             })
             .catch(() => {}),
+          isTauri()
+            ? watchCustomFonts((fonts) => {
+                if (!disposed) customFonts = fonts;
+              })
+                .then((off) => register(off))
+                .catch(() => {})
+            : Promise.resolve(),
         ]);
 
         try {
@@ -742,26 +1186,37 @@
           const win = getCurrentWindow();
           try {
             if (settings.controlGeometry) {
-              await applyDdayWindowBounds(win, settings.controlGeometry, DDAY_CONTROL_BOUNDS);
+              await applyDdayWindowBounds(win, settings.controlGeometry, DDAY_CONTROL_BOUNDS, {
+                enforceMaxSize: true,
+                disableMaximize: true,
+              });
             } else {
-              await win
-                .setMinSize(new LogicalSize(DDAY_CONTROL_BOUNDS.minWidth, DDAY_CONTROL_BOUNDS.minHeight))
-                .catch(() => {});
-              await ensureWindowOnScreen(win);
+              const monitors = await getMonitorGeometries();
+              const curPos = await win.outerPosition().catch(() => null);
+              const curMonitor = findMonitorAtPoint(curPos?.x, curPos?.y, monitors) || pickPrimaryMonitor(monitors);
+              await applyControlWindowLimits(win, curMonitor, DDAY_CONTROL_BOUNDS);
+              await ensureWindowOnScreen(win, monitors);
             }
           } catch {}
 
           await win.setAlwaysOnTop(settings.controlAlwaysOnTop).catch(() => {});
 
-          const scheduleSaveGeom = () => {
-            if (windowTransitioning || closing) return;
-            if (saveGeomTimer) clearTimeout(saveGeomTimer);
-            saveGeomTimer = setTimeout(() => void saveControlGeometry(), 350);
-          };
-
           try {
-            register(await win.onMoved(scheduleSaveGeom));
-            register(await win.onResized(scheduleSaveGeom));
+            register(
+              await win.onMoved(() => {
+                void refreshMonitorLimitsOnMove();
+                scheduleSaveControlGeometry(350);
+              }),
+            );
+            register(await win.onResized(() => scheduleSaveControlGeometry(350)));
+            register(
+              await win.onScaleChanged(() => {
+                // I11: DPI 배율 전환 중 setSize 루프 및 과도기 오측정 저장을 막습니다.
+                scaleSuppressUntil = performance.now() + 500;
+                prevStableGeomKey = '';
+                scheduleSaveControlGeometry(540);
+              }),
+            );
             register(
               await win.onCloseRequested((e) => {
                 e.preventDefault();
@@ -777,12 +1232,35 @@
             register(
               await win.listen(DDAY_EVENTS.setTarget, (ev) => {
                 applyTargetPayload(/** @type {any} */ (ev.payload));
+                resolveTarget();
               }),
             );
           } catch {}
 
           ready = true;
+          // C1: controlReady 발행 후 setTarget 도착(또는 부트스트랩 확인)과 글꼴 로드를 최대 350ms 기다린 뒤 show() 합니다.
           await emit(DDAY_EVENTS.controlReady, {}).catch(() => {});
+          await Promise.race([
+            targetArrived,
+            new Promise((r) => setTimeout(r, bootstrap.hasBootstrap ? 120 : 350)),
+          ]);
+          const customMatch = customFonts.find((f) => f.name === uiFontFamily);
+          if (customMatch) {
+            await Promise.race([
+              registerFontFace(customMatch.name, customMatch.path).catch(() => false),
+              new Promise((r) => setTimeout(r, 250)),
+            ]);
+          }
+          if (typeof document !== 'undefined' && document.fonts) {
+            await Promise.race([
+              Promise.allSettled([
+                document.fonts.load(`12px ${uiFontStack}`),
+                document.fonts.ready,
+              ]),
+              new Promise((r) => setTimeout(r, 350)),
+            ]);
+          }
+          await tick();
           await win.show().catch(() => {});
           await win.setFocus().catch(() => {});
         } else {
@@ -798,6 +1276,8 @@
 
     return () => {
       disposed = true;
+      ddaySorter.destroy();
+      removalGuard.clear();
       ro?.disconnect();
       offs.forEach((fn) => fn());
       clearInterval(dayTimer);
@@ -805,26 +1285,37 @@
       if (saveGeomTimer) clearTimeout(saveGeomTimer);
       window.removeEventListener('focus', onFocus);
       window.removeEventListener('tidy-dday-preview-sync', onPreviewSync);
+      if (!isTauri()) delete /** @type {any} */ (window).__ddayControlQA;
       settingsSection?.dispose();
       widgetSection?.dispose();
     };
   });
 </script>
 
-<svelte:window onkeydown={handleKeydown} onblur={() => (contextMenu = null)} />
+<svelte:window
+  onkeydown={handleKeydown}
+  onblur={() => {
+    contextMenu = null;
+    ddaySorter.cancel();
+  }}
+/>
 
-<div class="ctrl-host" class:is-preview={preview || !isTauri()} class:has-preview-frame={Boolean(previewFrameStyle)}>
+<div
+  class="ctrl-host"
+  class:is-preview={preview || !isTauri()}
+  class:has-preview-frame={hasPreviewFrame}
+  style={themeStyle}
+>
   <div
     bind:this={shellEl}
     class="ctrl-shell"
     class:is-compact={layout.compactWidth}
-    class:is-very-narrow={layout.veryNarrow}
     class:is-wide={layout.wideEdit}
     class:is-short={layout.shortHeight}
-    class:is-grid2={layout.listGrid2Col}
     data-scheme={dark ? 'dark' : 'light'}
+    data-theme={themeTokens.themeId}
     data-tier={layout.tier}
-    style="--dd-accent: {accent}; --ctrl-font-size: {metrics.fsBody}px; {metricsStyle}; {previewFrameStyle}"
+    style="--ui-font-family: {uiFontStack}; --global-font-family: {uiFontStack}; --ctrl-font-size: {metrics.fsBody}px; {metricsStyle}; {previewFrameStyle}"
     role="dialog"
     aria-label="D-Day 컨트롤 타워"
   >
@@ -897,7 +1388,9 @@
             type="button"
             class="ctrl-head-btn"
             aria-label={layout.wideEdit ? '기본 크기로 축소' : '넓게 보기'}
-            title={layout.wideEdit ? '기본 크기(380×580)로 복원' : '넓게 보기(560×640)'}
+            title={layout.wideEdit
+              ? `기본 크기(${DDAY_CONTROL_BOUNDS.defaultWidth}×${DDAY_CONTROL_BOUNDS.defaultHeight})로 복원`
+              : `넓게 보기(${DDAY_CONTROL_BOUNDS.wideWidth}×${DDAY_CONTROL_BOUNDS.wideHeight})`}
             onclick={() => void toggleControlSize()}
           >
             {#if layout.wideEdit}
@@ -922,7 +1415,7 @@
               aria-selected={targetLabel === w.label}
               class="ctrl-win-pill"
               class:on={targetLabel === w.label}
-              onclick={() => { targetLabel = w.label; focusDdayId = null; contextMenu = null; }}
+              onclick={() => { targetLabel = w.label; focusDdayId = null; previewOrder = null; contextMenu = null; }}
               title={stripHtmlToTitle(w.title, 20)}
             >
               {stripHtmlToTitle(w.title, 12)}
@@ -940,10 +1433,10 @@
             aria-selected={activeTab === 'list'}
             class="ctrl-tab"
             class:on={activeTab === 'list'}
-            onclick={() => { activeTab = 'list'; contextMenu = null; }}
+            onclick={() => { activeTab = 'list'; previewOrder = null; contextMenu = null; }}
           >
             <span>D-Day 목록</span>
-            <span class="ctrl-tab-badge tnum">{activeItems.length}</span>
+            <span class="ctrl-tab-badge tnum">{displayedActiveItems.length}</span>
           </button>
           <button
             type="button"
@@ -951,7 +1444,7 @@
             aria-selected={activeTab === 'settings'}
             class="ctrl-tab"
             class:on={activeTab === 'settings'}
-            onclick={() => { activeTab = 'settings'; contextMenu = null; }}
+            onclick={() => { activeTab = 'settings'; previewOrder = null; contextMenu = null; }}
           >
             <span>설정 · 보관</span>
             <span class="ctrl-tab-badge tnum">{archivedItems.length}</span>
@@ -959,7 +1452,7 @@
         </div>
       </div>
 
-      <div class="ctrl-scroll">
+      <div bind:this={scrollEl} class="ctrl-scroll">
         {#if activeTab === 'list'}
           <!-- 상단 배너 미니 프리뷰 & 모드 토글 -->
           <section class="ctrl-banner-box" aria-label="메모 상단 배너 설정">
@@ -1003,6 +1496,7 @@
                   items={bannerItems}
                   mode={currentWindowSnap?.ddayBannerMode ?? 'single'}
                   {todayKey}
+                  {themeColor}
                   {accent}
                   {dark}
                   compact={true}
@@ -1014,7 +1508,12 @@
           </section>
 
           <div class="ctrl-sec-head">
-            <span class="ctrl-sec-title">진행 중 <strong class="tnum">{activeItems.length}</strong></span>
+            <div class="ctrl-sec-left">
+              <span class="ctrl-sec-title">진행 중 <strong class="tnum">{displayedActiveItems.length}</strong></span>
+              {#if displayedActiveItems.length >= 2 && !layout.compactWidth}
+                <span class="ctrl-sort-hint">끌어서 순서 변경</span>
+              {/if}
+            </div>
             <button
               type="button"
               class="ctrl-add-btn"
@@ -1025,7 +1524,7 @@
             </button>
           </div>
 
-          {#if activeItems.length === 0}
+          {#if displayedActiveItems.length === 0}
             <div class="ctrl-empty">
               <span class="ctrl-empty-icon"><DdayControlGlyph state={idleGlyphState} size={22} /></span>
               <strong>등록된 D-Day가 아직 없어요</strong>
@@ -1040,23 +1539,35 @@
               </button>
             </div>
           {:else}
-            <div class="ctrl-list" role="list" aria-label="진행 중인 D-Day 목록">
-              {#each activeItems as item, idx (item.id)}
-                <DdayRowCard
-                  {item}
-                  {todayKey}
-                  {accent}
-                  {dark}
-                  forceCompact={compactCapsules}
-                  canMoveUp={idx > 0}
-                  canMoveDown={idx < activeItems.length - 1}
-                  highlighted={focusDdayId === item.id}
-                  oncomplete={handleComplete}
-                  ontogglechannel={handleToggleChannel}
-                  onedit={(id) => { editingDdayId = id; subView = 'edit'; }}
-                  onmove={handleMove}
-                  oncontextopen={openRowContext}
-                />
+            <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+            <div
+              class="ctrl-list"
+              role="list"
+              aria-label="진행 중인 D-Day 목록"
+              onpointermove={(e) => removalGuard.onPointerMove(e.clientX, e.clientY)}
+            >
+              {#each renderActiveItems as item, idx (item.id)}
+                <div
+                  class="dd-sort-item"
+                  role="listitem"
+                  data-dday-id={item.id}
+                  use:ddaySorter.row={{ id: item.id, index: idx, disabled: !canDragSort }}
+                >
+                  <DdayRowCard
+                    {item}
+                    {todayKey}
+                    {accent}
+                    {dark}
+                    forceCompact={compactCapsules}
+                    sortable={canDragSort}
+                    highlighted={focusDdayId === item.id}
+                    shouldBlockContextMenu={() => ddaySorter.isPointerGuardActive()}
+                    oncomplete={handleComplete}
+                    ontogglechannel={handleToggleChannel}
+                    onedit={(id) => { editingDdayId = id; subView = 'edit'; }}
+                    oncontextopen={openRowContext}
+                  />
+                </div>
               {/each}
             </div>
           {/if}
@@ -1078,11 +1589,25 @@
       </div>
 
       <footer class="ctrl-foot">
-        <button type="button" class="ctrl-widget-btn" onclick={launchWidget}>
+        <button
+          type="button"
+          class="ctrl-widget-btn"
+          class:is-open={widgetOpen}
+          aria-pressed={widgetOpen}
+          disabled={widgetBusy}
+          title={widgetOpen ? '클릭해 바탕화면 D-Day 위젯 닫기' : '바탕화면 D-Day 위젯 띄우기'}
+          onclick={handleToggleWidget}
+        >
+          {#if widgetOpen}<span class="ctrl-widget-dot" aria-hidden="true"></span>{/if}
           <LayoutGrid size={13} strokeWidth={2.2} />
-          <span>위젯 띄우기</span>
+          <span>{widgetOpen ? '위젯 켜짐' : '위젯 켜기'}</span>
         </button>
-        <button type="button" class="ctrl-done-btn" onclick={() => void closeModal()}>완료</button>
+        <button
+          type="button"
+          class="ctrl-done-btn"
+          title="창 닫기"
+          onclick={() => void closeModal()}
+        >완료</button>
       </footer>
     {/if}
 
@@ -1114,7 +1639,7 @@
         aria-label={`${activeContextItem.title} 빠른 메뉴`}
         onkeydown={handleContextKeydown}
         oncontextmenu={(e) => e.preventDefault()}
-        style="left: {contextMenu.x}px; top: {contextMenu.y}px; --surface: {ctxSurface}; --accent: {accent}; --ctx-width: {ctxWidth}px; font-size: {Math.max(9, uiFontSize)}pt;"
+        style="left: {contextMenu.x}px; top: {contextMenu.y}px; --surface: {themeTokens.bg}; --accent: {themeTokens.accentInk}; --ctx-accent-ink: {themeTokens.onAccent}; --ctx-width: {ctxWidth}px; font-size: {Math.max(9, uiFontSize)}pt;"
       >
         <ContextRibbonHeader
           leftChip={activeContextCounter?.label || 'D-Day'}
@@ -1140,26 +1665,45 @@
 
   <DdayResizeHandles
     native={isTauri()}
-    edgeSize={5}
-    cornerSize={12}
+    debugShow={previewShowHandles}
+    edgeSize={4}
+    cornerSize={10}
     onResizeStart={() => {
       contextMenu = null;
+      ddaySorter.cancel();
     }}
   />
 </div>
 
 <style>
-  .ctrl-host {
+  :global(html),
+  :global(body),
+  :global(#app) {
     width: 100%;
-    height: 100dvh;
-    padding: 4px;
+    height: 100%;
+    background: transparent !important;
+    margin: 0;
+    padding: 0;
+    overflow: hidden;
+  }
+
+  .ctrl-host {
+    position: fixed;
+    inset: 0;
+    padding: 0;
+    margin: 0;
     box-sizing: border-box;
     display: flex;
     justify-content: center;
     align-items: stretch;
+    background: transparent;
+    overflow: hidden;
   }
   .ctrl-host.is-preview.has-preview-frame {
-    background: #ece7db;
+    position: relative;
+    width: 100vw;
+    height: 100vh;
+    background: var(--dd-preview-stage, #ece7db);
     padding: 18px;
     align-items: center;
   }
@@ -1174,22 +1718,31 @@
     height: 100%;
     min-width: 0;
     min-height: 0;
-    border-radius: 18px;
-    background: #fdfaf3;
-    color: #1e2430;
-    border: 1px solid rgba(15, 23, 42, 0.1);
-    box-shadow: 0 12px 32px rgba(15, 23, 42, 0.16);
+    border-radius: 16px;
+    background: var(--dd-ctrl-bg, #fdfaf3);
+    color: var(--dd-ctrl-ink, #1e2430);
+    border: 1px solid var(--dd-ctrl-border, #e8ddb7);
+    box-shadow: none;
     display: flex;
     flex-direction: column;
     overflow: hidden;
+    isolation: isolate;
+    color-scheme: light;
+    font-family: var(--ui-font-family, '메이플스토리 L', sans-serif);
     font-size: var(--ctrl-font-size, 12px);
     user-select: none;
   }
   .ctrl-shell[data-scheme='dark'] {
-    background: #1b1e26;
-    color: #eef2f9;
-    border-color: rgba(255, 255, 255, 0.12);
-    box-shadow: 0 16px 38px rgba(0, 0, 0, 0.45);
+    color-scheme: dark;
+  }
+  .ctrl-shell :global(button),
+  .ctrl-shell :global(input),
+  .ctrl-shell :global(select),
+  .ctrl-shell :global(textarea) {
+    font-family: inherit;
+  }
+  .ctrl-host.is-preview.has-preview-frame .ctrl-shell {
+    box-shadow: 0 16px 38px rgba(15, 23, 42, 0.16);
   }
 
   .tnum {
@@ -1217,15 +1770,11 @@
     width: clamp(26px, calc(var(--dd-icon-sz, 26px) * 1.12), 34px);
     height: clamp(26px, calc(var(--dd-icon-sz, 26px) * 1.12), 34px);
     border-radius: 10px;
-    background: color-mix(in srgb, var(--dd-accent) 16%, #ffffff);
-    color: var(--dd-accent);
+    background: var(--dd-accent-soft);
+    color: var(--dd-accent-ink);
     display: grid;
     place-items: center;
     flex-shrink: 0;
-  }
-  .ctrl-shell[data-scheme='dark'] .ctrl-logo {
-    background: color-mix(in srgb, var(--dd-accent) 26%, #242836);
-    color: #ffffff;
   }
 
   .ctrl-head-copy {
@@ -1242,16 +1791,14 @@
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+    color: var(--dd-ctrl-ink);
   }
   .ctrl-head-copy small {
     font-size: var(--dd-fs-sub, 10px);
-    color: #64748b;
+    color: var(--dd-ctrl-sub);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-  }
-  .ctrl-shell[data-scheme='dark'] .ctrl-head-copy small {
-    color: #94a3b8;
   }
 
   .ctrl-head-actions {
@@ -1267,7 +1814,7 @@
     border: 0;
     border-radius: 8px;
     background: transparent;
-    color: #64748b;
+    color: var(--dd-ctrl-muted);
     display: grid;
     place-items: center;
     padding: 0;
@@ -1279,27 +1826,16 @@
     pointer-events: none;
   }
   .ctrl-head-btn:hover {
-    background: rgba(15, 23, 42, 0.07);
-    color: #1e2430;
+    background: var(--dd-ctrl-surface-muted);
+    color: var(--dd-ctrl-ink);
   }
   .ctrl-head-btn.pin-on {
-    color: var(--dd-accent);
-    background: color-mix(in srgb, var(--dd-accent) 13%, transparent);
+    color: var(--dd-accent-ink);
+    background: var(--dd-accent-soft);
   }
   .ctrl-head-btn.ctrl-close:hover {
     background: rgba(225, 29, 72, 0.12);
     color: #e11d48;
-  }
-  .ctrl-shell[data-scheme='dark'] .ctrl-head-btn {
-    color: #94a3b8;
-  }
-  .ctrl-shell[data-scheme='dark'] .ctrl-head-btn:hover {
-    background: rgba(255, 255, 255, 0.1);
-    color: #ffffff;
-  }
-  .ctrl-shell[data-scheme='dark'] .ctrl-head-btn.pin-on {
-    color: #ffffff;
-    background: color-mix(in srgb, var(--dd-accent) 30%, transparent);
   }
   .ctrl-shell[data-scheme='dark'] .ctrl-head-btn.ctrl-close:hover {
     background: rgba(251, 113, 133, 0.22);
@@ -1319,9 +1855,9 @@
     height: 23px;
     padding: 0 9px;
     border-radius: 999px;
-    border: 1px solid rgba(15, 23, 42, 0.08);
-    background: #ffffff;
-    color: #64748b;
+    border: 1px solid var(--dd-ctrl-line);
+    background: var(--dd-ctrl-surface);
+    color: var(--dd-ctrl-sub);
     font-size: var(--dd-fs-sub, 10.5px);
     font-weight: 700;
     white-space: nowrap;
@@ -1329,18 +1865,9 @@
     cursor: pointer;
   }
   .ctrl-win-pill.on {
-    border-color: var(--dd-accent);
-    background: color-mix(in srgb, var(--dd-accent) 12%, #ffffff);
-    color: var(--dd-accent);
-  }
-  .ctrl-shell[data-scheme='dark'] .ctrl-win-pill {
-    background: #232733;
-    border-color: rgba(255, 255, 255, 0.08);
-    color: #94a3b8;
-  }
-  .ctrl-shell[data-scheme='dark'] .ctrl-win-pill.on {
-    background: color-mix(in srgb, var(--dd-accent) 24%, #232733);
-    color: #ffffff;
+    border-color: var(--dd-accent-border);
+    background: var(--dd-accent-soft);
+    color: var(--dd-accent-ink);
   }
 
   .ctrl-tabs-wrap {
@@ -1356,17 +1883,14 @@
     padding: 3px;
     gap: 3px;
     border-radius: 11px;
-    background: rgba(15, 23, 42, 0.055);
-  }
-  .ctrl-shell[data-scheme='dark'] .ctrl-tabs {
-    background: #14171e;
+    background: var(--dd-ctrl-section);
   }
   .ctrl-tab {
     height: clamp(27px, calc(var(--dd-btn-h, 30px) * 0.96), 34px);
     border: 0;
     border-radius: 8.5px;
     background: transparent;
-    color: #64748b;
+    color: var(--dd-ctrl-sub);
     font: inherit;
     font-size: var(--dd-fs-body, 11.5px);
     font-weight: 700;
@@ -1383,51 +1907,46 @@
     height: 26px;
   }
   .ctrl-tab.on {
-    background: #ffffff;
-    color: #1e2430;
+    background: var(--dd-ctrl-surface);
+    color: var(--dd-ctrl-ink);
     box-shadow: 0 1px 3px rgba(15, 23, 42, 0.09);
   }
-  .ctrl-shell[data-scheme='dark'] .ctrl-tab {
-    color: #94a3b8;
-  }
   .ctrl-shell[data-scheme='dark'] .ctrl-tab.on {
-    background: #272c38;
-    color: #f8fafc;
     box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35);
   }
   .ctrl-tab-badge {
     padding: 1px 6px;
     border-radius: 999px;
-    background: rgba(15, 23, 42, 0.07);
+    background: var(--dd-ctrl-surface-muted);
     font-size: var(--dd-fs-micro, 10px);
     font-weight: 800;
-    color: #475569;
+    color: var(--dd-ctrl-sub);
   }
   .ctrl-tab.on .ctrl-tab-badge {
-    background: color-mix(in srgb, var(--dd-accent) 16%, transparent);
-    color: var(--dd-accent);
-  }
-  .ctrl-shell[data-scheme='dark'] .ctrl-tab-badge {
-    background: rgba(255, 255, 255, 0.08);
-    color: #cbd5e1;
+    background: var(--dd-accent-soft);
+    color: var(--dd-accent-ink);
   }
 
   .ctrl-scroll {
     flex: 1;
     min-height: 0;
     overflow-y: auto;
-    padding: 2px var(--dd-pad-x, 14px) 16px;
+    /* C6 + I10: 동쪽 4px 리사이즈 핸들과 스크롤바 비겹침 + measuredNarrow 깜빡임 방지 */
+    margin-right: 4px;
+    padding: 2px calc(var(--dd-pad-x, 14px) - 4px) 16px var(--dd-pad-x, 14px);
     display: flex;
     flex-direction: column;
     gap: var(--dd-gap, 10px);
+    scrollbar-gutter: stable;
     scrollbar-width: thin;
+    scrollbar-color: var(--dd-scroll-thumb, auto) var(--dd-scroll-track, transparent);
   }
 
   .ctrl-banner-box {
     padding: 9px 10px;
     border-radius: 13px;
-    background: #ffffff;
-    border: 1px solid rgba(15, 23, 42, 0.08);
+    background: var(--dd-ctrl-surface);
+    border: 1px solid var(--dd-ctrl-line);
     display: flex;
     flex-direction: column;
     gap: 8px;
@@ -1435,10 +1954,6 @@
   .ctrl-shell.is-short .ctrl-banner-box {
     padding: 7px 9px;
     gap: 6px;
-  }
-  .ctrl-shell[data-scheme='dark'] .ctrl-banner-box {
-    background: #232733;
-    border-color: rgba(255, 255, 255, 0.08);
   }
   .ctrl-banner-head {
     display: flex;
@@ -1453,15 +1968,19 @@
     gap: 5px;
     font-size: var(--dd-fs-sub, 11px);
     font-weight: 800;
-    color: #334155;
+    color: var(--dd-ctrl-ink);
     white-space: nowrap;
     min-width: 0;
+    overflow: hidden;
   }
-  .ctrl-shell.is-very-narrow .ctrl-banner-label :global(svg) {
+  .ctrl-banner-label span {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .ctrl-shell.is-compact .ctrl-banner-label :global(svg) {
     display: none;
-  }
-  .ctrl-shell[data-scheme='dark'] .ctrl-banner-label {
-    color: #e2e8f0;
   }
 
   .ctrl-banner-modes {
@@ -1469,11 +1988,8 @@
     padding: 2px;
     gap: 2px;
     border-radius: 8px;
-    background: #f1f5f9;
+    background: var(--dd-ctrl-section);
     flex-shrink: 0;
-  }
-  .ctrl-shell[data-scheme='dark'] .ctrl-banner-modes {
-    background: #1a1d26;
   }
   .ctrl-banner-modes button {
     height: 21px;
@@ -1481,7 +1997,7 @@
     border: 0;
     border-radius: 6px;
     background: transparent;
-    color: #64748b;
+    color: var(--dd-ctrl-sub);
     font-size: var(--dd-fs-micro, 10px);
     font-weight: 700;
     white-space: nowrap;
@@ -1489,53 +2005,60 @@
     cursor: pointer;
   }
   .ctrl-shell.is-compact .ctrl-banner-modes button {
-    padding: 0 5.5px;
+    padding: 0 5px;
   }
   .ctrl-banner-modes button.on {
-    background: #ffffff;
-    color: var(--dd-accent);
+    background: var(--dd-ctrl-surface);
+    color: var(--dd-accent-ink);
     box-shadow: 0 1px 2px rgba(15, 23, 42, 0.09);
   }
-  .ctrl-shell[data-scheme='dark'] .ctrl-banner-modes button {
-    color: #94a3b8;
-  }
   .ctrl-shell[data-scheme='dark'] .ctrl-banner-modes button.on {
-    background: #2f3545;
-    color: #ffffff;
+    background: var(--dd-ctrl-surface-hover);
+    color: var(--dd-ctrl-ink);
   }
 
   .ctrl-banner-empty {
     margin: 0;
     padding: 8px 10px;
     border-radius: 9px;
-    border: 1px dashed rgba(15, 23, 42, 0.12);
+    border: 1px dashed var(--dd-ctrl-line);
     font-size: var(--dd-fs-sub, 10.5px);
-    color: #64748b;
+    color: var(--dd-ctrl-sub);
     text-align: center;
     word-break: keep-all;
-  }
-  .ctrl-shell[data-scheme='dark'] .ctrl-banner-empty {
-    border-color: rgba(255, 255, 255, 0.12);
-    color: #94a3b8;
   }
 
   .ctrl-sec-head {
     display: flex;
     align-items: center;
     justify-content: space-between;
+    gap: 8px;
     padding: 2px 2px 0;
+    min-width: 0;
+  }
+  .ctrl-sec-left {
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
+    min-width: 0;
   }
   .ctrl-sec-title {
     font-size: var(--dd-fs-body, 11.5px);
     font-weight: 800;
-    color: #475569;
+    color: var(--dd-ctrl-sub);
+    white-space: nowrap;
   }
   .ctrl-sec-title strong {
-    color: var(--dd-accent);
+    color: var(--dd-accent-ink);
     margin-left: 2px;
   }
-  .ctrl-shell[data-scheme='dark'] .ctrl-sec-title {
-    color: #cbd5e1;
+  .ctrl-sort-hint {
+    font-size: var(--dd-fs-micro, 9.5px);
+    font-weight: 600;
+    color: var(--dd-ctrl-muted);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
   .ctrl-add-btn {
@@ -1543,8 +2066,8 @@
     padding: 0 10px 0 8px;
     border: 0;
     border-radius: 999px;
-    background: var(--dd-accent);
-    color: #ffffff;
+    background: var(--dd-accent-fill);
+    color: var(--dd-on-accent);
     font: inherit;
     font-size: var(--dd-fs-sub, 11px);
     font-weight: 800;
@@ -1554,7 +2077,8 @@
     white-space: nowrap;
     word-break: keep-all;
     cursor: pointer;
-    box-shadow: 0 2px 6px color-mix(in srgb, var(--dd-accent) 28%, transparent);
+    flex-shrink: 0;
+    box-shadow: 0 2px 6px color-mix(in srgb, var(--dd-accent-fill) 28%, transparent);
   }
   .ctrl-add-btn:hover {
     filter: brightness(0.95);
@@ -1565,42 +2089,68 @@
     flex-direction: column;
     gap: 7px;
   }
-  .ctrl-shell.is-grid2 .ctrl-list {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 8px;
-    align-items: stretch;
+
+  .dd-sort-item {
+    position: relative;
+    width: 100%;
+    border-radius: 13px;
+  }
+  /* C7: Svelte scoped :global() + --dd-sort-width / --dnd-width 폴백으로 IACVT 붕괴 방지 */
+  .dd-sort-item:global([data-dnd-dragging]) {
+    width: var(--dd-sort-width, var(--dnd-width)) !important;
+    min-width: var(--dd-sort-width, var(--dnd-width)) !important;
+    max-width: var(--dd-sort-width, var(--dnd-width)) !important;
+    left: var(--dd-sort-left) !important;
+    z-index: 20;
+    cursor: grabbing;
+  }
+  .dd-sort-item:global([data-dnd-dragging]) :global(.dd-row) {
+    border-color: var(--dd-accent-border);
+    box-shadow: 0 10px 26px rgba(15, 23, 42, 0.2);
+    cursor: grabbing;
+  }
+  .ctrl-shell[data-scheme='dark'] .dd-sort-item:global([data-dnd-dragging]) :global(.dd-row) {
+    box-shadow: 0 12px 30px rgba(0, 0, 0, 0.5);
+  }
+  /* 끄기·착지 중 내부 버튼 호버·손잡이를 억제해 실수로 완료·편집처럼 보이지 않게 합니다. */
+  .dd-sort-item:global(:is([data-dnd-dragging], [data-dnd-dropping])) :global(.dd-check),
+  .dd-sort-item:global(:is([data-dnd-dragging], [data-dnd-dropping])) :global(.dd-edit-btn),
+  .dd-sort-item:global(:is([data-dnd-dragging], [data-dnd-dropping])) :global(.dd-cap-seg) {
+    pointer-events: none;
+  }
+  .dd-sort-item:global([data-dnd-dragging]:not(:has(.dd-kbd-handle:focus-visible))) :global(.dd-kbd-handle),
+  .dd-sort-item:global([data-dnd-dropping]) :global(.dd-kbd-handle) {
+    opacity: 0 !important;
+    pointer-events: none !important;
   }
 
   .ctrl-empty {
     padding: 22px 14px;
     border-radius: 14px;
-    border: 1.5px dashed rgba(15, 23, 42, 0.12);
+    border: 1.5px dashed var(--dd-ctrl-line);
     display: flex;
     flex-direction: column;
     align-items: center;
     text-align: center;
     gap: 6px;
   }
-  .ctrl-shell[data-scheme='dark'] .ctrl-empty {
-    border-color: rgba(255, 255, 255, 0.12);
-  }
   .ctrl-empty-icon {
     width: 36px;
     height: 36px;
     border-radius: 11px;
-    background: color-mix(in srgb, var(--dd-accent) 13%, transparent);
-    color: var(--dd-accent);
+    background: var(--dd-accent-soft);
+    color: var(--dd-accent-ink);
     display: grid;
     place-items: center;
   }
   .ctrl-empty strong {
     font-size: var(--dd-fs-title, 12.5px);
     font-weight: 800;
+    color: var(--dd-ctrl-ink);
   }
   .ctrl-empty small {
     font-size: var(--dd-fs-sub, 11px);
-    color: #64748b;
+    color: var(--dd-ctrl-sub);
     line-height: 1.45;
     word-break: keep-all;
   }
@@ -1610,8 +2160,8 @@
     padding: 0 12px;
     border: 0;
     border-radius: 999px;
-    background: var(--dd-accent);
-    color: #ffffff;
+    background: var(--dd-accent-fill);
+    color: var(--dd-on-accent);
     font-size: var(--dd-fs-body, 11.5px);
     font-weight: 800;
     display: inline-flex;
@@ -1627,25 +2177,21 @@
     justify-content: space-between;
     gap: 8px;
     padding: 10px var(--dd-pad-x, 14px) 12px;
-    border-top: 1px solid rgba(15, 23, 42, 0.08);
-    background: color-mix(in srgb, #ffffff 72%, #fdfaf3);
+    border-top: 1px solid var(--dd-ctrl-line);
+    background: var(--dd-ctrl-foot-bg);
     flex-shrink: 0;
   }
   .ctrl-shell.is-short .ctrl-foot {
     padding: 7px var(--dd-pad-x, 12px) 9px;
-  }
-  .ctrl-shell[data-scheme='dark'] .ctrl-foot {
-    border-top-color: rgba(255, 255, 255, 0.08);
-    background: #1f232c;
   }
 
   .ctrl-widget-btn {
     height: clamp(29px, calc(var(--dd-btn-h, 32px) * 1.04), 37px);
     padding: 0 12px;
     border-radius: 10px;
-    border: 1px solid color-mix(in srgb, var(--dd-accent) 32%, rgba(15, 23, 42, 0.08));
-    background: color-mix(in srgb, var(--dd-accent) 10%, #ffffff);
-    color: var(--dd-accent);
+    border: 1px solid var(--dd-accent-border);
+    background: var(--dd-accent-soft);
+    color: var(--dd-accent-ink);
     font: inherit;
     font-size: var(--dd-fs-body, 11.5px);
     font-weight: 800;
@@ -1656,22 +2202,33 @@
     word-break: keep-all;
     cursor: pointer;
   }
-  .ctrl-widget-btn:hover {
-    background: color-mix(in srgb, var(--dd-accent) 18%, #ffffff);
+  .ctrl-widget-btn:hover:not(:disabled) {
+    filter: brightness(0.97);
   }
-  .ctrl-shell[data-scheme='dark'] .ctrl-widget-btn {
-    background: color-mix(in srgb, var(--dd-accent) 20%, #232733);
-    border-color: color-mix(in srgb, var(--dd-accent) 40%, transparent);
-    color: #ffffff;
+  .ctrl-widget-btn:disabled {
+    opacity: 0.6;
+    cursor: default;
+  }
+  .ctrl-widget-btn.is-open {
+    border-color: var(--dd-accent-fill);
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--dd-accent-fill) 32%, transparent);
+  }
+  .ctrl-widget-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 999px;
+    background: var(--dd-accent-fill);
+    flex-shrink: 0;
   }
 
+  /* Q3: 라이트·다크 모드 모두 + 새 D-Day와 동일한 --dd-accent-fill + --dd-on-accent로 통일 */
   .ctrl-done-btn {
     height: clamp(29px, calc(var(--dd-btn-h, 32px) * 1.04), 37px);
     padding: 0 18px;
     border: 0;
     border-radius: 10px;
-    background: #1e2430;
-    color: #ffffff;
+    background: var(--dd-accent-fill);
+    color: var(--dd-on-accent);
     font: inherit;
     font-size: var(--dd-fs-body, 11.5px);
     font-weight: 800;
@@ -1679,28 +2236,21 @@
     cursor: pointer;
   }
   .ctrl-done-btn:hover {
-    opacity: 0.92;
-  }
-  .ctrl-shell[data-scheme='dark'] .ctrl-done-btn {
-    background: var(--dd-accent);
-    color: #ffffff;
+    filter: brightness(0.95);
   }
 
   .ctrl-resize-grip {
     position: absolute;
-    right: 5px;
-    bottom: 5px;
-    color: #64748b;
-    opacity: 0.28;
+    right: 7px;
+    bottom: 7px;
+    color: var(--dd-ctrl-muted);
+    opacity: 0.34;
     pointer-events: none;
     z-index: 25;
     transition: opacity 150ms ease;
   }
   .ctrl-shell:hover .ctrl-resize-grip {
-    opacity: 0.56;
-  }
-  .ctrl-shell[data-scheme='dark'] .ctrl-resize-grip {
-    color: #94a3b8;
+    opacity: 0.62;
   }
 
   .ctrl-toast {
@@ -1711,8 +2261,8 @@
     max-width: calc(100% - 24px);
     padding: 7px 12px;
     border-radius: 999px;
-    background: #1e2430;
-    color: #ffffff;
+    background: var(--dd-toast-bg);
+    color: var(--dd-toast-ink);
     font-size: 11px;
     font-weight: 700;
     display: inline-flex;
@@ -1728,10 +2278,6 @@
   .ctrl-toast span {
     overflow: hidden;
     text-overflow: ellipsis;
-  }
-  .ctrl-shell[data-scheme='dark'] .ctrl-toast {
-    background: #f8fafc;
-    color: #0f172a;
   }
 
   .ctrl-ctx-backdrop {

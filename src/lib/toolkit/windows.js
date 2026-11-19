@@ -2,7 +2,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { openUrl } from '@tauri-apps/plugin-opener';
 import { PLATFORM_TOOLS } from './registry.js';
 import { getCurrentWindow } from '@tauri-apps/api/window';
-import { WebviewWindow } from '@tauri-apps/api/webviewWindow';
+import { WebviewWindow, getAllWebviewWindows } from '@tauri-apps/api/webviewWindow';
 import { PhysicalPosition, PhysicalSize, LogicalSize } from '@tauri-apps/api/dpi';
 import { native, readSettings } from './store.js';
 import { moreTools } from './moreTools.js';
@@ -37,19 +37,26 @@ const MENU_WINDOWS = {
   // 우클릭 메뉴 — 높이는 ToolkitMenu의 context 항목 높이(CSS)와 맞춘 값입니다.
   context: { label: 'toolkit-context-menu', width: 340, height: 640 },
 };
-/** @param {'timer'|'picker'|'scoreboard'|'external'|'more'|'context'} [kind] */
+/** 열려 있는 툴킷 팝업 메뉴를 숨깁니다.
+ * 왜 getAllWebviewWindows()를 1회만 부르는가: 예전에는 메뉴 6종마다 WebviewWindow.getByLabel()을 병렬로 불러
+ *   한 번 호출에 get_all_windows IPC가 6회씩 몰렸습니다. 목록을 1회만 읽고 실제로 보이는 창만 숨깁니다.
+ * @param {'timer'|'picker'|'scoreboard'|'external'|'more'|'context'|Array<'timer'|'picker'|'scoreboard'|'external'|'more'|'context'>} [kind] */
 export async function dismissMenu(kind) {
-  if (native) {
-    const menus = kind
-      ? [MENU_WINDOWS[kind]]
-      : Object.values(MENU_WINDOWS);
-    await Promise.all(
-      menus.map(async ({ label }) => {
-        const menu = await WebviewWindow.getByLabel(label);
-        if (menu) await menu.hide();
+  if (!native) return;
+  const targets = Array.isArray(kind)
+    ? new Set(kind.map((k) => MENU_WINDOWS[k]?.label).filter(Boolean))
+    : kind
+      ? new Set([MENU_WINDOWS[kind]?.label].filter(Boolean))
+      : new Set(Object.values(MENU_WINDOWS).map((m) => m.label));
+  if (targets.size === 0) return;
+  const open = await getAllWebviewWindows();
+  await Promise.all(
+    open
+      .filter((win) => targets.has(win.label))
+      .map(async (menu) => {
+        if (await menu.isVisible().catch(() => true)) await menu.hide();
       }),
-    );
-  }
+  );
 }
 /**
  * @param {HTMLElement} trigger
@@ -206,7 +213,7 @@ export async function setToolMinSize(minLogicalWidth, minLogicalHeight) {
 export async function resizeToolbar(width, height) {
   if (!native) return;
   // 도구 관리 중 툴바 폭이 바뀌어도 우클릭 패널은 유지합니다.
-  await Promise.all(['timer', 'picker', 'scoreboard', 'external'].map(kind => dismissMenu(/** @type {any} */ (kind))));
+  await dismissMenu(['timer', 'picker', 'scoreboard', 'external']);
   const win = getCurrentWindow();
   await win.setSize(new LogicalSize(Math.ceil(width), Math.ceil(height)));
   const [position, size, monitors] = await Promise.all([

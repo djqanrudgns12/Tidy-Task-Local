@@ -2,7 +2,10 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   STORYBOOK_PAINT,
+  DEEP_BADGE_HEX,
+  resolveDeepBadgeHex,
   GROUP_COLOR_SAFE_ORDER,
+  hexToRgb01,
   srgbToOklab,
   recolorRgbaBuffer,
 } from './recolor.js';
@@ -75,6 +78,33 @@ test('12모둠 기본 색 풀은 유사 색 쌍(ΔE_OK < 0.045)이 바로 인접
       );
     }
   }
+});
+
+test('DEEP_BADGE_HEX 12색은 흰 글자 WCAG >= 4.5:1 및 설원(#F4F8FB) >= 3.0:1 대비와 고유 색차를 충족한다', () => {
+  const relLum = (/** @type {string} */ hex) => {
+    const [r, g, b] = hexToRgb01(hex).map((c) => (c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4));
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  };
+  const contrast = (/** @type {string} */ c1, /** @type {string} */ c2) => {
+    const l1 = relLum(c1);
+    const l2 = relLum(c2);
+    return (Math.max(l1, l2) + 0.05) / (Math.min(l1, l2) + 0.05);
+  };
+
+  for (const id of GROUP_COLOR_SAFE_ORDER) {
+    const hex = resolveDeepBadgeHex(id);
+    assert.equal(hex, DEEP_BADGE_HEX[id]);
+    const crWhite = contrast(hex, '#FFFFFF');
+    const crSnow = contrast(hex, '#F4F8FB');
+    assert.ok(crWhite >= 4.5, `${id} (${hex}) vs #FFFFFF contrast=${crWhite.toFixed(2)} < 4.5`);
+    assert.ok(crSnow >= 3.0, `${id} (${hex}) vs #F4F8FB contrast=${crSnow.toFixed(2)} < 3.0`);
+  }
+
+  // apricot vs lemon 색차 확인
+  const [La, aa, ba] = srgbToOklab(...hexToRgb01(DEEP_BADGE_HEX.apricot));
+  const [Ll, al, bl] = srgbToOklab(...hexToRgb01(DEEP_BADGE_HEX.lemon));
+  const de = Math.hypot(La - Ll, aa - al, ba - bl);
+  assert.ok(de >= 0.04, `apricot vs lemon ΔE_OK=${de.toFixed(3)} too close`);
 });
 
 test('학생 아바타 영구 고정 불변식: 명단 추가·결석·순서 변경에도 기존 학생 캐릭터가 절대 바뀌지 않는다', () => {

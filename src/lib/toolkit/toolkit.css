@@ -28,6 +28,10 @@
 .tk-root button:active:not(:disabled) {
   transform: translateY(1px);
 }
+/* 드래그 중에는 버튼이 눌린 채 남는 시각 잔상을 없앱니다(명시도 (0,4,1)로 위 규칙을 확실히 상회). */
+.tk-root .toolkit-bar.is-dragging button:active:not(:disabled) {
+  transform: none;
+}
 .tk-root svg {
   flex-shrink: 0;
 }

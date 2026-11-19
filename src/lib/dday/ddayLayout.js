@@ -49,13 +49,13 @@ function stepHysteresis(prevOn, enterCond, exitCond) {
  *   listGrid2Col: boolean,
  *   archiveGrid2Col: boolean,
  *   shortHeight: boolean,
- *   tier: 'compact' | 'standard' | 'wide' | 'xwide',
+ *   tier: 'compact' | 'standard' | 'wide',
  * }} ControlLayoutState
  */
 
 /**
- * D-Day 컨트롤 패널 외곽(.ctrl-shell) 크기에 따라 5개 뷰의 반응형 레이아웃 모드를 판별합니다.
- * .ctrl-host 여백(좌우 합 8px)을 감안해 560px 와이드 프리셋(shell 552px)에서 2단 폼이 켜지도록 설계합니다.
+ * D-Day 컨트롤 패널 외곽(.ctrl-shell border-box) 크기에 따라 5개 뷰의 반응형 레이아웃 모드를 판별합니다.
+ * 최소 폭 340px · 최대 폭 580px 하네스 범위에서 1열 수직 리스트를 유지하며 360px 콤팩트 / 536px 와이드를 전환합니다.
  * @param {{
  *   width: number,
  *   height: number,
@@ -68,23 +68,20 @@ function stepHysteresis(prevOn, enterCond, exitCond) {
 export function classifyControlLayout({
   width,
   height,
-  itemCount = 0,
-  archiveCount = 0,
+  itemCount: _itemCount = 0,
+  archiveCount: _archiveCount = 0,
   prev = null,
 }) {
-  const safeW = Math.max(240, Number.isFinite(width) ? width : 372);
-  const safeH = Math.max(300, Number.isFinite(height) ? height : 572);
+  const safeW = Math.max(240, Number.isFinite(width) ? width : 380);
+  const safeH = Math.max(300, Number.isFinite(height) ? height : 580);
 
   const compactWidth = stepHysteresis(
     Boolean(prev?.compactWidth),
-    safeW < 336,
-    safeW >= 352,
+    safeW < 360,
+    safeW >= 372,
   );
-  const veryNarrow = stepHysteresis(
-    Boolean(prev?.veryNarrow),
-    safeW < 316,
-    safeW >= 330,
-  );
+  // minWidth 340 하네스 도입으로 veryNarrow(<316) 분기는 도달하지 않으므로 하위 호환용 false 고정
+  const veryNarrow = false;
   const archiveFullDate = stepHysteresis(
     Boolean(prev?.archiveFullDate),
     safeW >= 452,
@@ -92,39 +89,28 @@ export function classifyControlLayout({
   );
   const wideEdit = stepHysteresis(
     Boolean(prev?.wideEdit),
-    safeW >= 544,
-    safeW < 528,
+    safeW >= 536,
+    safeW < 520,
   );
   const wideSettings = stepHysteresis(
     Boolean(prev?.wideSettings),
-    safeW >= 548,
-    safeW < 532,
+    safeW >= 536,
+    safeW < 520,
   );
 
-  const rawList2Col = stepHysteresis(
-    Boolean(prev?.listGrid2Col),
-    safeW >= 668,
-    safeW < 652,
-  );
-  const listGrid2Col = itemCount >= 2 && rawList2Col;
-
-  const rawArchive2Col = stepHysteresis(
-    Boolean(prev?.archiveGrid2Col),
-    safeW >= 668,
-    safeW < 652,
-  );
-  const archiveGrid2Col = archiveCount >= 2 && rawArchive2Col;
+  // D-Day 목록과 아카이브는 340..580px 범위에서 세로 1열 우선순위·가독성을 일관 유지합니다.
+  const listGrid2Col = false;
+  const archiveGrid2Col = false;
 
   const shortHeight = stepHysteresis(
     Boolean(prev?.shortHeight),
-    safeH < 464,
-    safeH >= 480,
+    safeH < 480,
+    safeH >= 496,
   );
 
-  /** @type {'compact' | 'standard' | 'wide' | 'xwide'} */
+  /** @type {'compact' | 'standard' | 'wide'} */
   let tier = 'standard';
   if (compactWidth) tier = 'compact';
-  else if (rawList2Col) tier = 'xwide';
   else if (wideEdit) tier = 'wide';
 
   return {

@@ -2,9 +2,11 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { DDAY_CONTROL_BOUNDS } from './ddayModel.js';
 import {
+  applyControlWindowLimits,
   clampSizeToMonitor,
   computeDoubleClickTarget,
   computeWidgetSidePlacement,
+  resolveControlSizeLimits,
   snapWidgetRectToEdges,
 } from './ddayWindowBounds.js';
 
@@ -22,7 +24,7 @@ const MONITORS = [
 ];
 
 test('clampSizeToMonitor converts physical work area by target monitor DPI scale', () => {
-  // Tiny 800x600 monitor -> limits max dimensions safely inside work area
+  // Tiny 800x600 monitor -> maxWidth(580) & workMaxH(536) 이내로 제한
   const smallMonitor = {
     bounds: { x: 0, y: 0, width: 800, height: 600 },
     work: { x: 0, y: 0, width: 800, height: 560 },
@@ -34,15 +36,60 @@ test('clampSizeToMonitor converts physical work area by target monitor DPI scale
     smallMonitor,
     24,
   );
-  assert.equal(clamped.width, 776);
+  assert.equal(clamped.width, 580);
   assert.equal(clamped.height, 536);
 
-  // 4K 200% monitor has logical work height 1040 -> 640 fits comfortably
-  const hiDpi = clampSizeToMonitor({ width: 560, height: 640 }, DDAY_CONTROL_BOUNDS, MONITORS[0], 16);
-  assert.deepEqual(hiDpi, { width: 560, height: 640 });
+  // 4K 200% monitor has logical work height 1040 -> 660 fits comfortably
+  const hiDpi = clampSizeToMonitor({ width: 560, height: 660 }, DDAY_CONTROL_BOUNDS, MONITORS[0], 16);
+  assert.deepEqual(hiDpi, { width: 560, height: 660 });
 });
 
-test('computeDoubleClickTarget toggles default (380x580) <-> wide (560x640) inside work area', () => {
+test('resolveControlSizeLimits & applyControlWindowLimits protect small/mixed-DPI screens without trapping oversized height', async () => {
+  // 1366x768 @ 125%: 논리 작업영역 약 1093x582 -> 340..580 x 460..558
+  const hd125 = { bounds: { x: 0, y: 0, width: 1366, height: 768 }, work: { x: 0, y: 0, width: 1366, height: 728 }, scale: 1.25 };
+  assert.deepEqual(resolveControlSizeLimits(hd125, DDAY_CONTROL_BOUNDS, 24), {
+    minWidth: 340,
+    minHeight: 460,
+    maxWidth: 580,
+    maxHeight: 558,
+  });
+
+  // 1280x720 @ 150%: 논리 작업높이 448px < minHeight(460) -> effectiveMin이 작업영역 이내로 내려감
+  const laptop150 = { bounds: { x: 0, y: 0, width: 1280, height: 720 }, work: { x: 0, y: 0, width: 1280, height: 672 }, scale: 1.5 };
+  const smallLimits = resolveControlSizeLimits(laptop150, DDAY_CONTROL_BOUNDS, 24);
+  assert.equal(smallLimits.minWidth, 340);
+  assert.equal(smallLimits.minHeight, 424);
+  assert.equal(smallLimits.maxWidth, 580);
+  assert.equal(smallLimits.maxHeight, 424);
+
+  const clampedLaptop = clampSizeToMonitor({ width: 380, height: 580 }, DDAY_CONTROL_BOUNDS, laptop150, 24);
+  assert.deepEqual(clampedLaptop, { width: 380, height: 424 });
+
+  // 4K @ 200%: 논리 작업영역 1920x1040 -> 340..580 x 460..860 정확 적용
+  assert.deepEqual(resolveControlSizeLimits(MONITORS[0], DDAY_CONTROL_BOUNDS, 24), {
+    minWidth: 340,
+    minHeight: 460,
+    maxWidth: 580,
+    maxHeight: 860,
+  });
+
+  // applyControlWindowLimits: setMinSize + setMaxSize + setMaximizable(false) 동시 호출 검증
+  /** @type {any[]} */
+  const calls = [];
+  const fakeWin = {
+    setMinSize: async (/** @type {any} */ s) => calls.push(['min', s.width, s.height]),
+    setMaxSize: async (/** @type {any} */ s) => calls.push(['max', s.width, s.height]),
+    setMaximizable: async (/** @type {boolean} */ v) => calls.push(['maximizable', v]),
+  };
+  await applyControlWindowLimits(/** @type {any} */ (fakeWin), MONITORS[1], DDAY_CONTROL_BOUNDS, 24);
+  assert.deepEqual(calls, [
+    ['min', 340, 460],
+    ['max', 580, 860],
+    ['maximizable', false],
+  ]);
+});
+
+test('computeDoubleClickTarget toggles default (380x580) <-> wide (560x660) inside work area', () => {
   // At 380x580 on 200% monitor -> physical size 760x1160 near right edge
   const toWide = computeDoubleClickTarget({
     currentPos: { x: 3000, y: 100 },
@@ -52,14 +99,14 @@ test('computeDoubleClickTarget toggles default (380x580) <-> wide (560x640) insi
   });
   assert.equal(toWide.preset, 'wide');
   assert.equal(toWide.width, 560);
-  assert.equal(toWide.height, 640);
+  assert.equal(toWide.height, 660);
   // Expanded window stays clamped within 3840 work width (560*2 = 1120px)
   assert.ok(toWide.physicalX !== null && toWide.physicalX + 1120 <= 3840);
 
   // Already wide -> returns to default preset
   const toDefault = computeDoubleClickTarget({
     currentPos: { x: 1000, y: 200 },
-    currentSize: { width: 1120, height: 1280 },
+    currentSize: { width: 1120, height: 1320 },
     currentScale: 2,
     monitors: MONITORS,
   });

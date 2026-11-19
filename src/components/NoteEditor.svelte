@@ -150,10 +150,9 @@
     outline: none;
     font-weight: 500;
     line-height: 1.6;
-    /* 한국어는 어절(띄어쓰기) 단위로 줄을 넘겨야 자연스럽습니다.
-       break-word 는 단어 한가운데를 잘라 가독성을 해칩니다. */
-    word-break: keep-all;
-    /* 다만 URL처럼 띄어쓰기 없는 긴 문자열은 강제로 잘라 가로 넘침을 막습니다. */
+    /* 좁은 메모 창에서 띄어쓰기가 없는 긴 단어가 통째로 내려가 오른쪽 빈 공간이 크게 생기는 것을 막기 위해 글자 단위로 줄바꿈합니다. */
+    word-break: break-all;
+    /* 특수문자 연속 등 word-break로 못 자르는 문자열도 가로 넘침 없이 줄바꿈합니다. */
     overflow-wrap: anywhere;
     padding-bottom: 16px;
     position: relative;

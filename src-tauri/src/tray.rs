@@ -34,19 +34,20 @@ const MAX_SLOT: u32 = 10;
 const CASCADE_MARGIN: f64 = 100.0;
 const CASCADE_STEP: f64 = 30.0;
 // 버튼 옆에 붙어 뜨는 임시 창은 좌표 초기화 대상이 아닙니다 (열릴 때마다 스스로 위치를 잡습니다).
-// 왜 꼭 빼야 하는가: 좌표 초기화는 대상 창마다 show()를 부릅니다. 숨어 상주하는 날짜 선택 창(date-picker)이
+// 왜 꼭 빼야 하는가: 좌표 초기화는 대상 창마다 show()를 부릅니다. 숨어 상주하는 팝업 창이
 //   여기 빠지면 빈 투명 창이 떠서 그 자리의 클릭을 가로챕니다. (JS datePicker/protocol.js의 DATE_PICKER_LABEL)
-const TRANSIENT_LABELS: [&str; 9] = [
+// 툴킷 팝업 메뉴 목록은 toolkit::MENU_LABELS 하나를 단일 원천으로 공유해 누락(예: toolkit-more-menu)을 막습니다.
+const TRANSIENT_LABELS: [&str; 5] = [
     "ctx-menu",
     "reminder",
-    "toolkit-menu",
-    "toolkit-picker-menu",
-    "toolkit-scoreboard-menu",
-    "toolkit-external-menu",
-    "toolkit-context-menu",
     "date-picker",
     "font-picker",
+    "dday-widget-menu",
 ];
+
+fn is_transient_label(label: &str) -> bool {
+    TRANSIENT_LABELS.contains(&label) || crate::toolkit::MENU_LABELS.contains(&label)
+}
 
 /// 창(JS)이 대신 처리해 주어야 하는 트레이 요청.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -254,6 +255,8 @@ pub fn tray_take_pending_request() -> Option<String> {
 /// 새 위치의 저장은 각 창의 "창 이동" 처리기가 스스로 합니다.
 ///   (열려 있는 창의 데이터를 밖에서 고치면 그 창이 막 입력한 내용과 경합합니다)
 pub fn reset_coordinates(app: &tauri::AppHandle) {
+    // 툴바가 드래그 중이었다면 먼저 해제해 새 좌표가 정상 저장되게 합니다.
+    crate::toolkit_drag::cancel_active_drag(app);
     let Some((origin_x, origin_y, scale)) = primary_work_origin(app) else {
         log::warn!("주 모니터를 찾지 못해 좌표 초기화를 건너뜁니다.");
         return;
@@ -261,7 +264,7 @@ pub fn reset_coordinates(app: &tauri::AppHandle) {
     let mut labels: Vec<String> = app
         .webview_windows()
         .keys()
-        .filter(|label| !TRANSIENT_LABELS.contains(&label.as_str()))
+        .filter(|label| !is_transient_label(label.as_str()))
         .cloned()
         .collect();
     labels.sort_by(|a, b| cascade_key(a).cmp(&cascade_key(b)));
@@ -478,10 +481,14 @@ mod tests {
     // 숨어 상주하는 팝업 창은 좌표 초기화(show)에 끌려 나오면 안 되고, 데이터 창도 아닙니다.
     #[test]
     fn hidden_popup_windows_are_transient_not_data() {
-        for label in ["ctx-menu", "date-picker", "font-picker", "toolkit-picker-menu"] {
-            assert!(TRANSIENT_LABELS.contains(&label), "{label}");
+        for label in ["ctx-menu", "reminder", "date-picker", "font-picker", "dday-widget-menu"]
+            .into_iter()
+            .chain(crate::toolkit::MENU_LABELS)
+        {
+            assert!(is_transient_label(label), "{label}");
             assert!(!is_data_window(label), "{label}");
         }
+        assert!(is_transient_label("toolkit-more-menu"));
     }
 
     #[test]

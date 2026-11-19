@@ -21,6 +21,28 @@ export const STORYBOOK_PAINT = Object.freeze(/** @type {Record<string, Storybook
   cherry:     { hex: '#E8A5C8', L: 0.801, C: 0.091, hDeg: 346.9 },
 }));
 
+/** OKLab 명도 L ≈ 0.54~0.58 보정 Deep 12색 — 흰 글자(#FFFFFF) WCAG >= 4.6:1, 흰 눈(#F4F8FB) >= 4.3:1.
+ *  현황판·결과보드·PNG 헤더 밴드, HUD 호명 배지, 북극 분열 깃발 배지 공용(시안 1A & 4A). */
+export const DEEP_BADGE_HEX = Object.freeze(/** @type {Record<string, string>} */ ({
+  strawberry: '#C44A63',
+  peach:      '#B05E30',
+  apricot:    '#9F6800',
+  lemon:      '#8A7200',
+  lime:       '#568100',
+  mint:       '#008466',
+  teal:       '#008288',
+  sky:        '#2B7AB3',
+  ocean:      '#4071D0',
+  lavender:   '#7A66C0',
+  grape:      '#9B59B8',
+  cherry:     '#B5528B',
+}));
+
+/** @param {string} colorId @returns {string} */
+export function resolveDeepBadgeHex(colorId) {
+  return DEEP_BADGE_HEX[colorId] ?? DEEP_BADGE_HEX.mint;
+}
+
 /** ΔE_OK < 0.045 유사 쌍(strawberry↔cherry, apricot↔lemon, mint↔teal, lavender↔grape)이
  *  바로 인접 인덱스에 놓이지 않도록 분산 배치한 모둠 기본 색 순서. */
 export const GROUP_COLOR_SAFE_ORDER = Object.freeze([

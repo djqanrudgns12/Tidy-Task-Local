@@ -2,7 +2,7 @@
   import GroupSymbol from '../../scoreboard/GroupSymbol.svelte';
   import StageHudBand from './StageHudBand.svelte';
   import StageStudent from './StageStudent.svelte';
-  import { createBannerTracker } from './stageShared.js';
+  import { createBannerTracker, idleTitle } from './stageShared.js';
   import { PALETTE } from '../../../lib/scoreboard/model.js';
   import { formatStudentLabel } from '../../../lib/group-picker/allocation.js';
   import { STORYBOOK_PAINT } from '../../../lib/group-picker/recolor.js';
@@ -50,6 +50,7 @@
     fontFamily = 'Pretendard, sans-serif',
     onStart,
     onSkip,
+    onOpenSetup,
     onMarkBroken,
   } = $props<{
     phase: 'idle' | 'running' | 'settled';
@@ -68,6 +69,7 @@
     fontFamily?: string;
     onStart: () => void;
     onSkip?: () => void;
+    onOpenSetup?: () => void;
     onMarkBroken: (src: string) => void;
   }>();
 
@@ -131,17 +133,18 @@
       bannerTracker.reset();
       lastRunRef = plan;
     }
-    const primary = pose.boarding;
-    const st = primary ? studentById[primary.studentId] : null;
+    const heroRef = pose.revealingHero ?? pose.boarding;
+    const st = heroRef ? studentById[heroRef.studentId] : null;
     return bannerTracker.update({
       mode: 'train',
       elapsed,
-      idleText: pose.activeSpeech,
+      idleText: idleTitle('모둠 열차', participants.length, groups.length),
       candidate: st
         ? {
             key: `tr-${st.id}`,
             groupIndex: activeGroup.index,
             groupName: activeGroup.name,
+            groupColorId: activeGroup.color,
             groupColorHex: activeColorHex,
             groupSymbol: activeGroup.symbol,
             studentName: formatStudentLabel(st, allStudents, alwaysShowNumber),
@@ -188,7 +191,6 @@
   // 증기 퍼프 소스 목록
   const steamImgs = [TRAIN_URLS['t1-steam-1'], TRAIN_URLS['t1-steam-2'], TRAIN_URLS['t1-steam-3']];
 
-  const heroCalloutStudent = $derived(pose?.heroCallout ? studentById[pose.heroCallout.studentId] : null);
   const cam = $derived(pose?.camera ?? { x: 0, y: 0, scale: 1, originX: 800, originY: 520 });
 
   /** 비행 티켓 발사 화면 좌표를 반환합니다 (카메라 변환 + 뷰포트 getBoundingClientRect 기준 실시간 매핑). */
@@ -202,12 +204,13 @@
 <div class="gp-stage-canvas" data-mode="train">
   <StageHudBand
     {phase}
+    mode="train"
     {groups}
     activeIndex={pose ? pose.carIndex : 0}
     doneAll={pose ? pose.committedIds.size === participants.length : false}
     {banner}
     {fontFamily}
-    idleStatusText={`햇살역 승강장 · ${participants.length}명 탑승 대기 중`}
+    idleStatusText={idleTitle('모둠 열차', participants.length, groups.length)}
     {onSkip}
   />
 
@@ -368,7 +371,14 @@
           />
 
           <!-- Z1: 객차 좌/우 유리창 배경 + 탑승객 실루엣 (bodySrc z4 뒤쪽에 엄격 클립) -->
-          <div class="gp-train-win-clip" style:left="431px" style:top="403px" style:width="62px" style:height="74px">
+          <div
+            class="gp-train-win-clip"
+            style:left="428px"
+            style:top="400px"
+            style:width="69px"
+            style:height="81px"
+            style:--car-hex={activeColorHex}
+          >
             {#if pose}
               {#each pose.inCarStudentIds.slice(3, 5) as sid, wi (sid)}
                 {@const st = studentById[sid]}
@@ -394,7 +404,14 @@
               {/each}
             {/if}
           </div>
-          <div class="gp-train-win-clip" style:left="1111px" style:top="403px" style:width="56px" style:height="74px">
+          <div
+            class="gp-train-win-clip"
+            style:left="1109px"
+            style:top="400px"
+            style:width="63px"
+            style:height="81px"
+            style:--car-hex={activeColorHex}
+          >
             {#if pose}
               {#each pose.inCarStudentIds.slice(5, 7) as sid, wi (sid)}
                 {@const st = studentById[sid]}
@@ -442,9 +459,9 @@
               {#if st}
                 {@const av = avatarForStudent(st, classAvatarMap)}
                 {@const seatCoords = [
-                  { x: 766, y: 616, h: 156 },
-                  { x: 800, y: 616, h: 156 },
-                  { x: 834, y: 616, h: 156 },
+                  { x: 766, y: 616, h: Math.round(0.86 * TRAIN_STUDENT_BASE_H) },
+                  { x: 800, y: 616, h: Math.round(0.86 * TRAIN_STUDENT_BASE_H) },
+                  { x: 834, y: 616, h: Math.round(0.86 * TRAIN_STUDENT_BASE_H) },
                 ][idx]}
                 <StageStudent
                   studentId={sid}
@@ -625,6 +642,10 @@
       <!-- Z5: 승강장 여유 4석 대기줄 + 우측 외 N명 배지 + 라이벌 + 문턱 앞 도약(behindDoor=false) -->
       {#each waitItems as item (item.studentId)}
         {@const av = avatarForStudent(item.student, classAvatarMap)}
+        {@const revealedColorHex =
+          phase === 'running' && item.revealed
+            ? (UI_COLOR_MAP[groups.find((g: any) => g.index === item.revealedGroupIndex)?.color] ?? '#5A4336')
+            : '#5A4336'}
         <StageStudent
           studentId={item.studentId}
           label={formatStudentLabel(item.student, allStudents, alwaysShowNumber)}
@@ -634,11 +655,14 @@
           heightPx={TRAIN_STUDENT_BASE_H * item.perspScale}
           opacity={item.opacity}
           showLabel={item.opacity >= 0.72}
-          labelMaxWOverride={148}
+          mysterySealed={phase === 'running' && !item.revealed}
+          justRevealed={phase === 'running' && Boolean(item.justRevealed)}
+          fixedPlateSize={phase === 'running' ? { width: 150, height: 49 } : undefined}
+          labelMaxWOverride={132}
           vpScale={vp.scale}
           idleCssAnim={phase === 'idle'}
           {elapsed}
-          accentHex="#5A4336"
+          accentHex={revealedColorHex}
           {dark}
           {fontFamily}
           zIndex={5}
@@ -649,8 +673,8 @@
       {#if hiddenWaitCount > 0}
         <div
           class="gp-queue-more-pill"
-          style:left={phase === 'idle' ? '786px' : '782px'}
-          style:top={phase === 'idle' ? '722px' : '824px'}
+          style:left="904px"
+          style:top={phase === 'idle' ? '708px' : '818px'}
         >
           외 {hiddenWaitCount}명 대기 중
         </div>
@@ -674,7 +698,9 @@
                 shadowScale={ab.rivalPose.shadow.scale}
                 shadowOpacity={ab.rivalPose.shadow.opacity}
                 movingBlend={1}
-                showLabel={ab.rivalPose.x >= 700}
+                showLabel={ab.rivalPose.x >= 520}
+                mysterySealed={true}
+                fixedPlateSize={{ width: 150, height: 49 }}
                 vpScale={vp.scale}
                 {elapsed}
                 accentHex="#5A4336"
@@ -704,7 +730,8 @@
                 shadowScale={ab.shadow.scale}
                 shadowOpacity={ab.shadow.opacity}
                 movingBlend={1}
-                showLabel={ab.u <= 0.08 || ab.x >= 710}
+                showLabel={!ab.behindDoor}
+                fixedPlateSize={{ width: 150, height: 49 }}
                 vpScale={vp.scale}
                 isHero={true}
                 celebrateBurst={ab.u >= 0.68 && ab.u <= 0.96}
@@ -718,19 +745,6 @@
             {/if}
           {/if}
         {/each}
-
-        {#if pose.heroCallout && heroCalloutStudent}
-          <div
-            class="gp-hero-callout"
-            style:left="800px"
-            style:top="224px"
-            style:border-color={activeColorHex}
-            style:--callout-hex={activeColorHex}
-          >
-            <GroupSymbol symbol={activeGroup.symbol} color={activeColorHex} size={22} />
-            <span>{formatStudentLabel(heroCalloutStudent, allStudents, alwaysShowNumber)}</span>
-          </div>
-        {/if}
       {/if}
       </div>
     </div>
@@ -750,7 +764,13 @@
             모둠 뽑기 시작 →
           {/if}
         </button>
-        <span class="gp-cta-hint">{startDisabledReason || '스페이스바(Space)로 바로 출발할 수 있어요'}</span>
+        {#if startDisabledReason && onOpenSetup}
+          <button type="button" class="gp-cta-hint clickable" onclick={onOpenSetup}>
+            {startDisabledReason}
+          </button>
+        {:else}
+          <span class="gp-cta-hint">{startDisabledReason || '스페이스바(Space)로 바로 출발할 수 있어요'}</span>
+        {/if}
       </div>
     {/if}
   </div>

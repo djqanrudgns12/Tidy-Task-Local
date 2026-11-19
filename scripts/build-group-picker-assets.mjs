@@ -6,8 +6,9 @@
  *
  *  사용:
  *    node scripts/build-group-picker-assets.mjs --self-test
- *    node scripts/build-group-picker-assets.mjs --characters <jobs.json>
- *    node scripts/build-group-picker-assets.mjs --assets <jobs.json>
+ *    node scripts/build-group-picker-assets.mjs --characters <jobs.json> [--source-root <dir>]
+ *    node scripts/build-group-picker-assets.mjs --assets <jobs.json> [--source-root <dir>]
+ *    node scripts/build-group-picker-assets.mjs --repair-train-windows --source <path>
  */
 import http from 'node:http';
 import { createRequire } from 'node:module';
@@ -1251,14 +1252,77 @@ window.__gpProcessJob = async function (job) {
   }
 
   if (frostedRects) {
-    for (const [fx, fy, fw, fh] of frostedRects) {
-      for (let y = fy; y < fy + fh; y++) {
+    for (const rect of frostedRects) {
+      const [fx, fy, fw, fh, rad = 16] = rect;
+      const hx = fw * 0.5, hy = fh * 0.5;
+      const rCorner = Math.min(rad, hx, hy);
+      const cx = fx + hx, cy = fy + hy;
+      for (let y = Math.floor(fy); y < Math.ceil(fy + fh); y++) {
         if (y < 0 || y >= h) continue;
-        for (let x = fx; x < fx + fw; x++) {
+        for (let x = Math.floor(fx); x < Math.ceil(fx + fw); x++) {
           if (x < 0 || x >= w) continue;
-          const i = (y * w + x) * 4;
-          if (work[i + 3] > 0.5) {
-            work[i] = 244; work[i + 1] = 250; work[i + 2] = 253; work[i + 3] = 0.24;
+          // Rounded-box SDF (d <= 0 내부 유리 개구부 -> 부드러운 1.5px 페더로 완전 투명화, 둥근 베젤 보호)
+          const qx = Math.abs(x + 0.5 - cx) - (hx - rCorner);
+          const qy = Math.abs(y + 0.5 - cy) - (hy - rCorner);
+          const d = Math.hypot(Math.max(qx, 0), Math.max(qy, 0)) + Math.min(Math.max(qx, qy), 0) - rCorner;
+          if (d <= 1.5) {
+            const i = (y * w + x) * 4;
+            const keepRatio = smoothstep(-0.5, 1.5, d);
+            work[i + 3] *= keepRatio;
+          }
+        }
+      }
+    }
+  }
+
+  // 창문 안쪽 유리(저채도 중명도 연결 영역)만 베젤 안쪽 곡선을 따라 투명 절개
+  if (job.windowSeeds) {
+    for (const ws of job.windowSeeds) {
+      const [bx0, by0, bx1, by1] = ws.bounds;
+      const sx = Math.round(clamp(ws.seedX, bx0, bx1));
+      const sy = Math.round(clamp(ws.seedY, by0, by1));
+      const visited = new Uint8Array(w * h);
+      const q = [];
+      const isGlass = (px, py) => {
+        const idx = (py * w + px) * 4;
+        if (work[idx + 3] < 0.25) return false;
+        const [L, oa, ob] = rgb01ToOklab(work[idx] / 255, work[idx + 1] / 255, work[idx + 2] / 255);
+        const C = Math.hypot(oa, ob);
+        return L >= 0.68 && C <= 0.040;
+      };
+      if (isGlass(sx, sy)) {
+        visited[sy * w + sx] = 1;
+        q.push(sy * w + sx);
+      }
+      for (let qi = 0; qi < q.length; qi++) {
+        const p = q[qi];
+        const px = p % w, py = Math.floor(p / w);
+        for (const [ox, oy] of [[-1, 0], [1, 0], [0, -1], [0, 1]]) {
+          const nx = px + ox, ny = py + oy;
+          if (nx < bx0 || nx > bx1 || ny < by0 || ny > by1) continue;
+          const np = ny * w + nx;
+          if (!visited[np] && isGlass(nx, ny)) {
+            visited[np] = 1;
+            q.push(np);
+          }
+        }
+      }
+      // 1px 경계 안티앨리어싱 페더 후 내부 유리 알파 0 절단
+      for (const p of q) {
+        work[p * 4 + 3] = 0;
+      }
+      for (const p of q) {
+        const px = p % w, py = Math.floor(p / w);
+        for (const [ox, oy] of [[-1, 0], [1, 0], [0, -1], [0, 1]]) {
+          const nx = px + ox, ny = py + oy;
+          if (nx < bx0 || nx > bx1 || ny < by0 || ny > by1) continue;
+          const np = ny * w + nx;
+          if (!visited[np]) {
+            const ni = np * 4;
+            const [L, oa, ob] = rgb01ToOklab(work[ni] / 255, work[ni + 1] / 255, work[ni + 2] / 255);
+            if (L >= 0.56 && Math.hypot(oa, ob) <= 0.045) {
+              work[ni + 3] *= 0.35;
+            }
           }
         }
       }
@@ -1510,17 +1574,30 @@ async function runSelfTest(page, port) {
 async function main() {
   const args = process.argv.slice(2);
   const selfTest = args.includes('--self-test');
+  const repairWindows = args.includes('--repair-train-windows');
+  const srcIdx = args.indexOf('--source');
+  const explicitSource = srcIdx >= 0 ? args[srcIdx + 1] : null;
+  const srcRootIdx = args.indexOf('--source-root');
+  const extraRoot = srcRootIdx >= 0 ? args[srcRootIdx + 1] : null;
   const jobsArgIdx = args.findIndex((a) => a === '--characters' || a === '--assets');
   const jobsFile = jobsArgIdx >= 0 ? args[jobsArgIdx + 1] : null;
   const jobsMode = jobsArgIdx >= 0 ? args[jobsArgIdx] : null;
 
-  if (!selfTest && !jobsFile) {
-    console.error('사용: node scripts/build-group-picker-assets.mjs --self-test | --characters <json> | --assets <json>');
+  if (!selfTest && !jobsFile && !repairWindows) {
+    console.error('사용: node scripts/build-group-picker-assets.mjs --self-test | --characters <json> | --assets <json> | --repair-train-windows [--source <path>]');
     process.exit(1);
   }
 
-  const artifactBrainDir = 'C:/Users/User/.gemini/antigravity/brain/09af5acc-28cc-4dbb-992c-ae5a10ba17d0';
-  const { server, port } = await startBridgeServer([artifactBrainDir, ASSETS_DIR, root]);
+  const allowedRoots = [ASSETS_DIR, root];
+  if (extraRoot && existsSync(extraRoot)) allowedRoots.push(extraRoot);
+  if (explicitSource && existsSync(explicitSource)) allowedRoots.push(path.dirname(path.resolve(explicitSource)));
+  if (jobsFile && existsSync(jobsFile)) {
+    const tmpSpec = JSON.parse(readFileSync(path.resolve(jobsFile), 'utf8'));
+    for (const j of tmpSpec.jobs ?? []) {
+      if (j.sourcePath) allowedRoots.push(path.dirname(path.resolve(j.sourcePath)));
+    }
+  }
+  const { server, port } = await startBridgeServer([...new Set(allowedRoots)]);
   const browser = await launchChromium();
   try {
     const page = await browser.newPage();
@@ -1528,6 +1605,57 @@ async function main() {
 
     if (selfTest) {
       await runSelfTest(page, port);
+    }
+
+    if (repairWindows) {
+      const sourcePath = explicitSource && existsSync(explicitSource)
+        ? path.resolve(explicitSource)
+        : path.join(ASSETS_DIR, 'train/t1-train-body-base.webp');
+      const isRawSprite = !sourcePath.toLowerCase().endsWith('.webp');
+      const repairJob = isRawSprite
+        ? {
+            id: 't1-train-body-base',
+            mode: 'cutout',
+            url: `http://127.0.0.1:${port}/file?path=${encodeURIComponent(sourcePath)}`,
+            keyKind: 'magenta',
+            // 창문 안쪽 유리(L>=0.68, C<=0.04)를 베젤 곡선을 따라 투명 절개하고 ratioRects 제외 없음 -> 외곽 100% 채색!
+            windowSeeds: [
+              { seedX: 192, seedY: 356, bounds: [130, 286, 254, 428] },
+              { seedX: 1188, seedY: 356, bounds: [1132, 286, 1246, 428] },
+            ],
+            measureAperture: true,
+            trim: true,
+            extractMask: true,
+            maskExclude: { yMinRatio: 0.175, yMaxRatio: 0.895 },
+            quality: 0.95,
+            saveAs: 'train/t1-train-body-base.webp',
+          }
+        : {
+            id: 't1-train-body-base',
+            mode: 'opaque-resize',
+            url: `http://127.0.0.1:${port}/file?path=${encodeURIComponent(sourcePath)}`,
+            extractMask: true,
+            maskExclude: { yMinRatio: 0.175, yMaxRatio: 0.895 },
+            quality: 0.95,
+            saveAs: 'train/t1-train-body-base.webp',
+          };
+      const res = await page.evaluate((j) => window.__gpProcessJob(j), repairJob);
+      console.log('T1 window repair result:', JSON.stringify(res));
+      if (!res.gates?.passed) throw new Error(`Repair gate failed: ${JSON.stringify(res.gates)}`);
+      const manifest = existsSync(MANIFEST_PATH) ? JSON.parse(readFileSync(MANIFEST_PATH, 'utf8')) : { characters: {}, assets: {} };
+      manifest.assets['train/t1-train-body-base.webp'] = {
+        width: res.width ?? res.w,
+        height: res.height ?? res.h,
+        offsetX: res.offsetX ?? 64,
+        offsetY: res.offsetY ?? 119,
+        sourceW: res.sourceW ?? 1376,
+        sourceH: res.sourceH ?? 768,
+        apertureRect: res.apertureRect ?? manifest.assets['train/t1-train-body-base.webp']?.apertureRect ?? null,
+        radius: null,
+        hub: null,
+        bytes: res.bytes,
+      };
+      writeFileSync(MANIFEST_PATH, `${JSON.stringify(manifest, null, 2)}\n`, 'utf8');
     }
 
     if (jobsFile) {

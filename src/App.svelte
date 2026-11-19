@@ -33,7 +33,7 @@
   import UpdateInstallOverlay from "./components/UpdateInstallOverlay.svelte";
 
   import { toggleMeal } from './lib/meal/mealWindows.js';
-  import { openTool } from './lib/toolkit/windows.js';
+  import { DDAY_WIDGET_LABEL, openDdayWidget, toggleDdayWidget } from './lib/dday/ddayWidgetWindow.js';
   import { convertFileSrc, invoke } from "@tauri-apps/api/core";
   import { getCurrentWindow } from "@tauri-apps/api/window";
   import { ensureLaunchAtStartup } from "./lib/autostart.js";
@@ -204,10 +204,13 @@
 
     // 메뉴를 띄울 화면 좌표를 "물리 픽셀"로 계산합니다.
     // 왜: 배율이 다른 모니터에서는 논리 좌표의 기준이 창마다 달라, 메뉴가 엉뚱한 곳(화면 밖)에 떴습니다.
-    const [scaleFactor, pos, mealWin] = await Promise.all([
+    const [scaleFactor, pos, mealWin, ddayWidgetWin] = await Promise.all([
       getCurrentWindow().scaleFactor(),
       getCurrentWindow().innerPosition(),
       type === 'bar' ? WebviewWindow.getByLabel('meal').catch(() => null) : Promise.resolve(null),
+      type === 'dday-banner' || (type === 'todo' && Boolean(todoMeta?.linkedDdayId))
+        ? WebviewWindow.getByLabel(DDAY_WIDGET_LABEL).catch(() => null)
+        : Promise.resolve(null),
     ]);
     const anchor = !e.clientX && !e.clientY && e.target instanceof Element ? e.target.getBoundingClientRect() : null;
     const screenX = Math.round(pos.x + (anchor ? anchor.left + 8 : e.clientX) * scaleFactor);
@@ -244,6 +247,7 @@
           bannerDdayCount: appState.bannerDdays.length,
           ddayBannerMode: appState.ddayBannerMode,
           mealOpen: Boolean(mealWin),
+          ddayWidgetOpen: Boolean(ddayWidgetWin),
           todoMeta,
           ddayBannerMeta,
         },
@@ -1075,7 +1079,7 @@
         else if (action === 'open-meal') await toggleMeal();
         else if (action === 'open-archive') await openArchiveWindow();
         else if (action === 'open-dday-control') void appState.openDdayControl({ initialTab: 'list' });
-        else if (action === 'open-dday-widget') await openTool('dday-widget');
+        else if (action === 'open-dday-widget') await openDdayWidget();
         else if (action === 'open-toolkit') await invoke('toolkit_open', { role: 'toolkit-summon' });
         else if (action === 'toggle-archived') { appState.showArchived = !appState.showArchived; appState.save(); }
         else if (action === 'toggle-notes') { appState.showNotes = !appState.showNotes; appState.save(); }
@@ -1267,6 +1271,12 @@
                 ddayBannerMode: appState.ddayBannerMode,
                 ddayBannerMeta: contextDdayId ? buildDdayBannerMetaById(contextDdayId) : null,
               },
+            }).catch(() => {});
+          } else if (act === 'toggle-dday-widget') {
+            const res = await toggleDdayWidget();
+            void emitTo('ctx-menu', 'ctx-state-synced', {
+              token: contextToken,
+              patch: { ddayWidgetOpen: res.open },
             }).catch(() => {});
           } else if (act === 'toggle-reminders') {
             const nextVal = toggleRemindersShared(payload.value);

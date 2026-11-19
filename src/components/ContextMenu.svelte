@@ -2,8 +2,9 @@
   // @ts-nocheck
   import { onMount, tick } from 'svelte';
   import { getCurrentWindow } from '@tauri-apps/api/window';
-  import { emit, emitTo } from '@tauri-apps/api/event';
+  import { emit, emitTo, listen } from '@tauri-apps/api/event';
   import { LogicalSize, PhysicalPosition } from '@tauri-apps/api/dpi';
+  import { DDAY_WIDGET_STATE_EVENT } from '../lib/dday/ddayWidgetWindow.js';
   import { getThemeAccent, getTidyTheme } from '../lib/themes.js';
   import { watchCustomFonts } from '../lib/toolkit/appearance.js';
   import { registerFontFace } from '../lib/fonts.js';
@@ -20,7 +21,7 @@
   import TinyNoteContextView from './context-menu/TinyNoteContextView.svelte';
   import './context-menu/ctxTokens.css';
   import {
-    Undo2, Redo2, Omega, Scissors, Copy, ClipboardPaste, PinOff,
+    Undo2, Redo2, Omega, Scissors, Copy, ClipboardPaste, PinOff, LayoutGrid,
   } from 'lucide-svelte';
 
   let {
@@ -60,6 +61,7 @@
     bannerDdayCount: 0,
     ddayBannerMode: 'single',
     mealOpen: false,
+    ddayWidgetOpen: false,
   });
   let visible = $state(false);
   let menuRef = $state(null);
@@ -287,6 +289,11 @@
       if (!focused && !opening) void close();
     }).then(register);
 
+    // 위젯 창이 X 버튼 등 외부 경로로 닫히거나 열려도 메뉴 안 스위치 상태가 어긋나지 않게 동기화합니다.
+    listen(DDAY_WIDGET_STATE_EVENT, ({ payload }) => {
+      if (visible) config = { ...config, ddayWidgetOpen: Boolean(payload) };
+    }).then(register);
+
     return () => { disposed = true; requestId++; offs.forEach(off => off()); };
   });
 
@@ -342,6 +349,8 @@
       else if (detail.action === 'toggle-notes') config = { ...config, showNotes: !config.showNotes };
       else if (detail.action === 'toggle-banner') {
         config = { ...config, ddayBannerMode: config.ddayBannerMode === 'hidden' ? 'single' : 'hidden' };
+      } else if (detail.action === 'toggle-dday-widget') {
+        config = { ...config, ddayWidgetOpen: !config.ddayWidgetOpen };
       } else if (detail.action === 'toggle-reminders') config = { ...config, showReminders: !config.showReminders };
       else if (detail.action === 'toggle-edit') config = { ...config, isEditMode: !config.isEditMode };
       else if (detail.action === 'tiny-pin') config = { ...config, isPinned: !config.isPinned };
@@ -489,17 +498,36 @@
         </button>
       </div>
 
-      <!-- ②-b 조건부 D-Day 고정 해제 슬림 바 -->
+      <!-- ②-b 조건부 D-Day 연동 카드: 바탕화면 위젯 ON/OFF 토글 + 고정 해제 -->
       {#if isLinked}
-        <button
-          type="button"
-          role="menuitem"
-          class="pocket-unpin-bar"
-          onclick={() => triggerAction('todo-unpin-dday')}
-        >
-          <PinOff size={11} strokeWidth={2} />
-          <span>D-Day 고정 해제 (할 일 유지)</span>
-        </button>
+        <div class="pocket-dday-card" role="group" aria-label="연동된 D-Day 설정">
+          <button
+            type="button"
+            role="menuitemcheckbox"
+            aria-checked={Boolean(config.ddayWidgetOpen)}
+            class="pocket-switch-row"
+            title={config.ddayWidgetOpen ? '바탕화면 D-Day 위젯 닫기' : '바탕화면 D-Day 위젯 바로 띄우기'}
+            onclick={() => triggerLiveAction({ kind: 'toggle', action: 'toggle-dday-widget' })}
+          >
+            <span class="pocket-sw-ic" class:on={config.ddayWidgetOpen} aria-hidden="true">
+              <LayoutGrid size={11.5} strokeWidth={2} />
+            </span>
+            <span class="pocket-sw-label">D-Day 위젯</span>
+            <span class="pocket-sw-knob" class:on={config.ddayWidgetOpen} aria-hidden="true"><i></i></span>
+          </button>
+
+          <div class="pocket-card-divider" aria-hidden="true"></div>
+
+          <button
+            type="button"
+            role="menuitem"
+            class="pocket-unpin-bar"
+            onclick={() => triggerAction('todo-unpin-dday')}
+          >
+            <PinOff size={11} strokeWidth={2} />
+            <span>D-Day 고정 해제 (할 일 유지)</span>
+          </button>
+        </div>
       {/if}
 
       <!-- ③ 텍스트 드래그 시 상단 툴바 정렬 서식 카드 -->
@@ -591,6 +619,7 @@
     {:else if type === 'dday-banner'}
       <DdayBannerContextView
         meta={config.ddayBannerMeta || {}}
+        widgetOpen={Boolean(config.ddayWidgetOpen)}
         canUndo={config.canUndo !== false}
         canRedo={config.canRedo !== false}
         onaction={triggerAction}
@@ -778,31 +807,116 @@
     border-color: var(--ctx-danger-border);
   }
 
+  .pocket-dday-card {
+    margin-top: 5px;
+    padding: 4px;
+    border-radius: var(--ctx-radius-card);
+    background: var(--ctx-field);
+    border: 1px solid var(--ctx-line);
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+  }
+  .pocket-card-divider {
+    height: 1px;
+    margin: 0 2px;
+    background: var(--ctx-line);
+  }
+  .pocket-switch-row {
+    width: 100%;
+    height: 24px;
+    padding: 0 5px;
+    border: 0;
+    border-radius: var(--ctx-radius-ctrl);
+    background: transparent;
+    color: var(--ctx-ink);
+    font-family: inherit;
+    font-size: clamp(9.5px, 0.8em, 10.5px);
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    text-align: left;
+    cursor: pointer;
+    transition: background-color 110ms ease;
+  }
+  .pocket-switch-row:hover {
+    background: var(--ctx-hover);
+  }
+  .pocket-switch-row:focus {
+    outline: none;
+  }
+  .pocket-switch-row:focus-visible {
+    outline: 1.5px solid var(--ctx-accent);
+    outline-offset: -1px;
+  }
+  .pocket-sw-ic {
+    display: flex;
+    color: var(--ctx-muted);
+    transition: color 120ms ease;
+  }
+  .pocket-sw-ic.on {
+    color: var(--ctx-accent);
+  }
+  .pocket-sw-label {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .pocket-sw-knob {
+    position: relative;
+    flex-shrink: 0;
+    width: 24px;
+    height: 14px;
+    border-radius: 999px;
+    background: var(--ctx-line-outer);
+    transition: background-color 140ms ease;
+  }
+  .pocket-sw-knob i {
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: #ffffff;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+    transition: transform 140ms cubic-bezier(0.3, 1.3, 0.5, 1);
+  }
+  .pocket-sw-knob.on {
+    background: var(--ctx-accent);
+  }
+  .pocket-sw-knob.on i {
+    transform: translateX(10px);
+  }
+
   .pocket-unpin-bar {
     width: 100%;
     height: 22px;
-    margin-top: 4px;
     padding: 0 6px;
     border-radius: var(--ctx-radius-ctrl);
-    border: 1px dashed var(--ctx-line);
+    border: 0;
     background: transparent;
     color: var(--ctx-muted);
     display: flex;
     align-items: center;
     justify-content: center;
     gap: 4px;
+    font-family: inherit;
     font-size: 9.5px;
     font-weight: 600;
     cursor: pointer;
-    transition: background-color 110ms ease, color 110ms ease, border-color 110ms ease;
+    transition: background-color 110ms ease, color 110ms ease;
   }
   .pocket-unpin-bar:hover {
-    background: var(--ctx-hover);
-    color: var(--ctx-ink);
-    border-color: var(--ctx-line-outer);
+    background: var(--ctx-danger-soft);
+    color: var(--ctx-danger);
   }
   .pocket-unpin-bar:focus-visible {
-    outline: 2px solid var(--ctx-accent);
+    outline: 1.5px solid var(--ctx-accent);
     outline-offset: -1px;
   }
 

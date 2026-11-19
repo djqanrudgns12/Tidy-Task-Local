@@ -65,11 +65,11 @@ export const DDAY_CONTROL_BOUNDS = Object.freeze({
   defaultWidth: 380,
   defaultHeight: 580,
   wideWidth: 560,
-  wideHeight: 640,
-  minWidth: 300,
-  minHeight: 400,
-  maxWidth: 1200,
-  maxHeight: 1400,
+  wideHeight: 660,
+  minWidth: 340,
+  minHeight: 460,
+  maxWidth: 580,
+  maxHeight: 860,
 });
 
 /** @type {Readonly<{ defaultWidth: number, defaultHeight: number, minWidth: number, minHeight: number, maxWidth: number, maxHeight: number }>} */
@@ -436,9 +436,51 @@ export function normalizeBoundedGeometry(raw, bounds) {
   return normalized;
 }
 
-/** @param {unknown} raw @returns {DdayGeometry | null} */
-export function normalizeControlGeometry(raw) {
-  return normalizeBoundedGeometry(raw, DDAY_CONTROL_BOUNDS);
+/**
+ * 컨트롤 패널 창 위치·크기 정규화: 유효 좌표(물리·논리)는 보존하고 크기만 경계 안으로 클램프합니다.
+ * 왜 거부(null) 대신 클램프하는가:
+ *   버전 업그레이드로 min/max 경계를 다듬었을 때 기존 사용자의 범위 밖 크기 때문에
+ *   저장된 창 위치까지 초기화되는 데이터 손실을 막기 위함입니다.
+ * @param {unknown} raw
+ * @param {{ minWidth: number, minHeight: number, maxWidth: number, maxHeight: number }} [bounds]
+ * @returns {DdayGeometry | null}
+ */
+export function normalizeControlGeometry(raw, bounds = DDAY_CONTROL_BOUNDS) {
+  if (!raw || typeof raw !== 'object') return null;
+  const g = /** @type {Record<string, any>} */ (raw);
+  const px = typeof g.physicalX === 'number' && Number.isFinite(g.physicalX) ? g.physicalX : g.x;
+  const py = typeof g.physicalY === 'number' && Number.isFinite(g.physicalY) ? g.physicalY : g.y;
+  const { width, height } = g;
+  if (![px, py, width, height].every((v) => typeof v === 'number' && Number.isFinite(v))) return null;
+  if (width <= 0 || height <= 0) return null;
+  if (px <= -10000 || py <= -10000 || px >= 100000 || py >= 100000) return null;
+  const rx = Math.round(px);
+  const ry = Math.round(py);
+  const clampedW = Math.round(Math.max(bounds.minWidth, Math.min(bounds.maxWidth, width)));
+  const clampedH = Math.round(Math.max(bounds.minHeight, Math.min(bounds.maxHeight, height)));
+  /** @type {DdayGeometry} */
+  const normalized = {
+    x: rx,
+    y: ry,
+    physicalX: rx,
+    physicalY: ry,
+    width: clampedW,
+    height: clampedH,
+  };
+  if (
+    typeof g.logicalX === 'number' &&
+    Number.isFinite(g.logicalX) &&
+    g.logicalX > -10000 &&
+    g.logicalX < 100000 &&
+    typeof g.logicalY === 'number' &&
+    Number.isFinite(g.logicalY) &&
+    g.logicalY > -10000 &&
+    g.logicalY < 100000
+  ) {
+    normalized.logicalX = Math.round(g.logicalX);
+    normalized.logicalY = Math.round(g.logicalY);
+  }
+  return normalized;
 }
 
 /**

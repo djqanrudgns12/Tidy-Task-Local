@@ -31,17 +31,74 @@ import { getMonitorGeometries } from './windows/windowRegistry.js';
         console.error("기존 창 표시 실패:", e);
       }
     } else {
-      // ✨ [핵심 2] 설정창이 "나 준비됐어!(settings-ready)"라고 외치면 그때 데이터를 쏴줍니다.
-      const unlisten = await listen('settings-ready', async () => {
-        await emitTo('settings', 'set-settings-target', payload);
-        unlisten(); // 한 번 쏘고 나면 수신기 끄기
-      });
-
       // 화면이 낮으면(작은 노트북·높은 배율) 아래 버튼이 화면 밖으로 나가지 않게 높이를 줄입니다.
       const monitors = await getMonitorGeometries();
       const size = settingsWindowSize(monitors.map((monitor) => monitor.work.height / monitor.scale));
 
-      const settingsWindow = new WebviewWindow('settings', {
+      /** @type {WebviewWindow | null} */
+      let settingsWindow = null;
+      /** @type {(() => void) | null} */
+      let unlisten = null;
+      let shown = false;
+      /** @type {ReturnType<typeof setTimeout> | null} */
+      let fallbackTimer = null;
+      /** @type {ReturnType<typeof setTimeout> | null} */
+      let readyRevealTimer = null;
+      /** @type {ReturnType<typeof setTimeout> | null} */
+      let leakTimer = null;
+
+      const clearTimers = () => {
+        if (fallbackTimer) {
+          clearTimeout(fallbackTimer);
+          fallbackTimer = null;
+        }
+        if (readyRevealTimer) {
+          clearTimeout(readyRevealTimer);
+          readyRevealTimer = null;
+        }
+        if (leakTimer) {
+          clearTimeout(leakTimer);
+          leakTimer = null;
+        }
+      };
+
+      const reveal = async () => {
+        if (shown || !settingsWindow) return;
+        shown = true;
+        if (fallbackTimer) {
+          clearTimeout(fallbackTimer);
+          fallbackTimer = null;
+        }
+        if (readyRevealTimer) {
+          clearTimeout(readyRevealTimer);
+          readyRevealTimer = null;
+        }
+        try {
+          await settingsWindow.show();
+          await settingsWindow.setFocus();
+        } catch {}
+      };
+
+      // ✨ [핵심 2] 설정창이 "나 준비됐어!(settings-ready)"라고 외치면 그때 데이터를 쏴줍니다.
+      unlisten = await listen('settings-ready', async () => {
+        unlisten?.();
+        unlisten = null;
+        await emitTo('settings', 'set-settings-target', payload).catch(() => {});
+        readyRevealTimer = setTimeout(() => {
+          void reveal();
+        }, 120);
+      });
+
+      fallbackTimer = setTimeout(() => {
+        void reveal();
+      }, 450);
+
+      leakTimer = setTimeout(() => {
+        unlisten?.();
+        unlisten = null;
+      }, 6000);
+
+      settingsWindow = new WebviewWindow('settings', {
         url: 'index.html',
         title: '시스템 설정',
         width: size.width,
@@ -49,9 +106,16 @@ import { getMonitorGeometries } from './windows/windowRegistry.js';
         resizable: false,
         decorations: false,
         transparent: true,
+        shadow: false,
         alwaysOnTop: true,
         center: true,
-        visible: true
+        visible: false
+      });
+
+      settingsWindow.once('tauri://error', () => {
+        clearTimers();
+        unlisten?.();
+        unlisten = null;
       });
     }
   }
