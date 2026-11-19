@@ -776,7 +776,16 @@
     } catch {
       // 닫기 차단을 방지합니다.
     } finally {
-      await getCurrentWindow().close().catch(() => {});
+      // close()가 아니라 destroy()로 닫습니다. close()는 닫기 요청을 다시 보내고, 아래 onCloseRequested가
+      //   그것을 막은(preventDefault) 뒤 closeModal()을 부르는데 이미 closing 중이라 그냥 돌아와서
+      //   [닫기]·[완료]·Alt+F4 어느 것으로도 창이 닫히지 않았습니다(6.0.0 출시 전 실제 앱에서 재현).
+      //   저장은 위에서 끝냈으므로 닫기 요청을 다시 거치지 않습니다(D-Day 위젯의 closeWindow()와 같은 방식).
+      try {
+        await getCurrentWindow().destroy();
+      } catch {
+        // 파괴에 실패하면 다음 클릭으로 다시 시도할 수 있게 잠금을 풉니다.
+        closing = false;
+      }
     }
   }
 
