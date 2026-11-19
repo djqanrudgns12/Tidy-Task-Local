@@ -1,5 +1,6 @@
 <script>
   import { untrack } from 'svelte';
+  import { isTauri } from '@tauri-apps/api/core';
   import {
     ArrowLeft,
     CalendarDays,
@@ -10,6 +11,7 @@
     Repeat,
     Trash2,
   } from 'lucide-svelte';
+  import { dragRegion } from '../../lib/dragRegion.js';
   import {
     DDAY_ICON_META,
     DDAY_ICONS,
@@ -47,6 +49,9 @@
    *   themeColor?: string,
    *   accent?: string,
    *   dark?: boolean,
+   *   wide?: boolean,
+   *   veryNarrow?: boolean,
+   *   onheaderdblclick?: (() => void) | undefined,
    *   oncancel: () => void,
    *   onsave: (draft: {
    *     title: string,
@@ -71,10 +76,19 @@
     themeColor = 'amber',
     accent = '#d97706',
     dark = false,
+    wide = false,
+    veryNarrow = false,
+    onheaderdblclick = undefined,
     oncancel,
     onsave,
     ondelete = undefined,
   } = $props();
+
+  /** @param {HTMLElement} node */
+  const draggable = (node) =>
+    isTauri()
+      ? dragRegion(node, { onDoubleClick: onheaderdblclick ?? null })
+      : { update() {}, destroy() {} };
 
   let title = $state('');
   let date = $state('');
@@ -196,14 +210,16 @@
 
 <form
   class="es-sheet"
+  class:wide
+  class:very-narrow={veryNarrow}
   data-scheme={dark ? 'dark' : 'light'}
   style="--dd-tone: {toneColor}; --dd-accent: {accent};"
   onsubmit={handleSubmit}
 >
-  <div class="es-top">
-    <button type="button" class="es-back" onclick={oncancel}>
+  <div class="es-top" use:draggable>
+    <button type="button" class="es-back" data-no-drag onclick={oncancel}>
       <ArrowLeft size={14} strokeWidth={2.3} />
-      <span>목록으로</span>
+      <span>{veryNarrow ? '목록' : '목록으로'}</span>
     </button>
     <strong class="es-heading">{mode === 'edit' ? 'D-Day 편집' : '새 D-Day 만들기'}</strong>
     {#if mode === 'edit' && ondelete}
@@ -211,6 +227,7 @@
         type="button"
         class="es-trash"
         class:active={confirmDelete}
+        data-no-drag
         aria-label="D-Day 삭제"
         title="D-Day 삭제"
         onclick={() => { confirmDelete = !confirmDelete; calendarOpen = false; }}
@@ -242,231 +259,240 @@
   {/if}
 
   <div class="es-scroll">
-    <div class="es-preview-strip">
-      <DdayIcon {icon} {tone} {accent} size={28} {dark} />
-      <div class="es-prev-copy">
-        <span class="es-prev-title">{title.trim() || 'D-Day 이름 미리보기'}</span>
-        <span class="es-prev-date tnum">{formatFullDate(date || todayKey)}</span>
-      </div>
-      <span class="es-prev-badge tnum">{previewCounter.label}</span>
-    </div>
-
-    <div class="es-field">
-      <div class="es-label-row">
-        <label for="dday-edit-title">이름</label>
-        <span class="es-count tnum" class:limit={codepointCount >= DDAY_TITLE_MAX}>
-          {codepointCount}/{DDAY_TITLE_MAX}
-        </span>
-      </div>
-      <input
-        bind:this={titleInputEl}
-        id="dday-edit-title"
-        type="text"
-        class="es-input"
-        value={title}
-        oninput={handleTitleInput}
-        placeholder="예: 수학 퍼즐 페스티벌, 기말고사"
-        autocomplete="off"
-      />
-      {#if showLinkedHint}
-        <p class="es-hint">원래 할 일: {strippedTodoHint}</p>
-      {/if}
-      {#if errorMsg}
-        <p class="es-error" role="alert">{errorMsg}</p>
-      {/if}
-    </div>
-
-    <div class="es-field">
-      <div class="es-label-row">
-        <span>날짜</span>
-        <span class="es-inline-date">
-          <label class="es-direct-label" for="dday-direct-date">직접 입력</label>
-          <input
-            id="dday-direct-date"
-            type="date"
-            class="es-direct-input"
-            bind:value={date}
-          />
-        </span>
-      </div>
-      <button
-        type="button"
-        class="es-date-btn"
-        aria-expanded={calendarOpen}
-        onclick={() => (calendarOpen = !calendarOpen)}
-      >
-        <CalendarDays size={15} strokeWidth={2.2} />
-        <span class="tnum">{formatFullDate(date || todayKey)}</span>
-        <span class="es-date-toggle">{calendarOpen ? '닫기' : '달력 열기'}</span>
-      </button>
-
-      {#if calendarOpen}
-        <div class="es-cal-wrap" style={dpStyle}>
-          {#key `${date}:${dark}`}
-            <CalendarPanel
-              value={date}
-              {todayKey}
-              onpick={(key) => {
-                date = key;
-                calendarOpen = false;
-                if (errorMsg) errorMsg = '';
-              }}
-              onclear={() => {
-                date = todayKey;
-                calendarOpen = false;
-              }}
-              onescape={() => {
-                calendarOpen = false;
-              }}
-            />
-          {/key}
+    <div class="es-layout">
+      <div class="es-col">
+        <div class="es-preview-strip">
+          <DdayIcon {icon} {tone} {accent} size="var(--dd-icon-sz, 28px)" {dark} />
+          <div class="es-prev-copy">
+            <span class="es-prev-title">{title.trim() || 'D-Day 이름 미리보기'}</span>
+            <span class="es-prev-date tnum">{formatFullDate(date || todayKey)}</span>
+          </div>
+          <span class="es-prev-badge tnum">{previewCounter.label}</span>
         </div>
-      {/if}
-    </div>
 
-    <div class="es-field">
-      <div class="es-label-row">
-        <span class="es-sec-label">아이콘 · 색상</span>
-        <span class="es-icon-meta">{selectedIconMeta.label} · {selectedIconMeta.category}</span>
+        <div class="es-field">
+          <div class="es-label-row">
+            <label for="dday-edit-title">이름</label>
+            <span class="es-count tnum" class:limit={codepointCount >= DDAY_TITLE_MAX}>
+              {codepointCount}/{DDAY_TITLE_MAX}
+            </span>
+          </div>
+          <input
+            bind:this={titleInputEl}
+            id="dday-edit-title"
+            type="text"
+            class="es-input"
+            value={title}
+            oninput={handleTitleInput}
+            placeholder="예: 수학 퍼즐 페스티벌, 기말고사"
+            autocomplete="off"
+          />
+          {#if showLinkedHint}
+            <p class="es-hint">원래 할 일: {strippedTodoHint}</p>
+          {/if}
+          {#if errorMsg}
+            <p class="es-error" role="alert">{errorMsg}</p>
+          {/if}
+        </div>
+
+        <div class="es-field">
+          <div class="es-label-row">
+            <span>날짜</span>
+            <span class="es-inline-date">
+              {#if !veryNarrow}
+                <label class="es-direct-label" for="dday-direct-date">직접 입력</label>
+              {/if}
+              <input
+                id="dday-direct-date"
+                type="date"
+                class="es-direct-input"
+                aria-label="날짜 직접 입력"
+                bind:value={date}
+              />
+            </span>
+          </div>
+          <button
+            type="button"
+            class="es-date-btn"
+            aria-expanded={calendarOpen}
+            onclick={() => (calendarOpen = !calendarOpen)}
+          >
+            <CalendarDays size={15} strokeWidth={2.2} />
+            <span class="tnum">{formatFullDate(date || todayKey)}</span>
+            <span class="es-date-toggle">{calendarOpen ? '닫기' : '달력 열기'}</span>
+          </button>
+
+          {#if calendarOpen}
+            <div class="es-cal-wrap" style={dpStyle}>
+              {#key `${date}:${dark}`}
+                <CalendarPanel
+                  value={date}
+                  {todayKey}
+                  onpick={(key) => {
+                    date = key;
+                    calendarOpen = false;
+                    if (errorMsg) errorMsg = '';
+                  }}
+                  onclear={() => {
+                    date = todayKey;
+                    calendarOpen = false;
+                  }}
+                  onescape={() => {
+                    calendarOpen = false;
+                  }}
+                />
+              {/key}
+            </div>
+          {/if}
+        </div>
       </div>
-      <div class="es-style-card">
-        <div class="es-icons" role="radiogroup" aria-label="아이콘 선택">
-          {#each DDAY_ICONS as iconId, idx}
-            {@const meta = DDAY_ICON_META[iconId]}
+
+      <div class="es-col">
+        <div class="es-field">
+          <div class="es-label-row">
+            <span class="es-sec-label">아이콘 · 색상</span>
+            <span class="es-icon-meta">{selectedIconMeta.label} · {selectedIconMeta.category}</span>
+          </div>
+          <div class="es-style-card">
+            <div class="es-icons" role="radiogroup" aria-label="아이콘 선택">
+              {#each DDAY_ICONS as iconId, idx}
+                {@const meta = DDAY_ICON_META[iconId]}
+                <button
+                  type="button"
+                  role="radio"
+                  aria-checked={icon === iconId}
+                  aria-label={`${meta.label} (${meta.category})`}
+                  title={`${meta.label} · ${meta.category}`}
+                  tabindex={icon === iconId ? 0 : -1}
+                  class="es-icon-opt"
+                  class:on={icon === iconId}
+                  onclick={() => (icon = iconId)}
+                  onkeydown={(e) => handleIconKeydown(e, idx)}
+                >
+                  <DdayIcon icon={iconId} variant="bare" size="calc(var(--dd-icon-sz, 25px) * 0.78)" {dark} />
+                </button>
+              {/each}
+            </div>
+
+            <div class="es-tones">
+              <div class="es-tone-swatches" role="radiogroup" aria-label="색상 선택">
+                {#each DDAY_TONES as toneId}
+                  {@const swatch = resolveToneColor(toneId, accent)}
+                  <button
+                    type="button"
+                    role="radio"
+                    aria-checked={tone === toneId}
+                    aria-label={TONE_LABELS[toneId]}
+                    title={TONE_LABELS[toneId]}
+                    class="es-tone-opt"
+                    class:on={tone === toneId}
+                    style="--sw: {swatch};"
+                    onclick={() => (tone = toneId)}
+                  >
+                    {#if tone === toneId}
+                      <Check size={10.5} strokeWidth={3.2} />
+                    {/if}
+                  </button>
+                {/each}
+              </div>
+              <span class="es-tone-name">{TONE_LABELS[tone]}</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="es-field">
+          <span class="es-sec-label">계산 방식</span>
+          <div class="es-mode-grid" role="radiogroup" aria-label="D-Day 계산 방식">
             <button
               type="button"
               role="radio"
-              aria-checked={icon === iconId}
-              aria-label={`${meta.label} (${meta.category})`}
-              title={`${meta.label} · ${meta.category}`}
-              tabindex={icon === iconId ? 0 : -1}
-              class="es-icon-opt"
-              class:on={icon === iconId}
-              onclick={() => (icon = iconId)}
-              onkeydown={(e) => handleIconKeydown(e, idx)}
+              aria-checked={countMode === 'countdown'}
+              class="es-mode-card"
+              class:on={countMode === 'countdown'}
+              onclick={() => (countMode = 'countdown')}
             >
-              <DdayIcon icon={iconId} variant="bare" size={20} {dark} />
+              <strong>남은 날짜 (D-n)</strong>
+              <small>시험·마감·행사, 당일 D-Day</small>
             </button>
-          {/each}
-        </div>
-
-        <div class="es-tones">
-          <div class="es-tone-swatches" role="radiogroup" aria-label="색상 선택">
-            {#each DDAY_TONES as toneId}
-              {@const swatch = resolveToneColor(toneId, accent)}
-              <button
-                type="button"
-                role="radio"
-                aria-checked={tone === toneId}
-                aria-label={TONE_LABELS[toneId]}
-                title={TONE_LABELS[toneId]}
-                class="es-tone-opt"
-                class:on={tone === toneId}
-                style="--sw: {swatch};"
-                onclick={() => (tone = toneId)}
-              >
-                {#if tone === toneId}
-                  <Check size={10.5} strokeWidth={3.2} />
-                {/if}
-              </button>
-            {/each}
+            <button
+              type="button"
+              role="radio"
+              aria-checked={countMode === 'since'}
+              class="es-mode-card"
+              class:on={countMode === 'since'}
+              onclick={() => (countMode = 'since')}
+            >
+              <strong>날짜 수 세기 (+n일)</strong>
+              <small>시작일 포함 누적 일수</small>
+            </button>
           </div>
-          <span class="es-tone-name">{TONE_LABELS[tone]}</span>
+
+          <button
+            type="button"
+            role="switch"
+            aria-checked={repeatYearly && countMode === 'countdown'}
+            disabled={countMode !== 'countdown'}
+            class="es-switch-row compact"
+            onclick={() => (repeatYearly = !repeatYearly)}
+          >
+            <span class="es-sw-icon"><Repeat size={13} strokeWidth={2.2} /></span>
+            <span class="es-sw-copy">
+              <strong>매년 반복</strong>
+              <small>{countMode === 'countdown' ? '생일·연례 행사처럼 매년 같은 날로 자동 갱신' : '남은 날짜 모드에서만 사용할 수 있어요'}</small>
+            </span>
+            <span class="es-knob" aria-hidden="true"><i></i></span>
+          </button>
         </div>
-      </div>
-    </div>
 
-    <div class="es-field">
-      <span class="es-sec-label">계산 방식</span>
-      <div class="es-mode-grid" role="radiogroup" aria-label="D-Day 계산 방식">
-        <button
-          type="button"
-          role="radio"
-          aria-checked={countMode === 'countdown'}
-          class="es-mode-card"
-          class:on={countMode === 'countdown'}
-          onclick={() => (countMode = 'countdown')}
-        >
-          <strong>남은 날짜 (D-n)</strong>
-          <small>시험·마감·행사, 당일 D-Day</small>
-        </button>
-        <button
-          type="button"
-          role="radio"
-          aria-checked={countMode === 'since'}
-          class="es-mode-card"
-          class:on={countMode === 'since'}
-          onclick={() => (countMode = 'since')}
-        >
-          <strong>날짜 수 세기 (+n일)</strong>
-          <small>시작일 포함 누적 일수</small>
-        </button>
-      </div>
+        <div class="es-field">
+          <span class="es-sec-label">표시 위치</span>
+          <div class="es-switch-list">
+            <button
+              type="button"
+              role="switch"
+              aria-checked={showInTodo}
+              class="es-switch-row"
+              onclick={() => (showInTodo = !showInTodo)}
+            >
+              <span class="es-sw-icon"><ListTodo size={14} strokeWidth={2.2} /></span>
+              <span class="es-sw-copy">
+                <strong>할 일 목록에 함께 표시</strong>
+                <small>{showInTodo ? '할 일 줄에도 마감일과 D-Day 핀을 표시합니다' : '메모장 할 일 목록에는 띄우지 않고 독립 관리합니다'}</small>
+              </span>
+              <span class="es-knob" aria-hidden="true"><i></i></span>
+            </button>
 
-      <button
-        type="button"
-        role="switch"
-        aria-checked={repeatYearly && countMode === 'countdown'}
-        disabled={countMode !== 'countdown'}
-        class="es-switch-row compact"
-        onclick={() => (repeatYearly = !repeatYearly)}
-      >
-        <span class="es-sw-icon"><Repeat size={13} strokeWidth={2.2} /></span>
-        <span class="es-sw-copy">
-          <strong>매년 반복</strong>
-          <small>{countMode === 'countdown' ? '생일·연례 행사처럼 매년 같은 날로 자동 갱신' : '남은 날짜 모드에서만 사용할 수 있어요'}</small>
-        </span>
-        <span class="es-knob" aria-hidden="true"><i></i></span>
-      </button>
-    </div>
+            <button
+              type="button"
+              role="switch"
+              aria-checked={showInBanner}
+              class="es-switch-row"
+              onclick={() => (showInBanner = !showInBanner)}
+            >
+              <span class="es-sw-icon"><PanelTop size={14} strokeWidth={2.2} /></span>
+              <span class="es-sw-copy">
+                <strong>메모 상단 배너에 고정</strong>
+                <small>이 메모 창의 헤더 아래 B-3 배너에 표시합니다</small>
+              </span>
+              <span class="es-knob" aria-hidden="true"><i></i></span>
+            </button>
 
-    <div class="es-field">
-      <span class="es-sec-label">표시 위치</span>
-      <div class="es-switch-list">
-        <button
-          type="button"
-          role="switch"
-          aria-checked={showInTodo}
-          class="es-switch-row"
-          onclick={() => (showInTodo = !showInTodo)}
-        >
-          <span class="es-sw-icon"><ListTodo size={14} strokeWidth={2.2} /></span>
-          <span class="es-sw-copy">
-            <strong>할 일 목록에 함께 표시</strong>
-            <small>{showInTodo ? '할 일 줄에도 마감일과 D-Day 핀을 표시합니다' : '메모장 할 일 목록에는 띄우지 않고 독립 관리합니다'}</small>
-          </span>
-          <span class="es-knob" aria-hidden="true"><i></i></span>
-        </button>
-
-        <button
-          type="button"
-          role="switch"
-          aria-checked={showInBanner}
-          class="es-switch-row"
-          onclick={() => (showInBanner = !showInBanner)}
-        >
-          <span class="es-sw-icon"><PanelTop size={14} strokeWidth={2.2} /></span>
-          <span class="es-sw-copy">
-            <strong>메모 상단 배너에 고정</strong>
-            <small>이 메모 창의 헤더 아래 B-3 배너에 표시합니다</small>
-          </span>
-          <span class="es-knob" aria-hidden="true"><i></i></span>
-        </button>
-
-        <button
-          type="button"
-          role="switch"
-          aria-checked={showInWidget}
-          class="es-switch-row"
-          onclick={() => (showInWidget = !showInWidget)}
-        >
-          <span class="es-sw-icon"><LayoutGrid size={14} strokeWidth={2.2} /></span>
-          <span class="es-sw-copy">
-            <strong>툴킷 D-Day 위젯에 표시</strong>
-            <small>바탕화면 독립 D-Day 위젯 카드에 포함합니다</small>
-          </span>
-          <span class="es-knob" aria-hidden="true"><i></i></span>
-        </button>
+            <button
+              type="button"
+              role="switch"
+              aria-checked={showInWidget}
+              class="es-switch-row"
+              onclick={() => (showInWidget = !showInWidget)}
+            >
+              <span class="es-sw-icon"><LayoutGrid size={14} strokeWidth={2.2} /></span>
+              <span class="es-sw-copy">
+                <strong>툴킷 D-Day 위젯에 표시</strong>
+                <small>바탕화면 독립 D-Day 위젯 카드에 포함합니다</small>
+              </span>
+              <span class="es-knob" aria-hidden="true"><i></i></span>
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   </div>
@@ -498,9 +524,13 @@
     align-items: center;
     justify-content: space-between;
     gap: 8px;
-    padding: 8px 14px 10px;
+    padding: 8px var(--dd-pad-x, 14px) 10px;
     border-bottom: 1px solid rgba(15, 23, 42, 0.07);
+    cursor: grab;
     flex-shrink: 0;
+  }
+  .es-top:active {
+    cursor: grabbing;
   }
   .es-sheet[data-scheme='dark'] .es-top {
     border-bottom-color: rgba(255, 255, 255, 0.08);
@@ -531,7 +561,7 @@
   }
 
   .es-heading {
-    font-size: 13px;
+    font-size: var(--dd-fs-head, 13px);
     font-weight: 800;
     color: #1e2430;
     white-space: nowrap;
@@ -625,11 +655,26 @@
     min-height: 0;
     overflow-y: auto;
     /* 21종 아이콘 3줄 배치 뒤에도 계산 방식까지 한눈에 보이도록 세로 리듬을 콤팩트하게 정돈합니다 */
-    padding: 10px 14px 12px;
+    padding: 10px var(--dd-pad-x, 14px) 12px;
+    scrollbar-width: thin;
+  }
+
+  .es-layout {
     display: flex;
     flex-direction: column;
-    gap: 9px;
-    scrollbar-width: thin;
+    gap: var(--dd-gap, 9px);
+  }
+  .es-col {
+    display: flex;
+    flex-direction: column;
+    gap: var(--dd-gap, 9px);
+    min-width: 0;
+  }
+  .es-sheet.wide .es-layout {
+    display: grid;
+    grid-template-columns: minmax(0, 0.96fr) minmax(0, 1.04fr);
+    gap: 14px;
+    align-items: start;
   }
 
   .es-preview-strip {
@@ -653,7 +698,7 @@
     gap: 1px;
   }
   .es-prev-title {
-    font-size: 12px;
+    font-size: var(--dd-fs-title, 12px);
     font-weight: 700;
     color: #1e2430;
     white-space: nowrap;
@@ -664,7 +709,7 @@
     color: #f1f5f9;
   }
   .es-prev-date {
-    font-size: 10px;
+    font-size: var(--dd-fs-sub, 10px);
     font-weight: 600;
     color: #64748b;
   }
@@ -677,7 +722,7 @@
     border-radius: 8px;
     background: var(--dd-tone);
     color: #ffffff;
-    font-size: 11px;
+    font-size: var(--dd-fs-sub, 11px);
     font-weight: 800;
   }
 
@@ -685,18 +730,21 @@
     display: flex;
     flex-direction: column;
     gap: 4.5px;
+    min-width: 0;
   }
   .es-label-row {
     display: flex;
     align-items: center;
     justify-content: space-between;
     gap: 8px;
+    min-width: 0;
   }
   .es-label-row > label,
   .es-sec-label {
-    font-size: 11px;
+    font-size: var(--dd-fs-sub, 11px);
     font-weight: 800;
     color: #475569;
+    white-space: nowrap;
   }
   .es-sheet[data-scheme='dark'] .es-label-row > label,
   .es-sheet[data-scheme='dark'] .es-sec-label {
@@ -722,14 +770,14 @@
 
   .es-input {
     width: 100%;
-    height: 32px;
+    height: clamp(30px, calc(var(--dd-btn-h, 32px) * 1.02), 38px);
     padding: 0 11px;
     border-radius: 10px;
     border: 1.5px solid rgba(15, 23, 42, 0.1);
     background: #ffffff;
     color: #1e2430;
     font: inherit;
-    font-size: 12.5px;
+    font-size: var(--dd-fs-title, 12.5px);
     font-weight: 600;
     outline: none;
     transition: border-color 140ms ease, box-shadow 140ms ease;
@@ -789,7 +837,7 @@
 
   .es-date-btn {
     width: 100%;
-    height: 32px;
+    height: clamp(30px, calc(var(--dd-btn-h, 32px) * 1.02), 38px);
     padding: 0 11px;
     border-radius: 10px;
     border: 1.5px solid rgba(15, 23, 42, 0.1);
@@ -799,10 +847,17 @@
     align-items: center;
     gap: 8px;
     font: inherit;
-    font-size: 12px;
+    font-size: var(--dd-fs-body, 12px);
     font-weight: 700;
+    min-width: 0;
     cursor: pointer;
     transition: border-color 140ms ease;
+  }
+  .es-date-btn > span:not(.es-date-toggle) {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
   .es-date-btn:hover {
     border-color: var(--dd-accent);
@@ -814,7 +869,7 @@
   }
   .es-date-toggle {
     margin-left: auto;
-    font-size: 10.5px;
+    font-size: var(--dd-fs-sub, 10.5px);
     font-weight: 700;
     color: var(--dd-accent);
     white-space: nowrap;
@@ -824,6 +879,9 @@
     display: flex;
     justify-content: center;
     padding-top: 2px;
+    font-size: var(--dd-cal-fs, 12px);
+    max-width: 100%;
+    overflow: hidden;
   }
 
   .es-style-card {
@@ -846,7 +904,7 @@
     gap: 4px;
   }
   .es-icon-opt {
-    height: 31px;
+    height: clamp(27px, calc(var(--dd-icon-sz, 26px) * 1.18), 38px);
     border-radius: 8px;
     border: 1.5px solid transparent;
     background: rgba(15, 23, 42, 0.025);
@@ -958,13 +1016,13 @@
     transition: border-color 130ms ease, background-color 130ms ease;
   }
   .es-mode-card strong {
-    font-size: 11.5px;
+    font-size: var(--dd-fs-body, 11.5px);
     font-weight: 800;
     color: #1e2430;
     white-space: nowrap;
   }
   .es-mode-card small {
-    font-size: 10px;
+    font-size: var(--dd-fs-sub, 10px);
     color: #64748b;
     line-height: 1.35;
     word-break: keep-all;
@@ -1051,12 +1109,12 @@
     gap: 1px;
   }
   .es-sw-copy strong {
-    font-size: 11.5px;
+    font-size: var(--dd-fs-body, 11.5px);
     font-weight: 700;
     color: #1e2430;
   }
   .es-sw-copy small {
-    font-size: 10px;
+    font-size: var(--dd-fs-sub, 10px);
     color: #64748b;
     line-height: 1.35;
     word-break: keep-all;
@@ -1102,7 +1160,7 @@
     display: flex;
     align-items: center;
     gap: 8px;
-    padding: 10px 14px 12px;
+    padding: 10px var(--dd-pad-x, 14px) 12px;
     border-top: 1px solid rgba(15, 23, 42, 0.08);
     flex-shrink: 0;
   }
@@ -1110,11 +1168,11 @@
     border-top-color: rgba(255, 255, 255, 0.08);
   }
   .es-foot button {
-    height: 34px;
+    height: clamp(30px, calc(var(--dd-btn-h, 32px) * 1.06), 38px);
     border-radius: 10px;
     border: 0;
     font: inherit;
-    font-size: 12px;
+    font-size: var(--dd-fs-body, 12px);
     font-weight: 800;
     display: inline-flex;
     align-items: center;

@@ -17,9 +17,8 @@
     X,
   } from 'lucide-svelte';
   import { getCurrentWindow } from '@tauri-apps/api/window';
-  type ResizeDirection = Parameters<ReturnType<typeof getCurrentWindow>['startResizeDragging']>[0];
   import { listen } from '@tauri-apps/api/event';
-  import { LogicalSize, PhysicalPosition } from '@tauri-apps/api/dpi';
+  import { PhysicalPosition } from '@tauri-apps/api/dpi';
   import { native } from '../../lib/toolkit/store.js';
   import { closeWindow } from '../../lib/toolkit/windows.js';
   import { watchAppearance } from '../../lib/toolkit/appearance.js';
@@ -28,6 +27,7 @@
   import { readLaunchAtStartup, setLaunchAtStartup } from '../../lib/autostart.js';
   import { track } from '../../lib/analytics.js';
   import {
+    DDAY_WIDGET_BOUNDS,
     computeProgressPercent,
     formatDotDate,
     normalizeDdayWidgetPrefs,
@@ -38,6 +38,12 @@
     type DdaySkin,
     type DdayWidgetPrefs,
   } from '../../lib/dday/ddayModel.js';
+  import { computeWidgetLayout } from '../../lib/dday/ddayLayout.js';
+  import {
+    applyDdayWindowBounds,
+    captureWindowGeometry,
+    snapWidgetRectToEdges,
+  } from '../../lib/dday/ddayWindowBounds.js';
   import {
     DDAY_EVENTS,
     collectAllNoteWindowsDdays,
@@ -48,12 +54,14 @@
     type DdayWindowSnapshot,
   } from '../../lib/dday/ddaySync.js';
   import DdayIcon from './DdayIcon.svelte';
+  import DdayResizeHandles from './DdayResizeHandles.svelte';
   import './dday-widget.css';
 
   let windows = $state<DdayWindowSnapshot[]>([]);
   let prefs = $state.raw(normalizeDdayWidgetPrefs(undefined));
   let systemDark = $state(false);
   let ready = $state(false);
+  let closing = $state(false);
   let today = $state(todayDateKey());
   let currentIndex = $state(0);
 
@@ -61,10 +69,15 @@
   let previewSchemeOverride = $state<'light' | 'dark' | null>(null);
 
   let menu = $state<{ x: number; y: number } | null>(null);
+  let menuOpenedAt = 0;
   let menuEl = $state<HTMLDivElement>();
   let boardEl = $state<HTMLElement>();
+  let boardW = $state(224);
+  let boardH = $state(244);
+  let committedTier = $state<'micro' | 'standard' | 'expanded' | null>(null);
 
   let pinBusy = $state(false);
+  let isSnapping = false;
   let startupEnabled = $state(true);
   let startupBusy = $state(false);
 
@@ -75,16 +88,6 @@
   });
 
   const draggable = (node: HTMLElement) => (native ? dragRegion(node) : { destroy() {} });
-  const resizeDirections: ResizeDirection[] = [
-    'North',
-    'South',
-    'West',
-    'East',
-    'NorthWest',
-    'NorthEast',
-    'SouthWest',
-    'SouthEast',
-  ];
 
   const effectiveSkin = $derived<DdaySkin>(previewSkinOverride ?? prefs.skin);
   const effectiveDark = $derived.by(() => {
@@ -116,6 +119,26 @@
   const currentProgress = $derived(
     currentEntry ? computeProgressPercent(currentEntry.item, today) : 0,
   );
+  const widgetLayout = $derived(
+    computeWidgetLayout({
+      width: boardW,
+      height: boardH,
+      label: currentEntry?.counter.label ?? 'D-5',
+      prevTier: committedTier,
+    }),
+  );
+
+  function blockDrag(node: HTMLElement) {
+    const stop = (e: Event) => e.stopPropagation();
+    node.addEventListener('pointerdown', stop);
+    node.addEventListener('mousedown', stop);
+    return {
+      destroy() {
+        node.removeEventListener('pointerdown', stop);
+        node.removeEventListener('mousedown', stop);
+      },
+    };
+  }
 
   function patch(value: Partial<typeof prefs>) {
     if (!native) {
@@ -158,20 +181,12 @@
     wheelLockUntil = now + 200;
   }
 
-  function resize(e: MouseEvent, direction: ResizeDirection) {
-    if (!native || e.button !== 0) return;
-    e.preventDefault();
-    e.stopPropagation();
-    void getCurrentWindow().startResizeDragging(direction).catch(() => {});
-  }
-
   async function toggleTop() {
     if (pinBusy) return;
     if (!native) {
       patch({ alwaysOnTop: !prefs.alwaysOnTop });
       return;
     }
-    if (!ready) return;
     pinBusy = true;
     const previous = prefs.alwaysOnTop;
     const nextVal = !previous;
@@ -184,6 +199,8 @@
       if (res !== 'saved') {
         await getCurrentWindow().setAlwaysOnTop(previous).catch(() => {});
       }
+    } catch {
+      await getCurrentWindow().setAlwaysOnTop(previous).catch(() => {});
     } finally {
       pinBusy = false;
     }
@@ -249,6 +266,12 @@
 
   async function openMenu(e?: MouseEvent | KeyboardEvent) {
     e?.preventDefault?.();
+    e?.stopPropagation?.();
+    if (menu && e && e.type === 'click') {
+      dismiss();
+      return;
+    }
+    menuOpenedAt = performance.now();
     const x = e instanceof MouseEvent ? e.clientX : Math.max(12, innerWidth - 40);
     const y = e instanceof MouseEvent ? e.clientY : 36;
     menu = { x, y };
@@ -261,6 +284,11 @@
       };
       menuEl.querySelector<HTMLButtonElement>('button')?.focus();
     }
+  }
+
+  function handleWindowBlur() {
+    if (menu && performance.now() - menuOpenedAt < 220) return;
+    menu = null;
   }
 
   function dismiss() {
@@ -297,26 +325,71 @@
   }
 
   let saveTimer: ReturnType<typeof setTimeout>;
+  let snapTimer: ReturnType<typeof setTimeout>;
+
   async function saveGeometry(force = false) {
     if (!native || !ready || !(force || prefs.autoOpen)) return;
-    const w = getCurrentWindow();
-    if (await w.isMinimized()) return;
-    const [p, s, scale] = await Promise.all([w.outerPosition(), w.innerSize(), w.scaleFactor()]);
-    patch({
-      geometry: {
-        x: p.x,
-        y: p.y,
-        width: s.width / scale,
-        height: s.height / scale,
-      },
-    });
+    try {
+      const captured = await captureWindowGeometry(getCurrentWindow(), DDAY_WIDGET_BOUNDS);
+      if (captured) patch({ geometry: captured });
+    } catch {}
+  }
+
+  async function snapToEdgeIfNear() {
+    if (!native || !ready || isSnapping || closing) return;
+    try {
+      const w = getCurrentWindow();
+      const [minimized, maximized, fullscreen] = await Promise.all([
+        w.isMinimized().catch(() => false),
+        w.isMaximized().catch(() => false),
+        w.isFullscreen().catch(() => false),
+      ]);
+      if (minimized || maximized || fullscreen) return;
+      const [pos, size, monitors] = await Promise.all([
+        w.outerPosition(),
+        w.outerSize(),
+        getMonitorGeometries(),
+      ]);
+      const snapped = snapWidgetRectToEdges(
+        { x: pos.x, y: pos.y, width: size.width, height: size.height },
+        monitors,
+      );
+      if (snapped.snapped) {
+        isSnapping = true;
+        try {
+          await w.setPosition(new PhysicalPosition(snapped.x, snapped.y));
+        } finally {
+          setTimeout(() => {
+            isSnapping = false;
+          }, 120);
+        }
+      }
+    } catch {}
   }
 
   async function closeWidget() {
+    if (closing) return;
+    closing = true;
     clearTimeout(saveTimer);
-    await saveGeometry();
-    await widgetSection.settle();
-    await closeWindow();
+    clearTimeout(snapTimer);
+    try {
+      const withTimeout = (p: Promise<unknown>, ms = 400) =>
+        Promise.race([p.catch(() => {}), new Promise((resolve) => setTimeout(resolve, ms))]);
+      await withTimeout(saveGeometry());
+      await withTimeout(widgetSection.settle());
+    } catch {
+      // 저장 실패나 타임아웃이 위젯 닫기를 막지 않도록 무시합니다.
+    } finally {
+      if (native) {
+        try {
+          await closeWindow();
+        } catch {
+          await getCurrentWindow().close().catch(() => {});
+        }
+      } else {
+        window.close();
+      }
+    }
   }
 
   function mergeWindowSnapshot(label: string, nextSnap: DdayWindowSnapshot) {
@@ -352,94 +425,147 @@
     };
     window.addEventListener('tidy-dday-preview-sync', onPreviewSync);
 
-    void (async () => {
-      register(
-        await watchAppearance((a) => {
-          if (!disposed && typeof a.darkMode === 'boolean') systemDark = a.darkMode;
-        }),
-      );
-      register(
-        await subscribeDdayStore(({ section, revision }) => {
-          if (section === 'widget') void widgetSection.external(revision);
-        }),
-      );
-
-      await Promise.all([
-        widgetSection.load(),
-        collectAllNoteWindowsDdays().then((list) => {
-          if (!disposed) windows = list;
-        }),
-      ]);
-
-      if (native) {
-        startupEnabled = await readLaunchAtStartup().catch(() => true);
-        register(
-          await listen(DDAY_EVENTS.windowUpdated, (ev) => {
-            const p = ev.payload as any;
-            if (p?.label && p?.snapshot) mergeWindowSnapshot(p.label, p.snapshot);
-          }),
-        );
-      } else {
-        startupEnabled = false;
-      }
-
-      if (disposed) return;
-
-      if (native) {
-        const w = getCurrentWindow();
-        const g = savedDdayGeometry(prefs);
-        if (g) {
-          await w.setPosition(new PhysicalPosition(g.x, g.y)).catch(() => {});
-          const monitors = await getMonitorGeometries();
-          const monitor =
-            monitors.find(
-              (m) =>
-                g.x >= m.bounds.x &&
-                g.x < m.bounds.x + m.bounds.width &&
-                g.y >= m.bounds.y &&
-                g.y < m.bounds.y + m.bounds.height,
-            ) ?? monitors[0];
-          await w
-            .setSize(
-              new LogicalSize(
-                monitor ? Math.min(g.width, monitor.work.width / monitor.scale) : g.width,
-                monitor ? Math.min(g.height, monitor.work.height / monitor.scale) : g.height,
-              ),
-            )
-            .catch(() => {});
+    let ro: ResizeObserver | null = null;
+    if (boardEl && typeof ResizeObserver !== 'undefined') {
+      const measure = (w: number, h: number) => {
+        if (w <= 0 || h <= 0) return;
+        const prevW = boardW;
+        const prevH = boardH;
+        boardW = w;
+        boardH = h;
+        const nextTier = computeWidgetLayout({
+          width: w,
+          height: h,
+          label: currentEntry?.counter.label ?? 'D-5',
+          prevTier: committedTier,
+        }).tier;
+        committedTier = nextTier;
+        if (menu && (Math.abs(w - prevW) >= 2 || Math.abs(h - prevH) >= 2)) {
+          menu = null;
         }
-        await ensureWindowOnScreen(w);
-        await w.setAlwaysOnTop(prefs.alwaysOnTop).catch(() => {});
-        const scheduleSave = () => {
-          clearTimeout(saveTimer);
-          saveTimer = setTimeout(() => void saveGeometry(), 350);
-        };
-        register(await w.onMoved(scheduleSave));
-        register(await w.onResized(scheduleSave));
-        register(
-          await w.onCloseRequested((e) => {
-            e.preventDefault();
-            void closeWidget();
-          }),
-        );
-        await w.show();
-      } else if (new URLSearchParams(location.search).has('menu')) {
-        await tick();
-        void openMenu();
+      };
+      const initRect = boardEl.getBoundingClientRect();
+      measure(initRect.width, initRect.height);
+      ro = new ResizeObserver((entries) => {
+        for (const entry of entries) {
+          measure(entry.contentRect.width, entry.contentRect.height);
+        }
+      });
+      ro.observe(boardEl);
+    }
+
+    void (async () => {
+      try {
+        try {
+          register(
+            await watchAppearance((a) => {
+              if (!disposed && typeof a.darkMode === 'boolean') systemDark = a.darkMode;
+            }),
+          );
+        } catch {}
+
+        try {
+          register(
+            await subscribeDdayStore(({ section, revision }) => {
+              if (section === 'widget') void widgetSection.external(revision);
+            }),
+          );
+        } catch {}
+
+        await Promise.all([
+          widgetSection.load().catch(() => {}),
+          collectAllNoteWindowsDdays()
+            .then((list) => {
+              if (!disposed) windows = list;
+            })
+            .catch(() => {}),
+        ]);
+
+        if (native) {
+          startupEnabled = await readLaunchAtStartup().catch(() => true);
+          try {
+            register(
+              await listen(DDAY_EVENTS.windowUpdated, (ev) => {
+                const p = ev.payload as any;
+                if (p?.label && p?.snapshot) mergeWindowSnapshot(p.label, p.snapshot);
+              }),
+            );
+          } catch {}
+        } else {
+          startupEnabled = false;
+        }
+
+        if (disposed) return;
+
+        if (native) {
+          const w = getCurrentWindow();
+          try {
+            const g = savedDdayGeometry(prefs);
+            if (g) {
+              await applyDdayWindowBounds(w, g, DDAY_WIDGET_BOUNDS);
+            } else {
+              await w.setMinSize(new (await import('@tauri-apps/api/dpi')).LogicalSize(DDAY_WIDGET_BOUNDS.minWidth, DDAY_WIDGET_BOUNDS.minHeight)).catch(() => {});
+              await ensureWindowOnScreen(w);
+            }
+          } catch {}
+
+          await w.setAlwaysOnTop(prefs.alwaysOnTop).catch(() => {});
+
+          const scheduleSave = () => {
+            clearTimeout(saveTimer);
+            saveTimer = setTimeout(() => void saveGeometry(), 350);
+          };
+          const scheduleMove = () => {
+            scheduleSave();
+            clearTimeout(snapTimer);
+            snapTimer = setTimeout(() => void snapToEdgeIfNear(), 240);
+          };
+
+          try {
+            register(await w.onMoved(scheduleMove));
+            register(
+              await w.onResized(() => {
+                scheduleSave();
+                if (menu) menu = null;
+              }),
+            );
+            register(
+              await w.onCloseRequested((e) => {
+                e.preventDefault();
+                void closeWidget();
+              }),
+            );
+          } catch {}
+
+          ready = true;
+          await w.show().catch(() => {});
+          await w.setFocus().catch(() => {});
+        } else {
+          ready = true;
+          if (new URLSearchParams(location.search).has('menu')) {
+            await tick();
+            void openMenu();
+          }
+        }
+      } finally {
+        ready = true;
+        if (native && !disposed) {
+          const w = getCurrentWindow();
+          void w.show().catch(() => {});
+        }
       }
-      ready = true;
-    })().finally(() => {
-      if (native && !disposed) void getCurrentWindow().show().catch(() => {});
-    });
+    })();
 
     const interval = setInterval(refreshDay, 60_000);
     window.addEventListener('focus', refreshDay);
 
     return () => {
       disposed = true;
+      ro?.disconnect();
       offs.forEach((fn) => fn());
       clearInterval(interval);
       clearTimeout(saveTimer);
+      clearTimeout(snapTimer);
       window.removeEventListener('focus', refreshDay);
       window.removeEventListener('tidy-dday-preview-sync', onPreviewSync);
       widgetSection.dispose();
@@ -447,13 +573,14 @@
   });
 </script>
 
-<svelte:window onkeydown={keydown} onblur={() => (menu = null)} />
+<svelte:window onkeydown={keydown} onblur={handleWindowBlur} />
 
 <div
   class="dw-root"
   class:is-preview={!native}
   data-scheme={effectiveDark ? 'dark' : 'light'}
-  style="--dw-tone: {currentTone};"
+  data-tier={widgetLayout.tier}
+  style="--dw-tone: {currentTone}; --dw-num-scale: {widgetLayout.numScale}; --dw-ctrl-sz: {widgetLayout.ctrlBtnSize}px; --dw-icon-sz: {widgetLayout.iconSize}px;"
 >
   <main
     bind:this={boardEl}
@@ -464,27 +591,23 @@
     onwheel={handleWheel}
     use:draggable
   >
-    {#if native}
-      {#each resizeDirections as direction}
-        <div
-          class="dw-resize"
-          data-direction={direction}
-          aria-hidden="true"
-          onmousedown={(e) => resize(e, direction)}
-        ></div>
-      {/each}
-    {/if}
-
     {#if !currentEntry}
       <div class="dw-empty-card">
         <div class="dw-empty-top">
-          <div class="dw-win-controls" class:pinned={prefs.alwaysOnTop}>
+          <div
+            class="dw-win-controls"
+            class:pinned={prefs.alwaysOnTop}
+            role="group"
+            aria-label="창 제어"
+            data-no-drag
+            use:blockDrag
+          >
             <button
               type="button"
               class="dw-icon-btn"
               aria-label="위젯 설정"
               title="위젯 설정"
-              onclick={(e) => { e.stopPropagation(); void openMenu(e); }}
+              onclick={(e) => void openMenu(e)}
             >
               <Ellipsis size={13} />
             </button>
@@ -493,7 +616,7 @@
               class="dw-icon-btn"
               aria-label="닫기"
               title="닫기"
-              onclick={() => void closeWidget()}
+              onclick={(e) => { e.stopPropagation(); void closeWidget(); }}
             >
               <X size={13} />
             </button>
@@ -505,6 +628,7 @@
         <button
           type="button"
           class="dw-empty-btn"
+          data-no-drag
           onclick={() => void openControl(null, 'main', true)}
         >
           <Plus size={12} strokeWidth={2.5} />
@@ -537,10 +661,17 @@
               <DdayIcon
                 icon={currentEntry.item.icon}
                 tone={currentEntry.item.tone}
-                size={22}
+                size="var(--dw-icon-sz, 22px)"
                 dark={effectiveDark}
               />
-              <div class="dw-win-controls" class:pinned={prefs.alwaysOnTop}>
+              <div
+                class="dw-win-controls"
+                class:pinned={prefs.alwaysOnTop}
+                role="group"
+                aria-label="창 제어"
+                data-no-drag
+                use:blockDrag
+              >
                 <button
                   type="button"
                   class="dw-icon-btn"
@@ -549,25 +680,25 @@
                   title={prefs.alwaysOnTop ? '고정 해제' : '항상 위에'}
                   onclick={(e) => { e.stopPropagation(); void toggleTop(); }}
                 >
-                  {#if prefs.alwaysOnTop}<Pin size={11} />{:else}<PinOff size={11} />{/if}
+                  {#if prefs.alwaysOnTop}<Pin size={12} />{:else}<PinOff size={12} />{/if}
                 </button>
                 <button
                   type="button"
                   class="dw-icon-btn"
                   aria-label="위젯 설정"
                   title="스킨 · 표시 설정"
-                  onclick={(e) => { e.stopPropagation(); void openMenu(e); }}
+                  onclick={(e) => void openMenu(e)}
                 >
-                  <Ellipsis size={12} />
+                  <Ellipsis size={13} />
                 </button>
                 <button
                   type="button"
-                  class="dw-icon-btn"
+                  class="dw-icon-btn dw-close-btn"
                   aria-label="위젯 닫기"
                   title="닫기"
                   onclick={(e) => { e.stopPropagation(); void closeWidget(); }}
                 >
-                  <X size={12} />
+                  <X size={13} />
                 </button>
               </div>
             </div>
@@ -575,6 +706,7 @@
             <button
               type="button"
               class="w4-hero-btn"
+              data-no-drag
               onclick={() => void openControl(currentEntry.item.id, currentEntry.windowLabel)}
               title="클릭하여 D-Day 컨트롤 열기"
             >
@@ -595,6 +727,7 @@
             <button
               type="button"
               class="w4-title-btn"
+              data-no-drag
               onclick={() => void openControl(currentEntry.item.id, currentEntry.windowLabel)}
               title={`${currentEntry.item.title} (${currentEntry.windowTitle})`}
             >
@@ -602,7 +735,7 @@
             </button>
 
             {#if visibleEntries.length >= 2}
-              <div class="w4-pager" role="group" aria-label="D-Day 전환">
+              <div class="w4-pager" role="group" aria-label="D-Day 전환" data-no-drag>
                 <button
                   type="button"
                   class="dw-nav-btn"
@@ -657,7 +790,7 @@
               <DdayIcon
                 icon={currentEntry.item.icon}
                 tone={currentEntry.item.tone}
-                size={20}
+                size="var(--dw-icon-sz, 20px)"
                 dark={effectiveDark}
               />
               <span class="w1-scope-tag">
@@ -668,7 +801,14 @@
               </span>
             </div>
 
-            <div class="dw-win-controls" class:pinned={prefs.alwaysOnTop}>
+            <div
+              class="dw-win-controls"
+              class:pinned={prefs.alwaysOnTop}
+              role="group"
+              aria-label="창 제어"
+              data-no-drag
+              use:blockDrag
+            >
               <button
                 type="button"
                 class="dw-icon-btn"
@@ -677,25 +817,25 @@
                 title={prefs.alwaysOnTop ? '고정 해제' : '항상 위에'}
                 onclick={(e) => { e.stopPropagation(); void toggleTop(); }}
               >
-                {#if prefs.alwaysOnTop}<Pin size={11} />{:else}<PinOff size={11} />{/if}
+                {#if prefs.alwaysOnTop}<Pin size={12} />{:else}<PinOff size={12} />{/if}
               </button>
               <button
                 type="button"
                 class="dw-icon-btn"
                 aria-label="위젯 설정"
                 title="스킨 · 표시 설정"
-                onclick={(e) => { e.stopPropagation(); void openMenu(e); }}
+                onclick={(e) => void openMenu(e)}
               >
-                <Ellipsis size={12} />
+                <Ellipsis size={13} />
               </button>
               <button
                 type="button"
-                class="dw-icon-btn"
+                class="dw-icon-btn dw-close-btn"
                 aria-label="위젯 닫기"
                 title="닫기"
                 onclick={(e) => { e.stopPropagation(); void closeWidget(); }}
               >
-                <X size={12} />
+                <X size={13} />
               </button>
             </div>
           </div>
@@ -704,6 +844,7 @@
             <button
               type="button"
               class="w1-flap-btn"
+              data-no-drag
               onclick={() => void openControl(currentEntry.item.id, currentEntry.windowLabel)}
               title="클릭하여 D-Day 컨트롤 열기"
             >
@@ -721,6 +862,7 @@
               <button
                 type="button"
                 class="w1-title-btn"
+                data-no-drag
                 onclick={() => void openControl(currentEntry.item.id, currentEntry.windowLabel)}
                 title={currentEntry.item.title}
               >
@@ -745,7 +887,7 @@
           </div>
 
           {#if visibleEntries.length >= 2}
-            <div class="w1-pager" role="group" aria-label="D-Day 전환">
+            <div class="w1-pager" role="group" aria-label="D-Day 전환" data-no-drag>
               <button
                 type="button"
                 class="dw-nav-btn"
@@ -769,6 +911,16 @@
       </div>
     {/if}
   </main>
+
+  <!-- container: size 바깥(형제)에 두어 바깥 투명 6px 테두리만 리사이즈 입력을 받고 상단 우측 버튼과 절대 겹치지 않게 합니다 -->
+  <DdayResizeHandles
+    {native}
+    edgeSize={5}
+    cornerSize={12}
+    onResizeStart={() => {
+      menu = null;
+    }}
+  />
 
   {#if menu}
     <button

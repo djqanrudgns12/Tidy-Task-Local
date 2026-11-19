@@ -59,6 +59,29 @@ export const DDAY_BANNER_MODES = Object.freeze(['single', 'bento', 'hidden']);
 export const DDAY_SKINS = Object.freeze(['w1', 'w4']);
 /** @type {readonly DdayAppearanceMode[]} */
 export const DDAY_APPEARANCE_MODES = Object.freeze(['auto', 'light', 'dark']);
+
+/** @type {Readonly<{ defaultWidth: number, defaultHeight: number, wideWidth: number, wideHeight: number, minWidth: number, minHeight: number, maxWidth: number, maxHeight: number }>} */
+export const DDAY_CONTROL_BOUNDS = Object.freeze({
+  defaultWidth: 380,
+  defaultHeight: 580,
+  wideWidth: 560,
+  wideHeight: 640,
+  minWidth: 300,
+  minHeight: 400,
+  maxWidth: 1200,
+  maxHeight: 1400,
+});
+
+/** @type {Readonly<{ defaultWidth: number, defaultHeight: number, minWidth: number, minHeight: number, maxWidth: number, maxHeight: number }>} */
+export const DDAY_WIDGET_BOUNDS = Object.freeze({
+  defaultWidth: 236,
+  defaultHeight: 256,
+  minWidth: 170,
+  minHeight: 175,
+  maxWidth: 900,
+  maxHeight: 900,
+});
+
 /**
  * @typedef {{
  *   id: string,
@@ -80,12 +103,23 @@ export const DDAY_APPEARANCE_MODES = Object.freeze(['auto', 'light', 'dark']);
  *
  * @typedef {{ showInTodo: boolean, showInBanner: boolean, showInWidget: boolean }} ChannelPreset
  * @typedef {{
+ *   x: number,
+ *   y: number,
+ *   physicalX: number,
+ *   physicalY: number,
+ *   logicalX?: number,
+ *   logicalY?: number,
+ *   width: number,
+ *   height: number,
+ * }} DdayGeometry
+ * @typedef {{
  *   defaultChannelsFromTodo: ChannelPreset,
  *   defaultChannelsFromNew: ChannelPreset,
  *   completeWithTodo: boolean,
  *   deleteWithTodo: boolean,
+ *   controlGeometry: DdayGeometry | null,
+ *   controlAlwaysOnTop: boolean,
  * }} DdaySettings
- * @typedef {{ x: number, y: number, width: number, height: number }} DdayGeometry
  * @typedef {{
  *   skin: DdaySkin,
  *   appearanceMode: DdayAppearanceMode,
@@ -359,6 +393,55 @@ function normalizeChannelPreset(raw, fallback) {
 }
 
 /**
+ * 창 위치·크기 객체를 경계 안에서 정규화합니다(물리 좌표 우선 + 기존 x/y 하위 호환).
+ * @param {unknown} raw
+ * @param {{ minWidth: number, minHeight: number, maxWidth: number, maxHeight: number }} bounds
+ * @returns {DdayGeometry | null}
+ */
+export function normalizeBoundedGeometry(raw, bounds) {
+  if (!raw || typeof raw !== 'object') return null;
+  const g = /** @type {Record<string, any>} */ (raw);
+  const px = typeof g.physicalX === 'number' && Number.isFinite(g.physicalX) ? g.physicalX : g.x;
+  const py = typeof g.physicalY === 'number' && Number.isFinite(g.physicalY) ? g.physicalY : g.y;
+  const { width, height } = g;
+  if (![px, py, width, height].every((v) => typeof v === 'number' && Number.isFinite(v))) return null;
+  if (px <= -10000 || py <= -10000 || px >= 100000 || py >= 100000) return null;
+  if (width < bounds.minWidth || height < bounds.minHeight || width > bounds.maxWidth || height > bounds.maxHeight) {
+    return null;
+  }
+  const rx = Math.round(px);
+  const ry = Math.round(py);
+  /** @type {DdayGeometry} */
+  const normalized = {
+    x: rx,
+    y: ry,
+    physicalX: rx,
+    physicalY: ry,
+    width: Math.round(width),
+    height: Math.round(height),
+  };
+  if (
+    typeof g.logicalX === 'number' &&
+    Number.isFinite(g.logicalX) &&
+    g.logicalX > -10000 &&
+    g.logicalX < 100000 &&
+    typeof g.logicalY === 'number' &&
+    Number.isFinite(g.logicalY) &&
+    g.logicalY > -10000 &&
+    g.logicalY < 100000
+  ) {
+    normalized.logicalX = Math.round(g.logicalX);
+    normalized.logicalY = Math.round(g.logicalY);
+  }
+  return normalized;
+}
+
+/** @param {unknown} raw @returns {DdayGeometry | null} */
+export function normalizeControlGeometry(raw) {
+  return normalizeBoundedGeometry(raw, DDAY_CONTROL_BOUNDS);
+}
+
+/**
  * @param {unknown} [raw]
  * @returns {DdaySettings}
  */
@@ -377,23 +460,19 @@ export function normalizeDdaySettings(raw) {
     }),
     completeWithTodo: typeof r.completeWithTodo === 'boolean' ? r.completeWithTodo : true,
     deleteWithTodo: typeof r.deleteWithTodo === 'boolean' ? r.deleteWithTodo : false,
+    controlGeometry: normalizeControlGeometry(r.controlGeometry),
+    controlAlwaysOnTop: typeof r.controlAlwaysOnTop === 'boolean' ? r.controlAlwaysOnTop : true,
   };
 }
 
 /** @param {unknown} raw @returns {DdayGeometry | null} */
 export function normalizeDdayGeometry(raw) {
-  if (!raw || typeof raw !== 'object') return null;
-  const g = /** @type {Record<string, any>} */ (raw);
-  const { x, y, width, height } = g;
-  if (![x, y, width, height].every((v) => typeof v === 'number' && Number.isFinite(v))) return null;
-  if (x <= -10000 || y <= -10000) return null;
-  if (width < 150 || height < 150 || width > 2000 || height > 2000) return null;
-  return {
-    x: Math.round(x),
-    y: Math.round(y),
-    width: Math.round(width),
-    height: Math.round(height),
-  };
+  return normalizeBoundedGeometry(raw, {
+    minWidth: DDAY_WIDGET_BOUNDS.minWidth,
+    minHeight: DDAY_WIDGET_BOUNDS.minHeight,
+    maxWidth: 2000,
+    maxHeight: 2000,
+  });
 }
 
 /**

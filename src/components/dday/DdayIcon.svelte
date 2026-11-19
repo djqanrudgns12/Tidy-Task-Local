@@ -7,7 +7,7 @@
    *   icon?: string,
    *   tone?: string,
    *   accent?: string,
-   *   size?: number,
+   *   size?: number | string,
    *   dark?: boolean,
    *   variant?: 'badge' | 'bare',
    * }}
@@ -22,9 +22,14 @@
   } = $props();
 
   const color = $derived(resolveToneColor(tone, accent));
-  // 배지 내부에서는 테두리(1px) 안쪽 여백을 유지하면서 20px 초소형 배너에서도 뭉개지지 않게 82% 비율을 씁니다.
+  const sizeCss = $derived(typeof size === 'number' ? `${size}px` : size);
+  // 숫자 px 전달 시 기본 attribute 크기를 맞추고, 실제 반응형 스케일은 CSS width/height(%)가 무손실로 처리합니다.
   const stickerSize = $derived(
-    variant === 'bare' ? size : Math.max(14, Math.round(size * 0.82)),
+    typeof size === 'number'
+      ? variant === 'bare'
+        ? size
+        : Math.max(14, Math.round(size * 0.82))
+      : 22,
   );
 </script>
 
@@ -32,7 +37,7 @@
   <span
     class="dday-bare"
     data-scheme={dark ? 'dark' : 'light'}
-    style="--dd-size: {size}px;"
+    style="--dd-size: {sizeCss};"
     aria-hidden="true"
   >
     <DdayStickerSvg {icon} size={stickerSize} />
@@ -41,7 +46,7 @@
   <span
     class="dday-bubble"
     data-scheme={dark ? 'dark' : 'light'}
-    style="--dd-tone: {color}; --dd-size: {size}px;"
+    style="--dd-tone: {color}; --dd-size: {sizeCss};"
     aria-hidden="true"
   >
     <DdayStickerSvg {icon} size={stickerSize} />
@@ -58,6 +63,12 @@
     --dd-ink: #4c4340;
     --dd-stem: #4c4340;
     --dd-trail: #94a3b8;
+  }
+
+  .dday-bare :global(.dday-sticker-svg) {
+    width: 100%;
+    height: 100%;
+    display: block;
   }
 
   .dday-bare[data-scheme='dark'] {
@@ -82,6 +93,12 @@
     --dd-stem: #4c4340;
     --dd-trail: #94a3b8;
     transition: background-color 150ms ease, border-color 150ms ease;
+  }
+
+  .dday-bubble :global(.dday-sticker-svg) {
+    width: 82%;
+    height: 82%;
+    display: block;
   }
 
   .dday-bubble[data-scheme='dark'] {

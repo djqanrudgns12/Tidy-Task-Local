@@ -58,11 +58,11 @@
     if (!cardEl || typeof ResizeObserver === 'undefined') return;
     const ro = new ResizeObserver((entries) => {
       for (const entry of entries) {
-        measuredNarrow = entry.contentRect.width < 285;
+        measuredNarrow = entry.contentRect.width < 305;
       }
     });
     ro.observe(cardEl);
-    measuredNarrow = cardEl.getBoundingClientRect().width < 285;
+    measuredNarrow = cardEl.getBoundingClientRect().width < 305;
     return () => ro.disconnect();
   });
 
@@ -134,7 +134,7 @@
       <Check size={11} strokeWidth={2.8} />
     </button>
 
-    <DdayIcon icon={item.icon} tone={item.tone} {accent} size={26} {dark} />
+    <DdayIcon icon={item.icon} tone={item.tone} {accent} size="var(--dd-icon-sz, 26px)" {dark} />
 
     <button
       type="button"
@@ -247,9 +247,10 @@
 
 <style>
   .dd-row {
+    container-type: inline-size;
     display: flex;
     flex-direction: column;
-    gap: 7px;
+    gap: var(--dd-row-gap, 7px);
     padding: 9px 10px 8px 8px;
     border-radius: 13px;
     background: #ffffff;
@@ -360,7 +361,7 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    font-size: 12.5px;
+    font-size: var(--dd-fs-title, 12.5px);
     font-weight: 700;
     color: #1e2430;
     line-height: 1.3;
@@ -379,7 +380,7 @@
     white-space: nowrap;
     padding: 2.5px 7px;
     border-radius: 7px;
-    font-size: 11px;
+    font-size: var(--dd-fs-sub, 11px);
     font-weight: 800;
     background: color-mix(in srgb, var(--dd-tone) 14%, #ffffff);
     color: color-mix(in srgb, var(--dd-tone) 88%, #111827);
@@ -412,13 +413,13 @@
     display: inline-flex;
     align-items: center;
     gap: 3px;
-    height: 24px;
+    height: clamp(24px, calc(var(--dd-icon-sz, 26px) * 0.94), 30px);
     padding: 0 7px;
     border-radius: 7px;
     border: 1px solid rgba(15, 23, 42, 0.08);
     background: #f8fafc;
     color: #475569;
-    font-size: 10.5px;
+    font-size: var(--dd-fs-sub, 10.5px);
     font-weight: 700;
     white-space: nowrap;
     word-break: keep-all;
@@ -426,7 +427,7 @@
     transition: background-color 120ms ease, color 120ms ease, border-color 120ms ease;
   }
   .dd-edit-btn.icon-only {
-    width: 24px;
+    width: clamp(24px, calc(var(--dd-icon-sz, 26px) * 0.94), 30px);
     padding: 0;
     justify-content: center;
   }
@@ -460,7 +461,7 @@
     gap: 4px;
     min-width: 0;
     flex: 1;
-    font-size: 10.5px;
+    font-size: var(--dd-fs-sub, 10.5px);
     color: #64748b;
   }
   .dd-row[data-scheme='dark'] .dd-meta {
@@ -470,7 +471,7 @@
   .dd-origin {
     flex-shrink: 0;
     white-space: nowrap;
-    font-size: 9.5px;
+    font-size: var(--dd-fs-micro, 9.5px);
     font-weight: 700;
     padding: 1.5px 5.5px;
     border-radius: 5px;
@@ -521,13 +522,13 @@
     display: inline-flex;
     align-items: center;
     gap: 3.5px;
-    height: 20px;
+    height: clamp(20px, calc(var(--dd-btn-h, 30px) * 0.68), 26px);
     padding: 0 7px;
     border: 0;
     border-radius: 999px;
     background: transparent;
     color: #94a3b8;
-    font-size: 10px;
+    font-size: var(--dd-fs-micro, 10px);
     font-weight: 700;
     line-height: 1;
     white-space: nowrap;
@@ -538,6 +539,15 @@
   .dd-capsule.compact .dd-cap-seg {
     padding: 0 5.5px;
     gap: 2.5px;
+  }
+  @container (width < 292px) {
+    .dd-line2 {
+      padding-left: 4px;
+      gap: 5px;
+    }
+    .dd-dot-sep {
+      display: none;
+    }
   }
   .dd-cap-seg:hover {
     color: #475569;

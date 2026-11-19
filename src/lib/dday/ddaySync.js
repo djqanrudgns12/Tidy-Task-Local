@@ -8,10 +8,11 @@ import { subscribeStore } from '../scores/store.js';
 import { track } from '../analytics.js';
 import { createSerialQueue } from '../storage/serialQueue.js';
 import { hasWindowContent } from '../storage/windowDataCodec.js';
-import { getMonitorGeometries } from '../windows/windowRegistry.js';
+import { ensureWindowOnScreen, getMonitorGeometries } from '../windows/windowRegistry.js';
 import { isDataWindowLabel, isTinyNoteLabel } from '../windows/windowLabels.js';
 import {
   DDAY_BANNER_MODES,
+  DDAY_CONTROL_BOUNDS,
   computeDdayCounter,
   normalizeDdayList,
   normalizeDdaySettings,
@@ -481,7 +482,7 @@ export async function dispatchDdayCommand(targetLabel, action, payload, settings
 }
 
 /**
- * D-Day 컨트롤 타워 창(`380px` 단독 모달)을 열거나 앞으로 가져옵니다.
+ * D-Day 컨트롤 타워 창(기본 380×580, 자유 리사이즈 가능)을 열거나 앞으로 가져옵니다.
  * @param {{ requesterLabel?: string, focusDdayId?: string | null, editDdayId?: string | null, initialTab?: 'list'|'settings'|'archive', openCreate?: boolean, appearance?: { themeColor?: string, isDarkMode?: boolean, uiFontFamily?: string, uiFontSize?: number } }} [opts]
  */
 export async function openDdayControlWindow(opts = {}) {
@@ -499,8 +500,9 @@ export async function openDdayControlWindow(opts = {}) {
   const existing = await WebviewWindow.getByLabel(DDAY_CONTROL_LABEL);
   if (existing) {
     try {
-      await existing.show();
+      await ensureWindowOnScreen(existing);
       await existing.unminimize();
+      await existing.show();
       await existing.setFocus();
       setTimeout(() => {
         void emitTo(DDAY_CONTROL_LABEL, DDAY_EVENTS.setTarget, payload).catch(() => {});
@@ -514,7 +516,10 @@ export async function openDdayControlWindow(opts = {}) {
   let unlisten = /** @type {(() => void) | null} */ (null);
   let sent = false;
   const cleanup = () => { unlisten?.(); unlisten = null; };
-  const timeout = setTimeout(cleanup, 6000);
+  const timeout = setTimeout(() => {
+    cleanup();
+    void WebviewWindow.getByLabel(DDAY_CONTROL_LABEL).then((w) => w?.show()).catch(() => {});
+  }, 6000);
   unlisten = await listen(DDAY_EVENTS.controlReady, async () => {
     if (sent) return;
     sent = true;
@@ -527,20 +532,25 @@ export async function openDdayControlWindow(opts = {}) {
   const minWorkH = monitors.length
     ? Math.min(...monitors.map((m) => m.work.height / (m.scale || 1)))
     : 720;
-  const height = Math.max(460, Math.min(620, Math.floor(minWorkH - 36)));
+  const height = Math.max(
+    DDAY_CONTROL_BOUNDS.minHeight,
+    Math.min(DDAY_CONTROL_BOUNDS.defaultHeight, Math.floor(minWorkH - 36)),
+  );
 
   const win = new WebviewWindow(DDAY_CONTROL_LABEL, {
     url: 'index.html',
     title: 'D-Day 컨트롤',
-    width: 380,
+    width: DDAY_CONTROL_BOUNDS.defaultWidth,
     height,
-    resizable: false,
+    minWidth: DDAY_CONTROL_BOUNDS.minWidth,
+    minHeight: DDAY_CONTROL_BOUNDS.minHeight,
+    resizable: true,
     decorations: false,
     transparent: true,
     shadow: false,
     alwaysOnTop: true,
     center: true,
-    visible: true,
+    visible: false,
   });
   win.once('tauri://error', () => {
     clearTimeout(timeout);

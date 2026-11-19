@@ -208,6 +208,7 @@
 
 <style>
   .b3-wrap {
+    container-type: inline-size;
     padding: 5px 10px 6px;
     border-top: 1px solid var(--header-line, rgba(15, 23, 42, 0.08));
     flex-shrink: 0;

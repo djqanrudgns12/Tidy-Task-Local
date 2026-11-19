@@ -1,0 +1,274 @@
+// D-Day 컨트롤 패널·바탕화면 위젯의 다중 모니터 DPI 2-pass 배치, 더블클릭 토글, 자석 스냅을 담당합니다.
+import { LogicalSize, PhysicalPosition } from '@tauri-apps/api/dpi';
+import { ensureWindowOnScreen, getMonitorGeometries } from '../windows/windowRegistry.js';
+import { isPlausibleCoordinate, pickPrimaryMonitor, resolveSavedPosition } from '../windows/windowPlacement.js';
+import { DDAY_CONTROL_BOUNDS, normalizeBoundedGeometry } from './ddayModel.js';
+import { clamp } from './ddayLayout.js';
+
+/**
+ * 물리 좌표를 포함하는 모니터를 찾고, 없으면 주 모니터를 돌려줍니다.
+ * @param {number | null | undefined} x
+ * @param {number | null | undefined} y
+ * @param {import('../windows/windowPlacement.js').MonitorGeometry[]} monitors
+ */
+export function findMonitorAtPoint(x, y, monitors) {
+  const list = (monitors || []).filter(Boolean);
+  if (list.length === 0) return null;
+  if (typeof x === 'number' && typeof y === 'number' && Number.isFinite(x) && Number.isFinite(y)) {
+    const found = list.find(
+      (m) => x >= m.bounds.x && x < m.bounds.x + m.bounds.width && y >= m.bounds.y && y < m.bounds.y + m.bounds.height,
+    );
+    if (found) return found;
+  }
+  return pickPrimaryMonitor(list);
+}
+
+/**
+ * 논리 창 크기를 대상 모니터 작업영역 이내로 안전하게 제한합니다.
+ * @param {{ width: number, height: number }} size
+ * @param {{ minWidth: number, minHeight: number, maxWidth: number, maxHeight: number }} bounds
+ * @param {import('../windows/windowPlacement.js').MonitorGeometry | null} monitor
+ * @param {number} [margin]
+ */
+export function clampSizeToMonitor(size, bounds, monitor, margin = 16) {
+  const scale = monitor && monitor.scale > 0 ? monitor.scale : 1;
+  const workMaxW = monitor
+    ? Math.max(bounds.minWidth, Math.floor(monitor.work.width / scale - margin))
+    : bounds.maxWidth;
+  const workMaxH = monitor
+    ? Math.max(bounds.minHeight, Math.floor(monitor.work.height / scale - margin))
+    : bounds.maxHeight;
+
+  const width = Math.round(clamp(size.width, bounds.minWidth, Math.min(bounds.maxWidth, workMaxW)));
+  const height = Math.round(clamp(size.height, bounds.minHeight, Math.min(bounds.maxHeight, workMaxH)));
+  return { width, height };
+}
+
+/**
+ * 컨트롤 타워 헤더 더블클릭(또는 크기 토글 버튼) 시 전환할 기본 ↔ 와이드 목표를 계산합니다.
+ * 현재 창 중심을 유지하되 모니터 작업영역 밖으로 튀어나가지 않게 보정합니다.
+ * @param {{
+ *   currentPos: { x: number, y: number } | null,
+ *   currentSize: { width: number, height: number } | null,
+ *   currentScale?: number,
+ *   monitors: import('../windows/windowPlacement.js').MonitorGeometry[],
+ * }} input
+ * @returns {{ width: number, height: number, physicalX: number | null, physicalY: number | null, preset: 'wide' | 'default' }}
+ */
+export function computeDoubleClickTarget({
+  currentPos,
+  currentSize,
+  currentScale = 1,
+  monitors,
+}) {
+  const cx = currentPos && currentSize ? currentPos.x + currentSize.width / 2 : null;
+  const cy = currentPos && currentSize ? currentPos.y + currentSize.height / 2 : null;
+  const monitor = findMonitorAtPoint(cx, cy, monitors);
+  const scale = monitor && monitor.scale > 0 ? monitor.scale : currentScale > 0 ? currentScale : 1;
+
+  const defSize = clampSizeToMonitor(
+    { width: DDAY_CONTROL_BOUNDS.defaultWidth, height: DDAY_CONTROL_BOUNDS.defaultHeight },
+    DDAY_CONTROL_BOUNDS,
+    monitor,
+    36,
+  );
+  const wideSize = clampSizeToMonitor(
+    { width: DDAY_CONTROL_BOUNDS.wideWidth, height: DDAY_CONTROL_BOUNDS.wideHeight },
+    DDAY_CONTROL_BOUNDS,
+    monitor,
+    32,
+  );
+
+  const curLogW = currentSize ? currentSize.width / scale : defSize.width;
+  const curLogH = currentSize ? currentSize.height / scale : defSize.height;
+  const isNearDefault =
+    Math.abs(curLogW - defSize.width) <= 18 && Math.abs(curLogH - defSize.height) <= 18;
+
+  const targetSize = isNearDefault ? wideSize : defSize;
+  /** @type {'wide' | 'default'} */
+  const preset = isNearDefault ? 'wide' : 'default';
+
+  let physicalX = null;
+  let physicalY = null;
+  if (monitor && currentPos && currentSize) {
+    const newPhysW = Math.round(targetSize.width * scale);
+    const newPhysH = Math.round(targetSize.height * scale);
+    const centerX = currentPos.x + currentSize.width / 2;
+    const centerY = currentPos.y + currentSize.height / 2;
+    const pad = Math.round(8 * scale);
+    const minX = monitor.work.x + pad;
+    const maxX = Math.max(minX, monitor.work.x + monitor.work.width - newPhysW - pad);
+    const minY = monitor.work.y + pad;
+    const maxY = Math.max(minY, monitor.work.y + monitor.work.height - newPhysH - pad);
+
+    physicalX = Math.round(clamp(centerX - newPhysW / 2, minX, maxX));
+    physicalY = Math.round(clamp(centerY - newPhysH / 2, minY, maxY));
+  }
+
+  return {
+    width: targetSize.width,
+    height: targetSize.height,
+    physicalX,
+    physicalY,
+    preset,
+  };
+}
+
+/**
+ * 위젯 창이 모니터 작업영역 가장자리에 가까우면 일정 간격(8px)으로 자석처럼 정렬합니다.
+ * @param {{ x: number, y: number, width: number, height: number }} rect
+ * @param {import('../windows/windowPlacement.js').MonitorGeometry[]} monitors
+ * @param {{ snapThresholdLogical?: number, edgeGapLogical?: number }} [options]
+ * @returns {{ x: number, y: number, snapped: boolean }}
+ */
+export function snapWidgetRectToEdges(
+  rect,
+  monitors,
+  { snapThresholdLogical = 14, edgeGapLogical = 8 } = {},
+) {
+  if (!rect || !Array.isArray(monitors) || monitors.length === 0) {
+    return { x: rect?.x ?? 0, y: rect?.y ?? 0, snapped: false };
+  }
+  const monitor = findMonitorAtPoint(rect.x + rect.width / 2, rect.y + rect.height / 2, monitors);
+  if (!monitor) return { x: rect.x, y: rect.y, snapped: false };
+
+  const scale = monitor.scale > 0 ? monitor.scale : 1;
+  const threshold = snapThresholdLogical * scale;
+  const gap = Math.round(edgeGapLogical * scale);
+  const { work } = monitor;
+
+  let x = rect.x;
+  let y = rect.y;
+
+  const leftEdge = work.x + gap;
+  const rightEdge = work.x + work.width - rect.width - gap;
+  if (Math.abs(rect.x - leftEdge) <= threshold) {
+    x = Math.round(leftEdge);
+  } else if (Math.abs(rect.x - rightEdge) <= threshold) {
+    x = Math.round(rightEdge);
+  }
+
+  const topEdge = work.y + gap;
+  const bottomEdge = work.y + work.height - rect.height - gap;
+  if (Math.abs(rect.y - topEdge) <= threshold) {
+    y = Math.round(topEdge);
+  } else if (Math.abs(rect.y - bottomEdge) <= threshold) {
+    y = Math.round(bottomEdge);
+  }
+
+  const movedEnough = Math.abs(x - rect.x) >= 2 || Math.abs(y - rect.y) >= 2;
+  return { x, y, snapped: movedEnough };
+}
+
+/**
+ * 컨트롤 타워에서 [위젯 띄우기] 실행 시 저장 위치가 없는 위젯이 컨트롤 창 뒤에 가려지지 않게 옆자리를 계산합니다.
+ * @param {{
+ *   controlPos: { x: number, y: number },
+ *   controlSize: { width: number, height: number },
+ *   widgetSize: { width: number, height: number },
+ *   monitors: import('../windows/windowPlacement.js').MonitorGeometry[],
+ * }} input
+ * @returns {{ x: number, y: number } | null}
+ */
+export function computeWidgetSidePlacement({ controlPos, controlSize, widgetSize, monitors }) {
+  const monitor = findMonitorAtPoint(
+    controlPos.x + controlSize.width / 2,
+    controlPos.y + controlSize.height / 2,
+    monitors,
+  );
+  if (!monitor) return null;
+  const scale = monitor.scale > 0 ? monitor.scale : 1;
+  const gap = Math.round(14 * scale);
+  const pad = Math.round(12 * scale);
+  const { work } = monitor;
+
+  const minX = work.x + pad;
+  const maxX = Math.max(minX, work.x + work.width - widgetSize.width - pad);
+  const minY = work.y + pad;
+  const maxY = Math.max(minY, work.y + work.height - widgetSize.height - pad);
+  const y = Math.round(clamp(controlPos.y, minY, maxY));
+
+  const rightX = controlPos.x + controlSize.width + gap;
+  if (rightX <= maxX) {
+    return { x: Math.round(rightX), y };
+  }
+
+  const leftX = controlPos.x - widgetSize.width - gap;
+  if (leftX >= minX) {
+    return { x: Math.round(leftX), y };
+  }
+
+  return { x: Math.round(maxX), y: Math.round(minY) };
+}
+
+/**
+ * 저장된 기하학(물리·논리 듀얼 좌표)을 최소 크기 → 모니터 작업영역 클램프 → 2-pass 순서로 적용합니다.
+ * 왜 2회 적용하는가: 배율이 다른 모니터(4K 200% ↔ FHD 100%)로 이동 시 OS가 첫 이동 직후 창 크기를 재계산하기 때문입니다.
+ * @param {import('@tauri-apps/api/window').Window} win
+ * @param {import('./ddayModel.js').DdayGeometry | { physicalX?: number | null, physicalY?: number | null, logicalX?: number | null, logicalY?: number | null, width: number, height: number }} target
+ * @param {{ minWidth: number, minHeight: number, maxWidth: number, maxHeight: number }} bounds
+ */
+export async function applyDdayWindowBounds(win, target, bounds) {
+  const monitors = await getMonitorGeometries();
+  await win.setMinSize(new LogicalSize(bounds.minWidth, bounds.minHeight)).catch(() => {});
+
+  const resolvedPos = resolveSavedPosition(
+    {
+      physicalX: target.physicalX ?? /** @type {any} */ (target).x,
+      physicalY: target.physicalY ?? /** @type {any} */ (target).y,
+      logicalX: target.logicalX,
+      logicalY: target.logicalY,
+      width: target.width,
+      height: target.height,
+    },
+    monitors,
+  );
+
+  const monitor = resolvedPos ? findMonitorAtPoint(resolvedPos.x, resolvedPos.y, monitors) : pickPrimaryMonitor(monitors);
+  const clamped = clampSizeToMonitor({ width: target.width, height: target.height }, bounds, monitor);
+
+  for (let pass = 0; pass < 2; pass++) {
+    if (resolvedPos) {
+      await win.setPosition(new PhysicalPosition(resolvedPos.x, resolvedPos.y)).catch(() => {});
+    }
+    await win.setSize(new LogicalSize(clamped.width, clamped.height)).catch(() => {});
+  }
+  await ensureWindowOnScreen(win, monitors);
+}
+
+/**
+ * 최소화·최대화·전체화면 상태가 아닐 때만 현재 창 기하학을 안전하게 캡처합니다.
+ * @param {import('@tauri-apps/api/window').Window} win
+ * @param {{ minWidth: number, minHeight: number, maxWidth: number, maxHeight: number }} bounds
+ * @returns {Promise<import('./ddayModel.js').DdayGeometry | null>}
+ */
+export async function captureWindowGeometry(win, bounds) {
+  const [minimized, maximized, fullscreen] = await Promise.all([
+    win.isMinimized().catch(() => false),
+    win.isMaximized().catch(() => false),
+    win.isFullscreen().catch(() => false),
+  ]);
+  if (minimized || maximized || fullscreen) return null;
+
+  const [pos, size, scale] = await Promise.all([
+    win.outerPosition(),
+    win.innerSize(),
+    win.scaleFactor(),
+  ]);
+  if (!isPlausibleCoordinate(pos.x) || !isPlausibleCoordinate(pos.y)) return null;
+  const factor = Number(scale) > 0 ? Number(scale) : 1;
+
+  return normalizeBoundedGeometry(
+    {
+      x: pos.x,
+      y: pos.y,
+      physicalX: pos.x,
+      physicalY: pos.y,
+      logicalX: Math.round(pos.x / factor),
+      logicalY: Math.round(pos.y / factor),
+      width: Math.round(size.width / factor),
+      height: Math.round(size.height / factor),
+    },
+    bounds,
+  );
+}

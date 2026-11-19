@@ -41,29 +41,17 @@
   cursor: grabbing;
 }
 
-/* 8방향 투명 리사이즈 히트존 */
-.dw-resize {
-  position: fixed;
-  z-index: 12;
-}
-.dw-resize[data-direction='North'] { top: 0; left: 16px; right: 16px; height: 7px; cursor: ns-resize; }
-.dw-resize[data-direction='South'] { bottom: 0; left: 16px; right: 16px; height: 7px; cursor: ns-resize; }
-.dw-resize[data-direction='West'] { left: 0; top: 16px; bottom: 16px; width: 7px; cursor: ew-resize; }
-.dw-resize[data-direction='East'] { right: 0; top: 16px; bottom: 16px; width: 7px; cursor: ew-resize; }
-.dw-resize[data-direction='NorthWest'] { top: 0; left: 0; width: 14px; height: 14px; cursor: nwse-resize; }
-.dw-resize[data-direction='NorthEast'] { top: 0; right: 0; width: 14px; height: 14px; cursor: nesw-resize; }
-.dw-resize[data-direction='SouthWest'] { bottom: 0; left: 0; width: 14px; height: 14px; cursor: nesw-resize; }
-.dw-resize[data-direction='SouthEast'] { bottom: 0; right: 0; width: 14px; height: 14px; cursor: nwse-resize; }
-
-/* 우상단 미세 컨트롤 버튼 — 호버·초점 시 또렷하게 드러남 */
+/* 우상단 컨트롤 버튼 — 호버·초점·핀 시 완전 불투명, dragRegion 탈취 방어를 위해 히트 영역과 z-index를 보강 */
 .dw-win-controls {
   position: relative;
-  z-index: 16;
+  z-index: 30;
   display: flex;
   align-items: center;
-  gap: 2px;
+  gap: 1px;
+  padding: 1px;
   flex-shrink: 0;
-  opacity: 0.58;
+  opacity: 0.78;
+  cursor: default;
   transition: opacity 150ms ease;
 }
 .dw-board:hover .dw-win-controls,
@@ -72,8 +60,8 @@
   opacity: 1;
 }
 .dw-icon-btn {
-  width: 22px;
-  height: 22px;
+  width: var(--dw-ctrl-sz, 26px);
+  height: var(--dw-ctrl-sz, 26px);
   border: 0;
   border-radius: 7px;
   background: transparent;
@@ -82,17 +70,31 @@
   place-items: center;
   padding: 0;
   cursor: pointer;
-  transition: background-color 120ms ease, color 120ms ease, transform 100ms ease;
+  transition: background-color 120ms ease, color 120ms ease;
+}
+.dw-icon-btn svg {
+  pointer-events: none;
+}
+.dw-icon-btn:active {
+  transform: none !important;
 }
 .dw-icon-btn:hover {
-  background: rgba(15, 23, 42, 0.08);
+  background: rgba(15, 23, 42, 0.1);
 }
 .dw-root[data-scheme='dark'] .dw-icon-btn:hover {
-  background: rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.14);
+}
+.dw-icon-btn.dw-close-btn:hover {
+  background: rgba(225, 29, 72, 0.14);
+  color: #e11d48;
+}
+.dw-root[data-scheme='dark'] .dw-icon-btn.dw-close-btn:hover {
+  background: rgba(251, 113, 133, 0.22);
+  color: #fda4af;
 }
 .dw-icon-btn.pin-on {
   color: var(--dw-tone, #d97706);
-  background: color-mix(in srgb, var(--dw-tone, #d97706) 14%, transparent);
+  background: color-mix(in srgb, var(--dw-tone, #d97706) 15%, transparent);
 }
 
 /* ═══════════════════════════════════════════════════════════════════════
@@ -277,7 +279,7 @@
 .w1-number {
   position: relative;
   z-index: 1;
-  font-size: clamp(22px, min(19cqw, 19cqh), 46px);
+  font-size: calc(clamp(20px, min(19cqw, 19cqh), 46px) * var(--dw-num-scale, 1));
   font-weight: 800;
   line-height: 1;
   color: color-mix(in srgb, var(--dw-tone) 88%, #111827);
@@ -457,7 +459,6 @@
   align-items: center;
   justify-content: space-between;
   gap: 4px;
-  z-index: 2;
 }
 .w4-hero-btn {
   flex: 1;
@@ -473,7 +474,7 @@
   cursor: pointer;
 }
 .w4-number {
-  font-size: clamp(23px, min(20cqw, 19cqh), 46px);
+  font-size: calc(clamp(21px, min(20cqw, 19cqh), 46px) * var(--dw-num-scale, 1));
   font-weight: 800;
   line-height: 1;
   color: color-mix(in srgb, var(--dw-tone) 92%, #0f172a);
@@ -610,6 +611,7 @@
   position: absolute;
   top: 8px;
   right: 8px;
+  z-index: 30;
 }
 .dw-empty-icon {
   width: 34px;
@@ -646,17 +648,17 @@
   cursor: pointer;
 }
 
-/* Container Queries — 170x175 초소형부터 320x320 확장까지 잘림 0% */
+/* Container Queries — 170x175 초소형부터 확장까지 잘림 0% */
 @container widget (height < 205px) {
   .w1-date,
   .w4-mat-date {
     display: none;
   }
   .w1-topband {
-    padding: 8px 8px 5px;
+    padding: 10px 7px 5px;
   }
   .w1-body {
-    padding: 6px 8px 5px;
+    padding: 5px 8px 5px;
     gap: 4px;
   }
   .w1-flap-btn {
@@ -665,13 +667,22 @@
   .w1-pager {
     padding-bottom: 5px;
   }
+  .w4-mat {
+    padding: 6px 7px;
+  }
 }
 @container widget (width < 195px) {
   .w1-scope-tag {
     display: none;
   }
+  .w1-topband {
+    padding-inline: 6px;
+  }
   .w4-chin {
     gap: 3px;
+  }
+  .w4-mat {
+    padding-inline: 6px;
   }
 }
 @container widget (min-width: 260px) and (min-height: 260px) {

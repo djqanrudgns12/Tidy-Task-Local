@@ -5,22 +5,41 @@
   import { getCurrentWindow } from '@tauri-apps/api/window';
   import {
     Check,
-    Flag,
     LayoutGrid,
+    Maximize2,
+    Minimize2,
     PanelTop,
+    Pin,
+    PinOff,
     Plus,
     X,
   } from 'lucide-svelte';
+  import { LogicalSize, PhysicalPosition } from '@tauri-apps/api/dpi';
+  import { WebviewWindow } from '@tauri-apps/api/webviewWindow';
   import { dragRegion } from '../../lib/dragRegion.js';
   import { getThemeAccent, getTidyTheme } from '../../lib/themes.js';
   import { openTool } from '../../lib/toolkit/windows.js';
+  import { ensureWindowOnScreen, getMonitorGeometries } from '../../lib/windows/windowRegistry.js';
   import {
+    DDAY_CONTROL_BOUNDS,
+    DDAY_WIDGET_BOUNDS,
     computeDdayCounter,
     normalizeDdaySettings,
     normalizeDdayWidgetPrefs,
     stripHtmlToTitle,
     todayDateKey,
   } from '../../lib/dday/ddayModel.js';
+  import {
+    classifyControlLayout,
+    computeControlMetrics,
+    controlMetricsToStyle,
+  } from '../../lib/dday/ddayLayout.js';
+  import {
+    applyDdayWindowBounds,
+    captureWindowGeometry,
+    computeDoubleClickTarget,
+    computeWidgetSidePlacement,
+  } from '../../lib/dday/ddayWindowBounds.js';
   import { formatDeadlineChip } from '../../lib/editor/richTextFormat.js';
   import { resolveMenuWidth } from '../../lib/windows/contextMenuLayout.js';
   import {
@@ -36,10 +55,13 @@
   import ContextTileGrid from '../context-menu/ContextTileGrid.svelte';
   import '../context-menu/ctxTokens.css';
   import DdayBanner from './DdayBanner.svelte';
+  import DdayControlGlyph from './DdayControlGlyph.svelte';
+  import DdayResizeHandles from './DdayResizeHandles.svelte';
   import DdayRowCard from './DdayRowCard.svelte';
   import DdayEditSheet from './DdayEditSheet.svelte';
   import DdaySettingsTab from './DdaySettingsTab.svelte';
   import DdayArchiveView from './DdayArchiveView.svelte';
+  import { resolveControlGlyphState } from '../../lib/dday/ddayBadge.js';
 
   /** @type {{ preview?: boolean }} */
   let { preview = false } = $props();
@@ -65,6 +87,8 @@
 
   let previewDarkOverride = $state(/** @type {boolean | null} */ (null));
   let previewFontOverride = $state(/** @type {number | null} */ (null));
+  let previewWidthOverride = $state(/** @type {number | null} */ (null));
+  let previewHeightOverride = $state(/** @type {number | null} */ (null));
 
   /** @type {{ item: import('../../lib/dday/ddayModel.js').DdayItem, x: number, y: number } | null} */
   let contextMenu = $state(null);
@@ -72,6 +96,16 @@
   let shellEl = $state(null);
   /** @type {HTMLDivElement | null} */
   let ctxEl = $state(null);
+
+  let shellW = $state(372);
+  let shellH = $state(572);
+  let committedLayout = $state(/** @type {import('../../lib/dday/ddayLayout.js').ControlLayoutState | null} */ (null));
+  let ready = $state(false);
+  let closing = $state(false);
+  let windowTransitioning = false;
+  let pinBusy = $state(false);
+  /** @type {ReturnType<typeof setTimeout> | null} */
+  let saveGeomTimer = null;
 
   let noticeText = $state('');
   /** @type {ReturnType<typeof setTimeout> | null} */
@@ -87,7 +121,24 @@
   }
 
   /** @param {HTMLElement} node */
-  const draggable = (node) => (isTauri() ? dragRegion(node) : { destroy() {} });
+  const draggable = (node) =>
+    isTauri()
+      ? dragRegion(node, { onDoubleClick: () => void toggleControlSize() })
+      : { update() {}, destroy() {} };
+
+  /** @param {HTMLElement} node */
+  function blockDrag(node) {
+    /** @param {Event} e */
+    const stop = (e) => e.stopPropagation();
+    node.addEventListener('pointerdown', stop);
+    node.addEventListener('mousedown', stop);
+    return {
+      destroy() {
+        node.removeEventListener('pointerdown', stop);
+        node.removeEventListener('mousedown', stop);
+      },
+    };
+  }
 
   const currentWindowSnap = $derived(
     windows.find((w) => w.label === targetLabel) || windows[0] || null,
@@ -96,13 +147,18 @@
   const themeColor = $derived(currentWindowSnap?.themeColor || 'amber');
   const accent = $derived(getThemeAccent(themeColor, dark));
   const uiFontSize = $derived(previewFontOverride ?? currentWindowSnap?.uiFontSize ?? 10);
-  const compactCapsules = $derived(uiFontSize >= 13);
 
   const activeItems = $derived.by(() =>
     (currentWindowSnap?.ddayItems || [])
       .filter((d) => d.status === 'active')
       .slice()
       .sort((a, b) => a.order - b.order),
+  );
+  const headerGlyphState = $derived(
+    resolveControlGlyphState(activeItems, todayKey, { themeColor, dark }),
+  );
+  const idleGlyphState = $derived(
+    resolveControlGlyphState([], todayKey, { themeColor, dark }),
   );
   const archivedItems = $derived.by(() =>
     (currentWindowSnap?.ddayItems || []).filter((d) => d.status === 'archived'),
@@ -119,13 +175,40 @@
     return found?.text || '';
   });
 
+  const layout = $derived(
+    classifyControlLayout({
+      width: shellW,
+      height: shellH,
+      itemCount: activeItems.length,
+      archiveCount: archivedItems.length,
+      prev: committedLayout,
+    }),
+  );
+  const metrics = $derived(
+    computeControlMetrics({
+      width: shellW,
+      height: shellH,
+      uiFontSize,
+      wideEdit: layout.wideEdit,
+    }),
+  );
+  const metricsStyle = $derived(controlMetricsToStyle(metrics));
+  const compactCapsules = $derived(uiFontSize >= 13 || layout.compactWidth);
+  const previewFrameStyle = $derived.by(() => {
+    if (!(preview || !isTauri()) || !previewWidthOverride) return '';
+    const h = previewHeightOverride || DDAY_CONTROL_BOUNDS.defaultHeight;
+    return `width: ${previewWidthOverride}px; height: ${h}px;`;
+  });
+
   // 컨텍스트 메뉴가 열려 있는 동안 최신 항목 상태로 유지
   const activeContextItem = $derived.by(() => {
     if (!contextMenu) return null;
     return activeItems.find((d) => d.id === contextMenu?.item.id) || null;
   });
   const ctxSurface = $derived(dark ? '#242730' : (getTidyTheme(themeColor)?.tidy?.bg || '#ffffff'));
-  const ctxWidth = $derived(resolveMenuWidth('ctrl-ctx', uiFontSize));
+  const ctxWidth = $derived(
+    Math.min(resolveMenuWidth('ctrl-ctx', uiFontSize), Math.max(206, shellW - 16)),
+  );
 
   // 삭제·아카이브된 항목으로 편집 진입 시 빈 편집 상태에 머물지 않도록 목록으로 복귀합니다.
   $effect(() => {
@@ -305,11 +388,116 @@
     }
   }
 
-  function closeModal() {
-    if (isTauri()) {
-      void getCurrentWindow().close().catch(() => {});
-    } else {
+  async function saveControlGeometry() {
+    if (!isTauri() || !ready || windowTransitioning || closing) return;
+    try {
+      const captured = await captureWindowGeometry(getCurrentWindow(), DDAY_CONTROL_BOUNDS);
+      if (captured) {
+        settingsSection?.mutate((cur) => ({ ...cur, controlGeometry: captured }));
+      }
+    } catch {}
+  }
+
+  async function toggleControlPin() {
+    if (pinBusy) return;
+    const prev = settings.controlAlwaysOnTop;
+    const nextVal = !prev;
+    if (!isTauri()) {
+      handleUpdateSettings({ controlAlwaysOnTop: nextVal });
+      showNotice(nextVal ? '항상 위 고정 켜짐' : '항상 위 해제됨');
+      return;
+    }
+    pinBusy = true;
+    try {
+      await getCurrentWindow().setAlwaysOnTop(nextVal);
+      if (settingsSection) {
+        const res = await settingsSection.mutateAndConfirm(
+          (cur) => ({ ...cur, controlAlwaysOnTop: nextVal }),
+          (cur) => cur.controlAlwaysOnTop === nextVal,
+        );
+        if (res !== 'saved') {
+          await getCurrentWindow().setAlwaysOnTop(prev).catch(() => {});
+        } else {
+          showNotice(nextVal ? '항상 위 고정 켜짐' : '항상 위 해제됨');
+        }
+      }
+    } catch {
+      await getCurrentWindow().setAlwaysOnTop(prev).catch(() => {});
+    } finally {
+      pinBusy = false;
+    }
+  }
+
+  async function toggleControlSize() {
+    if (windowTransitioning || closing) return;
+    contextMenu = null;
+    if (!isTauri()) {
+      if (layout.wideEdit) {
+        previewWidthOverride = DDAY_CONTROL_BOUNDS.defaultWidth;
+        previewHeightOverride = DDAY_CONTROL_BOUNDS.defaultHeight;
+      } else {
+        previewWidthOverride = DDAY_CONTROL_BOUNDS.wideWidth;
+        previewHeightOverride = DDAY_CONTROL_BOUNDS.wideHeight;
+      }
+      return;
+    }
+    windowTransitioning = true;
+    try {
+      const win = getCurrentWindow();
+      if (await win.isMaximized().catch(() => false)) {
+        await win.unmaximize().catch(() => {});
+      }
+      const [pos, size, scale, monitors] = await Promise.all([
+        win.outerPosition().catch(() => null),
+        win.outerSize().catch(() => null),
+        win.scaleFactor().catch(() => 1),
+        getMonitorGeometries(),
+      ]);
+      const target = computeDoubleClickTarget({
+        currentPos: pos ? { x: pos.x, y: pos.y } : null,
+        currentSize: size ? { width: size.width, height: size.height } : null,
+        currentScale: scale,
+        monitors,
+      });
+      for (let pass = 0; pass < 2; pass++) {
+        if (target.physicalX !== null && target.physicalY !== null) {
+          await win.setPosition(new PhysicalPosition(target.physicalX, target.physicalY)).catch(() => {});
+        }
+        await win.setSize(new LogicalSize(target.width, target.height)).catch(() => {});
+      }
+      await ensureWindowOnScreen(win, monitors);
+    } finally {
+      setTimeout(() => {
+        windowTransitioning = false;
+        void saveControlGeometry();
+      }, 100);
+    }
+  }
+
+  async function closeModal() {
+    if (closing) return;
+    closing = true;
+    if (saveGeomTimer) clearTimeout(saveGeomTimer);
+    if (!isTauri()) {
       window.close();
+      return;
+    }
+    try {
+      const withTimeout = (/** @type {Promise<unknown>} */ p, ms = 400) =>
+        Promise.race([p.catch(() => {}), new Promise((resolve) => setTimeout(resolve, ms))]);
+      // closing = true 이전 순간의 크기를 저장하기 위해 직접 캡처합니다.
+      const captured = await Promise.race([
+        captureWindowGeometry(getCurrentWindow(), DDAY_CONTROL_BOUNDS).catch(() => null),
+        new Promise((resolve) => setTimeout(() => resolve(null), 250)),
+      ]);
+      if (captured) {
+        settingsSection?.mutate((cur) => ({ ...cur, controlGeometry: captured }));
+      }
+      await withTimeout(settingsSection?.settle() ?? Promise.resolve());
+    } catch {
+      // 닫기 차단을 방지합니다.
+    } finally {
+      await getCurrentWindow().close().catch(() => {});
     }
   }
 
@@ -319,7 +507,39 @@
       return;
     }
     try {
+      const existing = await WebviewWindow.getByLabel('dday');
       await openTool('dday');
+      const win = existing || (await WebviewWindow.getByLabel('dday'));
+      if (win) {
+        // 처음 띄울 때 컨트롤 타워(항상 위) 뒤에 가리지 않도록 옆자리에 배치하고 포커스를 줍니다.
+        if (!existing && !widgetPrefs.geometry) {
+          try {
+            const ctrlWin = getCurrentWindow();
+            const [cPos, cSize, scale, monitors] = await Promise.all([
+              ctrlWin.outerPosition(),
+              ctrlWin.outerSize(),
+              ctrlWin.scaleFactor(),
+              getMonitorGeometries(),
+            ]);
+            const widgetSize = {
+              width: Math.round(DDAY_WIDGET_BOUNDS.defaultWidth * (scale || 1)),
+              height: Math.round(DDAY_WIDGET_BOUNDS.defaultHeight * (scale || 1)),
+            };
+            const side = computeWidgetSidePlacement({
+              controlPos: { x: cPos.x, y: cPos.y },
+              controlSize: { width: cSize.width, height: cSize.height },
+              widgetSize,
+              monitors,
+            });
+            if (side) {
+              await win.setPosition(new PhysicalPosition(side.x, side.y)).catch(() => {});
+            }
+          } catch {}
+        }
+        await win.unminimize().catch(() => {});
+        await win.show().catch(() => {});
+        await win.setFocus().catch(() => {});
+      }
       showNotice('데스크톱 D-Day 위젯을 띄웠어요');
     } catch {
       showNotice('D-Day 위젯을 열지 못했어요');
@@ -426,6 +646,10 @@
       if (params.has('dark')) previewDarkOverride = params.get('dark') !== '0';
       const fontParam = Number(params.get('font'));
       if (Number.isFinite(fontParam) && fontParam >= 9) previewFontOverride = fontParam;
+      const wParam = Number(params.get('w'));
+      const hParam = Number(params.get('h'));
+      if (Number.isFinite(wParam) && wParam >= 280) previewWidthOverride = Math.round(wParam);
+      if (Number.isFinite(hParam) && hParam >= 360) previewHeightOverride = Math.round(hParam);
       const tabParam = params.get('tab');
       if (tabParam === 'settings') activeTab = 'settings';
       else if (tabParam === 'archive') {
@@ -434,6 +658,35 @@
       } else if (tabParam === 'edit') {
         subView = 'create';
       }
+    }
+
+    let ro = /** @type {ResizeObserver | null} */ (null);
+    if (shellEl && typeof ResizeObserver !== 'undefined') {
+      const syncSize = (/** @type {number} */ w, /** @type {number} */ h) => {
+        if (w <= 0 || h <= 0) return;
+        const dw = Math.abs(w - shellW);
+        const dh = Math.abs(h - shellH);
+        if (dw >= 2 || dh >= 2) {
+          contextMenu = null;
+        }
+        committedLayout = classifyControlLayout({
+          width: w,
+          height: h,
+          itemCount: activeItems.length,
+          archiveCount: archivedItems.length,
+          prev: committedLayout,
+        });
+        shellW = w;
+        shellH = h;
+      };
+      const initBox = shellEl.getBoundingClientRect();
+      syncSize(initBox.width, initBox.height);
+      ro = new ResizeObserver((entries) => {
+        for (const entry of entries) {
+          syncSize(entry.contentRect.width, entry.contentRect.height);
+        }
+      });
+      ro.observe(shellEl);
     }
 
     settingsSection = createDdaySettingsSection({
@@ -458,42 +711,98 @@
     window.addEventListener('tidy-dday-preview-sync', onPreviewSync);
 
     void (async () => {
-      await Promise.all([
-        settingsSection.load(),
-        widgetSection.load(),
-        collectAllNoteWindowsDdays().then((list) => {
-          if (!disposed && list.length > 0) {
-            windows = list;
-            if (!list.some((w) => w.label === targetLabel)) {
-              targetLabel = list[0].label;
+      try {
+        await Promise.all([
+          settingsSection.load().catch(() => {}),
+          widgetSection.load().catch(() => {}),
+          collectAllNoteWindowsDdays()
+            .then((list) => {
+              if (!disposed && list.length > 0) {
+                windows = list;
+                if (!list.some((w) => w.label === targetLabel)) {
+                  targetLabel = list[0].label;
+                }
+              }
+            })
+            .catch(() => {}),
+        ]);
+
+        try {
+          register(
+            await subscribeDdayStore(({ section, revision }) => {
+              if (section === 'settings') void settingsSection?.external(revision);
+              if (section === 'widget') void widgetSection?.external(revision);
+            }),
+          );
+        } catch {}
+
+        if (disposed) return;
+
+        if (isTauri()) {
+          const win = getCurrentWindow();
+          try {
+            if (settings.controlGeometry) {
+              await applyDdayWindowBounds(win, settings.controlGeometry, DDAY_CONTROL_BOUNDS);
+            } else {
+              await win
+                .setMinSize(new LogicalSize(DDAY_CONTROL_BOUNDS.minWidth, DDAY_CONTROL_BOUNDS.minHeight))
+                .catch(() => {});
+              await ensureWindowOnScreen(win);
             }
-          }
-        }),
-      ]);
+          } catch {}
 
-      register(await subscribeDdayStore(({ section, revision }) => {
-        if (section === 'settings') void settingsSection?.external(revision);
-        if (section === 'widget') void widgetSection?.external(revision);
-      }));
+          await win.setAlwaysOnTop(settings.controlAlwaysOnTop).catch(() => {});
 
-      if (isTauri()) {
-        const win = getCurrentWindow();
-        register(await listen(DDAY_EVENTS.windowUpdated, (ev) => {
-          const p = /** @type {any} */ (ev.payload);
-          if (p?.label && p?.snapshot) mergeSnapshot(p.label, p.snapshot);
-        }));
-        register(await win.listen(DDAY_EVENTS.setTarget, (ev) => {
-          applyTargetPayload(/** @type {any} */ (ev.payload));
-        }));
-        await emit(DDAY_EVENTS.controlReady, {}).catch(() => {});
+          const scheduleSaveGeom = () => {
+            if (windowTransitioning || closing) return;
+            if (saveGeomTimer) clearTimeout(saveGeomTimer);
+            saveGeomTimer = setTimeout(() => void saveControlGeometry(), 350);
+          };
+
+          try {
+            register(await win.onMoved(scheduleSaveGeom));
+            register(await win.onResized(scheduleSaveGeom));
+            register(
+              await win.onCloseRequested((e) => {
+                e.preventDefault();
+                void closeModal();
+              }),
+            );
+            register(
+              await listen(DDAY_EVENTS.windowUpdated, (ev) => {
+                const p = /** @type {any} */ (ev.payload);
+                if (p?.label && p?.snapshot) mergeSnapshot(p.label, p.snapshot);
+              }),
+            );
+            register(
+              await win.listen(DDAY_EVENTS.setTarget, (ev) => {
+                applyTargetPayload(/** @type {any} */ (ev.payload));
+              }),
+            );
+          } catch {}
+
+          ready = true;
+          await emit(DDAY_EVENTS.controlReady, {}).catch(() => {});
+          await win.show().catch(() => {});
+          await win.setFocus().catch(() => {});
+        } else {
+          ready = true;
+        }
+      } finally {
+        ready = true;
+        if (isTauri() && !disposed) {
+          void getCurrentWindow().show().catch(() => {});
+        }
       }
     })();
 
     return () => {
       disposed = true;
+      ro?.disconnect();
       offs.forEach((fn) => fn());
       clearInterval(dayTimer);
       if (noticeTimer) clearTimeout(noticeTimer);
+      if (saveGeomTimer) clearTimeout(saveGeomTimer);
       window.removeEventListener('focus', onFocus);
       window.removeEventListener('tidy-dday-preview-sync', onPreviewSync);
       settingsSection?.dispose();
@@ -504,12 +813,18 @@
 
 <svelte:window onkeydown={handleKeydown} onblur={() => (contextMenu = null)} />
 
-<div class="ctrl-host" class:is-preview={preview || !isTauri()}>
+<div class="ctrl-host" class:is-preview={preview || !isTauri()} class:has-preview-frame={Boolean(previewFrameStyle)}>
   <div
     bind:this={shellEl}
     class="ctrl-shell"
+    class:is-compact={layout.compactWidth}
+    class:is-very-narrow={layout.veryNarrow}
+    class:is-wide={layout.wideEdit}
+    class:is-short={layout.shortHeight}
+    class:is-grid2={layout.listGrid2Col}
     data-scheme={dark ? 'dark' : 'light'}
-    style="--dd-accent: {accent}; --ctrl-font-size: {Math.min(13.5, Math.max(11.5, uiFontSize * 1.15))}px;"
+    data-tier={layout.tier}
+    style="--dd-accent: {accent}; --ctrl-font-size: {metrics.fsBody}px; {metricsStyle}; {previewFrameStyle}"
     role="dialog"
     aria-label="D-Day 컨트롤 타워"
   >
@@ -523,6 +838,9 @@
         {themeColor}
         {accent}
         {dark}
+        wide={layout.wideEdit}
+        veryNarrow={layout.veryNarrow}
+        onheaderdblclick={() => void toggleControlSize()}
         oncancel={() => { subView = 'main'; editingDdayId = null; }}
         onsave={handleSaveSheet}
         ondelete={handleDeleteFromSheet}
@@ -532,24 +850,66 @@
         items={archivedItems}
         {accent}
         {dark}
+        wideGrid={layout.archiveGrid2Col}
+        fullDate={layout.archiveFullDate}
+        veryNarrow={layout.veryNarrow}
+        onheaderdblclick={() => void toggleControlSize()}
         onback={() => (subView = 'main')}
         onrestore={handleRestore}
         ondelete={(id) => sendCommand('delete', { ddayId: id, deleteLinkedTodo: false })}
         onclearall={() => sendCommand('clear-archived')}
       />
     {:else}
-      <!-- 드래그 가능한 상단 헤더 -->
-      <header class="ctrl-head" use:draggable>
+      <!-- 드래그 가능한 상단 헤더 (더블클릭으로 기본 ↔ 와이드 크기 전환) -->
+      <header class="ctrl-head" use:draggable title="드래그해 이동 · 더블클릭해 창 크기 전환">
         <span class="ctrl-logo" aria-hidden="true">
-          <Flag size={15} strokeWidth={2.3} />
+          <DdayControlGlyph state={headerGlyphState} size={18} />
         </span>
         <div class="ctrl-head-copy">
           <strong>D-Day 컨트롤</strong>
-          <small>할 일 연동 · 상단 배너 · 바탕화면 위젯</small>
+          {#if !layout.compactWidth && !layout.shortHeight}
+            <small>할 일 연동 · 상단 배너 · 바탕화면 위젯</small>
+          {/if}
         </div>
-        <button type="button" class="ctrl-close" aria-label="닫기" onclick={closeModal}>
-          <X size={15} strokeWidth={2.3} />
-        </button>
+        <div
+          class="ctrl-head-actions"
+          role="group"
+          aria-label="창 제어"
+          data-no-drag
+          use:blockDrag
+        >
+          <button
+            type="button"
+            class="ctrl-head-btn"
+            class:pin-on={settings.controlAlwaysOnTop}
+            aria-label={settings.controlAlwaysOnTop ? '항상 위 고정 해제' : '항상 위에 고정'}
+            aria-pressed={settings.controlAlwaysOnTop}
+            title={settings.controlAlwaysOnTop ? '항상 위 고정 해제' : '항상 위에 고정'}
+            onclick={() => void toggleControlPin()}
+          >
+            {#if settings.controlAlwaysOnTop}
+              <Pin size={14} strokeWidth={2.2} />
+            {:else}
+              <PinOff size={14} strokeWidth={2.2} />
+            {/if}
+          </button>
+          <button
+            type="button"
+            class="ctrl-head-btn"
+            aria-label={layout.wideEdit ? '기본 크기로 축소' : '넓게 보기'}
+            title={layout.wideEdit ? '기본 크기(380×580)로 복원' : '넓게 보기(560×640)'}
+            onclick={() => void toggleControlSize()}
+          >
+            {#if layout.wideEdit}
+              <Minimize2 size={14} strokeWidth={2.2} />
+            {:else}
+              <Maximize2 size={14} strokeWidth={2.2} />
+            {/if}
+          </button>
+          <button type="button" class="ctrl-head-btn ctrl-close" aria-label="닫기" title="닫기" onclick={() => void closeModal()}>
+            <X size={15} strokeWidth={2.3} />
+          </button>
+        </div>
       </header>
 
       <!-- 2개 이상의 메모 창이 있을 때 대상 창 전환 -->
@@ -667,7 +1027,7 @@
 
           {#if activeItems.length === 0}
             <div class="ctrl-empty">
-              <span class="ctrl-empty-icon"><Flag size={18} strokeWidth={2.2} /></span>
+              <span class="ctrl-empty-icon"><DdayControlGlyph state={idleGlyphState} size={22} /></span>
               <strong>등록된 D-Day가 아직 없어요</strong>
               <small>중요한 시험·행사·기념일을 추가하거나, 할 일을 우클릭해 D-Day로 고정할 수 있어요.</small>
               <button
@@ -708,6 +1068,8 @@
             {accent}
             {dark}
             compact={compactCapsules}
+            veryNarrow={layout.veryNarrow}
+            wide={layout.wideSettings}
             onupdatesettings={handleUpdateSettings}
             onupdatewidgetprefs={handleUpdateWidgetPrefs}
             onopenarchive={() => (subView = 'archive')}
@@ -720,9 +1082,14 @@
           <LayoutGrid size={13} strokeWidth={2.2} />
           <span>위젯 띄우기</span>
         </button>
-        <button type="button" class="ctrl-done-btn" onclick={closeModal}>완료</button>
+        <button type="button" class="ctrl-done-btn" onclick={() => void closeModal()}>완료</button>
       </footer>
     {/if}
+
+    <!-- 우하단 미세 리사이즈 그립 힌트 (실제 입력은 바깥 DdayResizeHandles가 처리) -->
+    <svg class="ctrl-resize-grip" width="12" height="12" viewBox="0 0 12 12" aria-hidden="true">
+      <path d="M4.5 10.5L10.5 4.5M8 10.5L10.5 8" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" />
+    </svg>
 
     {#if noticeText}
       <div class="ctrl-toast" role="status" aria-live="polite">
@@ -770,6 +1137,15 @@
       </div>
     {/if}
   </div>
+
+  <DdayResizeHandles
+    native={isTauri()}
+    edgeSize={5}
+    cornerSize={12}
+    onResizeStart={() => {
+      contextMenu = null;
+    }}
+  />
 </div>
 
 <style>
@@ -782,7 +1158,7 @@
     justify-content: center;
     align-items: stretch;
   }
-  .ctrl-host.is-preview {
+  .ctrl-host.is-preview.has-preview-frame {
     background: #ece7db;
     padding: 18px;
     align-items: center;
@@ -792,11 +1168,12 @@
   }
 
   .ctrl-shell {
+    container: ctrl / size;
     position: relative;
-    width: 372px;
-    max-width: 100%;
+    width: 100%;
     height: 100%;
-    max-height: 620px;
+    min-width: 0;
+    min-height: 0;
     border-radius: 18px;
     background: #fdfaf3;
     color: #1e2430;
@@ -824,16 +1201,21 @@
     display: flex;
     align-items: center;
     gap: 9px;
-    padding: 12px 12px 9px 14px;
+    padding: 11px var(--dd-pad-x, 14px) 9px;
     cursor: grab;
     flex-shrink: 0;
+  }
+  .ctrl-shell.is-compact .ctrl-head,
+  .ctrl-shell.is-short .ctrl-head {
+    padding: 8px var(--dd-pad-x, 11px) 7px;
+    gap: 7px;
   }
   .ctrl-head:active {
     cursor: grabbing;
   }
   .ctrl-logo {
-    width: 30px;
-    height: 30px;
+    width: clamp(26px, calc(var(--dd-icon-sz, 26px) * 1.12), 34px);
+    height: clamp(26px, calc(var(--dd-icon-sz, 26px) * 1.12), 34px);
     border-radius: 10px;
     background: color-mix(in srgb, var(--dd-accent) 16%, #ffffff);
     color: var(--dd-accent);
@@ -854,13 +1236,15 @@
     gap: 1px;
   }
   .ctrl-head-copy strong {
-    font-size: 13.5px;
+    font-size: var(--dd-fs-head, 13.5px);
     font-weight: 800;
     line-height: 1.25;
     white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
   .ctrl-head-copy small {
-    font-size: 10px;
+    font-size: var(--dd-fs-sub, 10px);
     color: #64748b;
     white-space: nowrap;
     overflow: hidden;
@@ -870,35 +1254,63 @@
     color: #94a3b8;
   }
 
-  .ctrl-close {
-    width: 28px;
-    height: 28px;
+  .ctrl-head-actions {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    flex-shrink: 0;
+    cursor: default;
+  }
+  .ctrl-head-btn {
+    width: 27px;
+    height: 27px;
     border: 0;
     border-radius: 8px;
     background: transparent;
     color: #64748b;
     display: grid;
     place-items: center;
+    padding: 0;
     cursor: pointer;
     flex-shrink: 0;
+    transition: background-color 120ms ease, color 120ms ease;
   }
-  .ctrl-close:hover {
+  .ctrl-head-btn :global(svg) {
+    pointer-events: none;
+  }
+  .ctrl-head-btn:hover {
     background: rgba(15, 23, 42, 0.07);
     color: #1e2430;
   }
-  .ctrl-shell[data-scheme='dark'] .ctrl-close {
+  .ctrl-head-btn.pin-on {
+    color: var(--dd-accent);
+    background: color-mix(in srgb, var(--dd-accent) 13%, transparent);
+  }
+  .ctrl-head-btn.ctrl-close:hover {
+    background: rgba(225, 29, 72, 0.12);
+    color: #e11d48;
+  }
+  .ctrl-shell[data-scheme='dark'] .ctrl-head-btn {
     color: #94a3b8;
   }
-  .ctrl-shell[data-scheme='dark'] .ctrl-close:hover {
+  .ctrl-shell[data-scheme='dark'] .ctrl-head-btn:hover {
     background: rgba(255, 255, 255, 0.1);
     color: #ffffff;
+  }
+  .ctrl-shell[data-scheme='dark'] .ctrl-head-btn.pin-on {
+    color: #ffffff;
+    background: color-mix(in srgb, var(--dd-accent) 30%, transparent);
+  }
+  .ctrl-shell[data-scheme='dark'] .ctrl-head-btn.ctrl-close:hover {
+    background: rgba(251, 113, 133, 0.22);
+    color: #fda4af;
   }
 
   .ctrl-win-bar {
     display: flex;
     align-items: center;
     gap: 5px;
-    padding: 0 14px 8px;
+    padding: 0 var(--dd-pad-x, 14px) 8px;
     overflow-x: auto;
     scrollbar-width: none;
     flex-shrink: 0;
@@ -910,7 +1322,7 @@
     border: 1px solid rgba(15, 23, 42, 0.08);
     background: #ffffff;
     color: #64748b;
-    font-size: 10.5px;
+    font-size: var(--dd-fs-sub, 10.5px);
     font-weight: 700;
     white-space: nowrap;
     flex-shrink: 0;
@@ -932,8 +1344,11 @@
   }
 
   .ctrl-tabs-wrap {
-    padding: 0 14px 9px;
+    padding: 0 var(--dd-pad-x, 14px) 9px;
     flex-shrink: 0;
+  }
+  .ctrl-shell.is-short .ctrl-tabs-wrap {
+    padding-bottom: 6px;
   }
   .ctrl-tabs {
     display: grid;
@@ -947,13 +1362,13 @@
     background: #14171e;
   }
   .ctrl-tab {
-    height: 30px;
+    height: clamp(27px, calc(var(--dd-btn-h, 30px) * 0.96), 34px);
     border: 0;
     border-radius: 8.5px;
     background: transparent;
     color: #64748b;
     font: inherit;
-    font-size: 11.5px;
+    font-size: var(--dd-fs-body, 11.5px);
     font-weight: 700;
     display: inline-flex;
     align-items: center;
@@ -963,6 +1378,9 @@
     word-break: keep-all;
     cursor: pointer;
     transition: background-color 140ms ease, color 140ms ease, box-shadow 140ms ease;
+  }
+  .ctrl-shell.is-short .ctrl-tab {
+    height: 26px;
   }
   .ctrl-tab.on {
     background: #ffffff;
@@ -981,7 +1399,7 @@
     padding: 1px 6px;
     border-radius: 999px;
     background: rgba(15, 23, 42, 0.07);
-    font-size: 10px;
+    font-size: var(--dd-fs-micro, 10px);
     font-weight: 800;
     color: #475569;
   }
@@ -998,10 +1416,10 @@
     flex: 1;
     min-height: 0;
     overflow-y: auto;
-    padding: 2px 14px 18px;
+    padding: 2px var(--dd-pad-x, 14px) 16px;
     display: flex;
     flex-direction: column;
-    gap: 10px;
+    gap: var(--dd-gap, 10px);
     scrollbar-width: thin;
   }
 
@@ -1014,6 +1432,10 @@
     flex-direction: column;
     gap: 8px;
   }
+  .ctrl-shell.is-short .ctrl-banner-box {
+    padding: 7px 9px;
+    gap: 6px;
+  }
   .ctrl-shell[data-scheme='dark'] .ctrl-banner-box {
     background: #232733;
     border-color: rgba(255, 255, 255, 0.08);
@@ -1023,15 +1445,20 @@
     align-items: center;
     justify-content: space-between;
     gap: 6px;
+    min-width: 0;
   }
   .ctrl-banner-label {
     display: inline-flex;
     align-items: center;
     gap: 5px;
-    font-size: 11px;
+    font-size: var(--dd-fs-sub, 11px);
     font-weight: 800;
     color: #334155;
     white-space: nowrap;
+    min-width: 0;
+  }
+  .ctrl-shell.is-very-narrow .ctrl-banner-label :global(svg) {
+    display: none;
   }
   .ctrl-shell[data-scheme='dark'] .ctrl-banner-label {
     color: #e2e8f0;
@@ -1043,6 +1470,7 @@
     gap: 2px;
     border-radius: 8px;
     background: #f1f5f9;
+    flex-shrink: 0;
   }
   .ctrl-shell[data-scheme='dark'] .ctrl-banner-modes {
     background: #1a1d26;
@@ -1054,11 +1482,14 @@
     border-radius: 6px;
     background: transparent;
     color: #64748b;
-    font-size: 10px;
+    font-size: var(--dd-fs-micro, 10px);
     font-weight: 700;
     white-space: nowrap;
     word-break: keep-all;
     cursor: pointer;
+  }
+  .ctrl-shell.is-compact .ctrl-banner-modes button {
+    padding: 0 5.5px;
   }
   .ctrl-banner-modes button.on {
     background: #ffffff;
@@ -1078,7 +1509,7 @@
     padding: 8px 10px;
     border-radius: 9px;
     border: 1px dashed rgba(15, 23, 42, 0.12);
-    font-size: 10.5px;
+    font-size: var(--dd-fs-sub, 10.5px);
     color: #64748b;
     text-align: center;
     word-break: keep-all;
@@ -1095,7 +1526,7 @@
     padding: 2px 2px 0;
   }
   .ctrl-sec-title {
-    font-size: 11.5px;
+    font-size: var(--dd-fs-body, 11.5px);
     font-weight: 800;
     color: #475569;
   }
@@ -1108,14 +1539,14 @@
   }
 
   .ctrl-add-btn {
-    height: 27px;
+    height: clamp(25px, calc(var(--dd-btn-h, 29px) * 0.9), 32px);
     padding: 0 10px 0 8px;
     border: 0;
     border-radius: 999px;
     background: var(--dd-accent);
     color: #ffffff;
     font: inherit;
-    font-size: 11px;
+    font-size: var(--dd-fs-sub, 11px);
     font-weight: 800;
     display: inline-flex;
     align-items: center;
@@ -1133,6 +1564,12 @@
     display: flex;
     flex-direction: column;
     gap: 7px;
+  }
+  .ctrl-shell.is-grid2 .ctrl-list {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+    align-items: stretch;
   }
 
   .ctrl-empty {
@@ -1158,24 +1595,24 @@
     place-items: center;
   }
   .ctrl-empty strong {
-    font-size: 12.5px;
+    font-size: var(--dd-fs-title, 12.5px);
     font-weight: 800;
   }
   .ctrl-empty small {
-    font-size: 11px;
+    font-size: var(--dd-fs-sub, 11px);
     color: #64748b;
     line-height: 1.45;
     word-break: keep-all;
   }
   .ctrl-empty-cta {
     margin-top: 4px;
-    height: 30px;
+    height: clamp(28px, calc(var(--dd-btn-h, 30px) * 0.98), 34px);
     padding: 0 12px;
     border: 0;
     border-radius: 999px;
     background: var(--dd-accent);
     color: #ffffff;
-    font-size: 11.5px;
+    font-size: var(--dd-fs-body, 11.5px);
     font-weight: 800;
     display: inline-flex;
     align-items: center;
@@ -1189,10 +1626,13 @@
     align-items: center;
     justify-content: space-between;
     gap: 8px;
-    padding: 10px 14px 12px;
+    padding: 10px var(--dd-pad-x, 14px) 12px;
     border-top: 1px solid rgba(15, 23, 42, 0.08);
     background: color-mix(in srgb, #ffffff 72%, #fdfaf3);
     flex-shrink: 0;
+  }
+  .ctrl-shell.is-short .ctrl-foot {
+    padding: 7px var(--dd-pad-x, 12px) 9px;
   }
   .ctrl-shell[data-scheme='dark'] .ctrl-foot {
     border-top-color: rgba(255, 255, 255, 0.08);
@@ -1200,14 +1640,14 @@
   }
 
   .ctrl-widget-btn {
-    height: 33px;
+    height: clamp(29px, calc(var(--dd-btn-h, 32px) * 1.04), 37px);
     padding: 0 12px;
     border-radius: 10px;
     border: 1px solid color-mix(in srgb, var(--dd-accent) 32%, rgba(15, 23, 42, 0.08));
     background: color-mix(in srgb, var(--dd-accent) 10%, #ffffff);
     color: var(--dd-accent);
     font: inherit;
-    font-size: 11.5px;
+    font-size: var(--dd-fs-body, 11.5px);
     font-weight: 800;
     display: inline-flex;
     align-items: center;
@@ -1226,14 +1666,14 @@
   }
 
   .ctrl-done-btn {
-    height: 33px;
+    height: clamp(29px, calc(var(--dd-btn-h, 32px) * 1.04), 37px);
     padding: 0 18px;
     border: 0;
     border-radius: 10px;
     background: #1e2430;
     color: #ffffff;
     font: inherit;
-    font-size: 11.5px;
+    font-size: var(--dd-fs-body, 11.5px);
     font-weight: 800;
     white-space: nowrap;
     cursor: pointer;
@@ -1246,12 +1686,29 @@
     color: #ffffff;
   }
 
+  .ctrl-resize-grip {
+    position: absolute;
+    right: 5px;
+    bottom: 5px;
+    color: #64748b;
+    opacity: 0.28;
+    pointer-events: none;
+    z-index: 25;
+    transition: opacity 150ms ease;
+  }
+  .ctrl-shell:hover .ctrl-resize-grip {
+    opacity: 0.56;
+  }
+  .ctrl-shell[data-scheme='dark'] .ctrl-resize-grip {
+    color: #94a3b8;
+  }
+
   .ctrl-toast {
     position: absolute;
     left: 50%;
     bottom: 58px;
     transform: translateX(-50%);
-    max-width: calc(100% - 28px);
+    max-width: calc(100% - 24px);
     padding: 7px 12px;
     border-radius: 999px;
     background: #1e2430;
@@ -1262,9 +1719,15 @@
     align-items: center;
     gap: 6px;
     white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
     box-shadow: 0 8px 22px rgba(0, 0, 0, 0.28);
     z-index: 40;
     pointer-events: none;
+  }
+  .ctrl-toast span {
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
   .ctrl-shell[data-scheme='dark'] .ctrl-toast {
     background: #f8fafc;

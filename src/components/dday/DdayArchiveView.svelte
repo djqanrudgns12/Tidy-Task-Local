@@ -1,5 +1,7 @@
 <script>
+  import { isTauri } from '@tauri-apps/api/core';
   import { Archive, ArrowLeft, RotateCcw, Trash2 } from 'lucide-svelte';
+  import { dragRegion } from '../../lib/dragRegion.js';
   import { formatDotDate, resolveToneColor } from '../../lib/dday/ddayModel.js';
   import DdayIcon from './DdayIcon.svelte';
 
@@ -8,6 +10,10 @@
    *   items: import('../../lib/dday/ddayModel.js').DdayItem[],
    *   accent?: string,
    *   dark?: boolean,
+   *   wideGrid?: boolean,
+   *   fullDate?: boolean,
+   *   veryNarrow?: boolean,
+   *   onheaderdblclick?: (() => void) | undefined,
    *   onback: () => void,
    *   onrestore: (id: string) => void,
    *   ondelete: (id: string) => void,
@@ -18,11 +24,21 @@
     items,
     accent = '#d97706',
     dark = false,
+    wideGrid = false,
+    fullDate = false,
+    veryNarrow = false,
+    onheaderdblclick = undefined,
     onback,
     onrestore,
     ondelete,
     onclearall,
   } = $props();
+
+  /** @param {HTMLElement} node */
+  const draggable = (node) =>
+    isTauri()
+      ? dragRegion(node, { onDoubleClick: onheaderdblclick ?? null })
+      : { update() {}, destroy() {} };
 
   /** @type {'all' | 'todo' | 'standalone'} */
   let filter = $state('all');
@@ -31,6 +47,7 @@
   /** @param {string | null | undefined} dateKey */
   function shortDotDate(dateKey) {
     const full = formatDotDate(dateKey);
+    if (fullDate && !wideGrid) return full;
     return full ? full.split(' ')[0] : '';
   }
 
@@ -50,16 +67,19 @@
   }
 </script>
 
-<div class="ar-view" data-scheme={dark ? 'dark' : 'light'} style="--dd-accent: {accent};">
-  <div class="ar-top">
-    <button type="button" class="ar-back" onclick={onback}>
+<div class="ar-view" class:wide-grid={wideGrid} class:very-narrow={veryNarrow} data-scheme={dark ? 'dark' : 'light'} style="--dd-accent: {accent};">
+  <div class="ar-top" use:draggable>
+    <button type="button" class="ar-back" data-no-drag aria-label="설정으로 돌아가기" onclick={onback}>
       <ArrowLeft size={14} strokeWidth={2.3} />
-      <span>설정으로</span>
+      {#if !veryNarrow}
+        <span>설정으로</span>
+      {/if}
     </button>
     <strong class="ar-heading tnum">완료 아카이브 ({items.length})</strong>
     <button
       type="button"
       class="ar-clear-btn"
+      data-no-drag
       disabled={items.length === 0}
       onclick={() => (confirmClear = true)}
     >
@@ -116,7 +136,7 @@
         {#each filtered as item (item.id)}
           {@const toneColor = resolveToneColor(item.tone, accent)}
           <div class="ar-card" style="--dd-tone: {toneColor};" role="listitem">
-            <DdayIcon icon={item.icon} tone={item.tone} {accent} size={26} {dark} />
+            <DdayIcon icon={item.icon} tone={item.tone} {accent} size="var(--dd-icon-sz, 26px)" {dark} />
             <div class="ar-copy">
               <strong class="ar-title" title={item.title}>{item.title}</strong>
               <div class="ar-sub">
@@ -132,11 +152,15 @@
               <button
                 type="button"
                 class="ar-restore"
+                class:icon-only={veryNarrow}
+                aria-label={`${item.title} 복원`}
                 title="활성 D-Day로 복원"
                 onclick={() => onrestore(item.id)}
               >
                 <RotateCcw size={11} strokeWidth={2.4} />
-                <span>복원</span>
+                {#if !veryNarrow}
+                  <span>복원</span>
+                {/if}
               </button>
               <button
                 type="button"
@@ -187,9 +211,13 @@
     align-items: center;
     justify-content: space-between;
     gap: 8px;
-    padding: 8px 14px 10px;
+    padding: 8px var(--dd-pad-x, 14px) 10px;
     border-bottom: 1px solid rgba(15, 23, 42, 0.07);
+    cursor: grab;
     flex-shrink: 0;
+  }
+  .ar-top:active {
+    cursor: grabbing;
   }
   .ar-view[data-scheme='dark'] .ar-top {
     border-bottom-color: rgba(255, 255, 255, 0.08);
@@ -220,7 +248,7 @@
   }
 
   .ar-heading {
-    font-size: 13px;
+    font-size: var(--dd-fs-head, 13px);
     font-weight: 800;
     color: #1e2430;
     white-space: nowrap;
@@ -261,7 +289,9 @@
     display: flex;
     align-items: center;
     gap: 6px;
-    padding: 9px 14px 4px;
+    padding: 9px var(--dd-pad-x, 14px) 4px;
+    overflow-x: auto;
+    scrollbar-width: none;
     flex-shrink: 0;
   }
   .ar-chip {
@@ -301,7 +331,7 @@
     flex: 1;
     min-height: 0;
     overflow-y: auto;
-    padding: 8px 14px 14px;
+    padding: 8px var(--dd-pad-x, 14px) 14px;
     scrollbar-width: thin;
   }
 
@@ -349,6 +379,11 @@
     flex-direction: column;
     gap: 7px;
   }
+  .ar-view.wide-grid .ar-list {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
 
   .ar-card {
     display: flex;
@@ -364,6 +399,17 @@
     background: #232733;
     border-color: rgba(255, 255, 255, 0.08);
   }
+  .ar-view.wide-grid .ar-card {
+    gap: 7px;
+    padding: 9px;
+  }
+  .ar-view.wide-grid .ar-sub {
+    gap: 4px;
+    font-size: calc(var(--dd-fs-sub, 10px) - 0.5px);
+  }
+  .ar-view.wide-grid .ar-restore {
+    padding: 0 7px;
+  }
 
   .ar-copy {
     flex: 1;
@@ -373,7 +419,7 @@
     gap: 3px;
   }
   .ar-title {
-    font-size: 12px;
+    font-size: var(--dd-fs-title, 12px);
     font-weight: 700;
     color: #1e2430;
     white-space: nowrap;
@@ -390,7 +436,7 @@
     gap: 5px;
     min-width: 0;
     overflow: hidden;
-    font-size: 10px;
+    font-size: var(--dd-fs-sub, 10px);
     color: #64748b;
     white-space: nowrap;
   }
@@ -434,7 +480,7 @@
     border: 1px solid color-mix(in srgb, var(--dd-accent) 28%, transparent);
     background: color-mix(in srgb, var(--dd-accent) 10%, #ffffff);
     color: var(--dd-accent);
-    font-size: 10.5px;
+    font-size: var(--dd-fs-sub, 10.5px);
     font-weight: 800;
     display: inline-flex;
     align-items: center;
@@ -442,6 +488,11 @@
     white-space: nowrap;
     word-break: keep-all;
     cursor: pointer;
+  }
+  .ar-restore.icon-only {
+    width: 26px;
+    padding: 0;
+    justify-content: center;
   }
   .ar-restore:hover {
     background: var(--dd-accent);

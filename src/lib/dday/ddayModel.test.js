@@ -7,6 +7,7 @@ import {
   DDAY_TITLE_MAX,
   computeDdayCounter,
   computeProgressPercent,
+  normalizeControlGeometry,
   normalizeDdayItem,
   normalizeDdayList,
   normalizeDdaySettings,
@@ -112,6 +113,26 @@ test('settings and widget prefs sanitize malformed values cleanly', () => {
   });
   assert.equal(wMin.skin, 'w4');
   assert.equal(wMin.geometry, null);
+
+  // 기존 settings JSON에 controlGeometry / controlAlwaysOnTop 필드가 없어도 무손실 보완
+  assert.equal(s.controlGeometry, null);
+  assert.equal(s.controlAlwaysOnTop, true);
+
+  // normalizeControlGeometry 경계 및 듀얼 좌표 검증
+  assert.equal(normalizeControlGeometry({ x: 100, y: 100, width: 299, height: 400 }), null);
+  assert.equal(normalizeControlGeometry({ x: -32000, y: 100, width: 380, height: 580 }), null);
+  assert.equal(normalizeControlGeometry({ x: 100, y: 100, width: 380, height: Number.NaN }), null);
+  assert.deepEqual(
+    normalizeControlGeometry({ physicalX: 240.4, physicalY: 180.6, logicalX: 120, logicalY: 90, width: 560, height: 640 }),
+    { x: 240, y: 181, physicalX: 240, physicalY: 181, logicalX: 120, logicalY: 90, width: 560, height: 640 },
+  );
+
+  const sWithGeom = normalizeDdaySettings({
+    controlAlwaysOnTop: false,
+    controlGeometry: { x: 400, y: 200, width: 300, height: 400 },
+  });
+  assert.equal(sWithGeom.controlAlwaysOnTop, false);
+  assert.equal(sWithGeom.controlGeometry?.width, 300);
 });
 
 test('DDAY_ICONS 21종 카탈로그는 기존 8종 하위 호환과 메타·SVG 1:1 정합성을 보장한다', () => {

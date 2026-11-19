@@ -25,6 +25,8 @@
    *   accent?: string,
    *   dark?: boolean,
    *   compact?: boolean,
+   *   veryNarrow?: boolean,
+   *   wide?: boolean,
    *   onupdatesettings: (patch: Partial<import('../../lib/dday/ddayModel.js').DdaySettings>) => void,
    *   onupdatewidgetprefs: (patch: Partial<import('../../lib/dday/ddayModel.js').DdayWidgetPrefs>) => void,
    *   onopenarchive: () => void,
@@ -37,6 +39,8 @@
     accent = '#d97706',
     dark = false,
     compact = false,
+    veryNarrow = false,
+    wide = false,
     onupdatesettings,
     onupdatewidgetprefs,
     onopenarchive,
@@ -99,7 +103,7 @@
   }
 </script>
 
-<div class="st-wrap" data-scheme={dark ? 'dark' : 'light'} style="--dd-accent: {accent};">
+<div class="st-wrap" class:wide class:very-narrow={veryNarrow} data-scheme={dark ? 'dark' : 'light'} style="--dd-accent: {accent};">
   <!-- 1. 완료 아카이브 단일 진입 -->
   <button type="button" class="st-archive-entry" onclick={onopenarchive}>
     <span class="st-bubble accent">
@@ -107,7 +111,9 @@
     </span>
     <span class="st-entry-copy">
       <strong>완료 아카이브</strong>
-      <small>완료된 D-Day를 복원하거나 정리합니다</small>
+      {#if !veryNarrow}
+        <small>완료된 D-Day를 복원하거나 정리합니다</small>
+      {/if}
     </span>
     <span class="st-entry-pill tnum">
       <span>{archivedCount}건 열기</span>
@@ -116,7 +122,7 @@
   </button>
 
   <!-- 2. 새 항목 기본 표시 위치 -->
-  <section class="st-card" aria-labelledby="st-sec-channels">
+  <section class="st-card st-card-full" aria-labelledby="st-sec-channels">
     <header class="st-card-head">
       <SlidersHorizontal size={13} strokeWidth={2.3} />
       <h3 id="st-sec-channels">새 항목 기본 표시 위치</h3>
@@ -284,7 +290,17 @@
   .st-wrap {
     display: flex;
     flex-direction: column;
+    gap: var(--dd-gap, 10px);
+  }
+  .st-wrap.wide {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 10px;
+    align-items: stretch;
+  }
+  .st-wrap.wide .st-archive-entry,
+  .st-wrap.wide .st-card-full {
+    grid-column: 1 / -1;
   }
 
   .tnum {
@@ -341,12 +357,12 @@
     gap: 2px;
   }
   .st-entry-copy strong {
-    font-size: 12.5px;
+    font-size: var(--dd-fs-title, 12.5px);
     font-weight: 800;
     color: #1e2430;
   }
   .st-entry-copy small {
-    font-size: 10.5px;
+    font-size: var(--dd-fs-sub, 10.5px);
     color: #64748b;
     word-break: keep-all;
   }
@@ -394,7 +410,7 @@
   }
   .st-card-head h3 {
     margin: 0;
-    font-size: 11.5px;
+    font-size: var(--dd-fs-body, 11.5px);
     font-weight: 800;
     color: #334155;
   }
@@ -425,12 +441,12 @@
     gap: 1px;
   }
   .st-preset-label strong {
-    font-size: 11.5px;
+    font-size: var(--dd-fs-body, 11.5px);
     font-weight: 700;
     color: #1e2430;
   }
   .st-preset-label small {
-    font-size: 10px;
+    font-size: var(--dd-fs-sub, 10px);
     color: #64748b;
     word-break: keep-all;
   }
@@ -539,13 +555,13 @@
     gap: 1px;
   }
   .st-sw-copy strong {
-    font-size: 11.5px;
+    font-size: var(--dd-fs-body, 11.5px);
     font-weight: 700;
     color: #1e2430;
     word-break: keep-all;
   }
   .st-sw-copy small {
-    font-size: 10px;
+    font-size: var(--dd-fs-sub, 10px);
     color: #64748b;
     line-height: 1.38;
     word-break: keep-all;
