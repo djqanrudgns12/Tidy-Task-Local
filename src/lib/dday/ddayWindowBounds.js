@@ -90,7 +90,11 @@ export async function applyControlWindowLimits(win, monitor, bounds = DDAY_CONTR
  *   currentSize: { width: number, height: number } | null,
  *   currentScale?: number,
  *   monitors: import('../windows/windowPlacement.js').MonitorGeometry[],
+ *   forcePreset?: 'wide' | 'default' | null,
  * }} input
+ * forcePreset: 크기 토글 "버튼"은 자기 글자(넓게 보기 / 기본 크기로 축소)대로 가야 합니다.
+ *   "기본 크기에 가까운가"로만 고르면 높이만 조금 바꾼 창에서 [넓게 보기]가 오히려 기본 크기로 줄어
+ *   눌러도 안 되는 것처럼 보였습니다(6.0.0 출시 전 실제 앱에서 확인). 헤더 더블클릭은 지정하지 않습니다.
  * @returns {{ width: number, height: number, physicalX: number | null, physicalY: number | null, preset: 'wide' | 'default' }}
  */
 export function computeDoubleClickTarget({
@@ -98,6 +102,7 @@ export function computeDoubleClickTarget({
   currentSize,
   currentScale = 1,
   monitors,
+  forcePreset = null,
 }) {
   const cx = currentPos && currentSize ? currentPos.x + currentSize.width / 2 : null;
   const cy = currentPos && currentSize ? currentPos.y + currentSize.height / 2 : null;
@@ -122,9 +127,11 @@ export function computeDoubleClickTarget({
   const isNearDefault =
     Math.abs(curLogW - defSize.width) <= 18 && Math.abs(curLogH - defSize.height) <= 18;
 
-  const targetSize = isNearDefault ? wideSize : defSize;
   /** @type {'wide' | 'default'} */
-  const preset = isNearDefault ? 'wide' : 'default';
+  const preset = forcePreset === 'wide' || forcePreset === 'default'
+    ? forcePreset
+    : isNearDefault ? 'wide' : 'default';
+  const targetSize = preset === 'wide' ? wideSize : defSize;
 
   let physicalX = null;
   let physicalY = null;

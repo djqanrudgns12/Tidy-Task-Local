@@ -699,7 +699,8 @@
     }
   }
 
-  async function toggleControlSize() {
+  /** @param {'wide' | 'default' | null} [forcePreset] 버튼은 자기 글자대로(넓게/기본), 헤더 더블클릭은 지정 없이 토글합니다. */
+  async function toggleControlSize(forcePreset = null) {
     if (windowTransitioning || closing) return;
     contextMenu = null;
     ddaySorter.cancel();
@@ -734,6 +735,7 @@
         currentSize: size ? { width: size.width, height: size.height } : null,
         currentScale: scale,
         monitors,
+        forcePreset,
       });
       for (let pass = 0; pass < 2; pass++) {
         if (target.physicalX !== null && target.physicalY !== null) {
@@ -1400,7 +1402,7 @@
             title={layout.wideEdit
               ? `기본 크기(${DDAY_CONTROL_BOUNDS.defaultWidth}×${DDAY_CONTROL_BOUNDS.defaultHeight})로 복원`
               : `넓게 보기(${DDAY_CONTROL_BOUNDS.wideWidth}×${DDAY_CONTROL_BOUNDS.wideHeight})`}
-            onclick={() => void toggleControlSize()}
+            onclick={() => void toggleControlSize(layout.wideEdit ? 'default' : 'wide')}
           >
             {#if layout.wideEdit}
               <Minimize2 size={14} strokeWidth={2.2} />

@@ -115,6 +115,23 @@ test('computeDoubleClickTarget toggles default (380x580) <-> wide (560x660) insi
   assert.equal(toDefault.height, 580);
 });
 
+test('computeDoubleClickTarget: 버튼이 지정한 크기(forcePreset)로 간다 — 높이만 바꾼 창에서 [넓게 보기]가 줄어들지 않음', () => {
+  // 380x620(기본보다 40 높음, 100% 모니터) — 지정이 없으면 기본 크기로 돌아가는 것이 더블클릭 규칙
+  const base = { currentPos: { x: 4000, y: 100 }, currentSize: { width: 380, height: 620 }, currentScale: 1, monitors: MONITORS };
+  assert.equal(computeDoubleClickTarget(base).preset, 'default');
+  const wide = computeDoubleClickTarget({ ...base, forcePreset: 'wide' });
+  assert.equal(wide.preset, 'wide');
+  assert.equal(wide.width, 560);
+  assert.equal(wide.height, 660);
+  // 넓은 창에서 [기본 크기로 축소]
+  const back = computeDoubleClickTarget({ ...base, currentSize: { width: 560, height: 700 }, forcePreset: 'default' });
+  assert.equal(back.preset, 'default');
+  assert.equal(back.width, 380);
+  assert.equal(back.height, 580);
+  // 모르는 값은 무시하고 원래 규칙을 따른다
+  assert.equal(computeDoubleClickTarget({ ...base, forcePreset: /** @type {any} */ ('huge') }).preset, 'default');
+});
+
 test('snapWidgetRectToEdges snaps near edges with 8px gap and avoids micro jitter', () => {
   const nearRightBottom = snapWidgetRectToEdges(
     { x: 3840 + 1920 - 236 - 16, y: 1040 - 256 - 14, width: 236, height: 256 },
