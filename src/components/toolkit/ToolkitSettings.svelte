@@ -13,6 +13,7 @@
     native,
   } from '../../lib/toolkit/store.js';
   import { PLATFORM_TOOLS } from '../../lib/toolkit/registry.js';
+  import { settingsRowFor } from '../../lib/toolkit/settingsRows.js';
   import { defaults, TOOLBAR_SIZES, groupToolOrder, isToolEnabled } from '../../lib/toolkit/preferences.js';
   import { closeWindow } from '../../lib/toolkit/windows.js';
   import { dragRegion } from '../../lib/dragRegion.js';
@@ -54,22 +55,8 @@
     }
   }
   // 도구는 하나의 목록에 두고, 표시 상태에 따라 활성화·비활성화 영역으로 모읍니다.
-  type ToolRow = { id: string; title: string; hint: string };
-  const TOOL_ROWS: ToolRow[] = [
-    { id: 'timer', title: '타이머', hint: '수업 시간을 한눈에 확인해요' },
-    { id: 'clock', title: '시계', hint: '지금 몇 시인지 표준시로 크게 보여줘요' },
-    { id: 'picker', title: '간단 뽑기', hint: '한 명 뽑기 · 모둠원 뽑기' },
-    { id: 'noticeboard', title: '알림장', hint: '작성하고 화이트보드로 보여줘요' },
-    { id: 'tournament', title: '토너먼트', hint: '대진을 만들고 우리 반 우승자를 정해요' },
-    { id: 'focus-bell', title: '집중벨', hint: '소리와 애니메이션으로 시선을 모아요' },
-    { id: 'dice', title: '주사위', hint: '1~3개를 던지고 합계를 크게 보여줘요' },
-    { id: 'scoreboard', title: '점수판', hint: '개인 · 모둠 · 커스텀 점수를 크게 보여줘요' },
-    { id: 'thermometer', title: '학급 온도계', hint: '우리 반 공동 목표를 온도로 보여줘요' },
-    { id: 'vote', title: '학급 투표', hint: '키보드로 비밀 투표하고 두근두근 개표해요' },
-    { id: 'seating', title: '자리 배치', hint: '교실 자리를 고르고 배치해요' },
-    { id: 'roster', title: '학급 명단', hint: '학생과 모둠을 함께 관리해요' },
-  ];
-  const TOOL_ROWS_BY_ID: Record<string, ToolRow> = Object.fromEntries(TOOL_ROWS.map((tool) => [tool.id, tool]));
+  // 줄 이름·설명은 settingsRows.js 한 곳에 둡니다(빠진 도구가 있어도 멈추지 않게 settingsRowFor로 그림).
+  type ToolRow = import('../../lib/toolkit/settingsRows.js').ToolRow;
   async function saveOrder(ids: string[]) {
     if (toolsSaving) return false;
     toolsSaving = true;
@@ -362,7 +349,7 @@
             </div>
           </div>
         {:else}
-          {@render toolRow(TOOL_ROWS_BY_ID[id])}
+          {@render toolRow(settingsRowFor(id))}
         {/if}
         </div>
       {/each}

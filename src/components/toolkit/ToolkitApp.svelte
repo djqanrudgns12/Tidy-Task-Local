@@ -9,6 +9,7 @@
   } from "../../lib/toolkit/appearance.js";
   import { numeralStyleFor } from "../../lib/toolkit/fontMetrics.js";
   import { TIMER_KINDS } from "../../lib/toolkit/preferences.js";
+  import { closeWindow } from "../../lib/toolkit/windows.js";
   import ToolkitToolbar from "./ToolkitToolbar.svelte";
   import ToolkitMenu from "./ToolkitMenu.svelte";
   import "../../lib/toolkit/toolkit.css";
@@ -69,7 +70,17 @@
   {#if role === "toolkit"}<ToolkitToolbar />
   {:else if role === "toolkit-settings"}{#await import('./ToolkitSettings.svelte')}<div
         aria-label="툴킷 설정 준비 중"
-      ></div>{:then module}<module.default />{:catch}<p role="alert">설정 화면을 불러오지 못했어요. 창을 다시 열어 주세요.</p>{/await}
+      ></div>{:then module}<!-- 왜 경계로 감싸는가(6.0.1): 설정 화면이 그리다 멈추면 창은 이미 보이는(show) 상태라
+        투명한 빈 창이 화면 가운데 남아 툴바 클릭·이동을 가로챘습니다. 실패하면 보이는 안내와 닫기 버튼을 그립니다. --><svelte:boundary
+        onerror={(cause) => console.error("툴킷 설정 화면 오류", cause)}
+        ><module.default />{#snippet failed()}<div class="tk-crash" role="alert">
+            <p>설정 화면을 그리지 못했어요.<br />창을 닫고 다시 열어 주세요.</p>
+            <button type="button" onclick={() => void closeWindow()}>창 닫기</button>
+          </div>{/snippet}</svelte:boundary
+      >{:catch}<div class="tk-crash" role="alert">
+        <p>설정 화면을 불러오지 못했어요.<br />창을 닫고 다시 열어 주세요.</p>
+        <button type="button" onclick={() => void closeWindow()}>창 닫기</button>
+      </div>{/await}
   {:else if role === "toolkit-menu"}<ToolkitMenu />
   {:else if role === "toolkit-picker-menu"}<ToolkitMenu kind="picker" />
   {:else if role === "toolkit-scoreboard-menu"}<ToolkitMenu kind="scoreboard" />
@@ -101,3 +112,37 @@
         aria-label="타이머 준비 중"
       ></div>{:then module}<module.default kind={role} />{:catch}<p role="alert">타이머를 불러오지 못했어요. 창을 다시 열어 주세요.</p>{/await}{:else}<p role="alert">알 수 없는 도구예요.</p>{/if}
 </div>
+
+<style>
+  /* 투명 창이라 배경을 꼭 칠해야 안내가 보이고, 빈 창이 클릭을 가로채는 일이 없습니다. */
+  .tk-crash {
+    box-sizing: border-box;
+    width: 100%;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 14px;
+    padding: 24px;
+    border: 1px solid #e5e7eb;
+    border-radius: 16px;
+    background: #ffffff;
+    color: #1f2937;
+    font-size: 14px;
+    line-height: 1.6;
+    text-align: center;
+  }
+  .tk-crash p {
+    margin: 0;
+  }
+  .tk-crash button {
+    padding: 8px 18px;
+    border: 0;
+    border-radius: 999px;
+    background: #4f46e5;
+    color: #ffffff;
+    font-weight: 700;
+    cursor: pointer;
+  }
+</style>
