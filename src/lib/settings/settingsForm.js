@@ -2,12 +2,16 @@
 // [설정 창의 값 묶음] 설정 창이 다루는 값의 기본값·읽기·바뀜 판정·적용 요청 모양을 한곳에 둡니다.
 //
 // 왜 컴포넌트 밖에 두는가:
-//   "설정 초기화"의 기본값, 화면에 처음 채우는 값, [반영]이 보내는 값이 서로 다른 곳에 적혀 있으면
+//   "설정 초기화"의 기본값, 화면에 처음 채우는 값, [적용]·[완료]가 보내는 값이 서로 다른 곳에 적혀 있으면
 //   항목을 하나 추가할 때 한 곳을 빠뜨리기 쉽습니다. (실제로 '전체 무음'은 창을 열 때 보내는 값에서 빠져 있어
-//   설정 창을 열고 [반영]만 눌러도 무음이 풀렸습니다.)
+//   설정 창을 열고 [완료]만 눌러도 무음이 풀렸습니다.)
 // ═══════════════════════════════════════════════════════════════════
 
 export const DEFAULT_FONT = '메이플스토리 L';
+
+// 메모 창이 설정(모양·글자)을 적용·초기화하고 저장까지 마친 뒤 보내는 알림. payload: { label }
+// 저장소를 직접 읽는 보조 창(아카이브 등)이 열린 채로도 바뀐 설정을 다시 읽게 합니다.
+export const APPEARANCE_CHANGED_EVENT = 'tidy-appearance-changed';
 
 // 슬라이더 범위 (pt)
 export const FONT_SIZE_RANGE = Object.freeze({ min: 6, max: 14 });
@@ -37,14 +41,14 @@ export const SETTINGS_DEFAULTS = Object.freeze({
   globalMuteSound: false,
 });
 
-// [반영]을 눌러야 적용되는 항목. 상단 디자인은 고르는 즉시 적용되므로 "바뀜" 판정에서 뺍니다.
+// [적용]·[완료]를 눌러야 적용되는 항목. 상단 디자인은 고르는 즉시 적용되므로 "바뀜" 판정에서 뺍니다.
 const APPLY_FIELDS = /** @type {const} */ ([
   'themeColor', 'isDarkMode', 'fontFamily', 'fontSize', 'uiFontFamily', 'uiFontSize',
   'showArchived', 'showNotes', 'showReminders', 'globalMuteSound',
 ]);
 
 // 슬라이더 범위 밖의 저장값(옛 버전에서 넘어온 값)도 그대로 둡니다.
-// 왜: 여기서 범위 안으로 고치면 설정 창을 열고 [반영]만 눌러도 사용자의 글자 크기가 조용히 바뀝니다.
+// 왜: 여기서 범위 안으로 고치면 설정 창을 열고 [완료]만 눌러도 사용자의 글자 크기가 조용히 바뀝니다.
 /** @param {unknown} value @param {number} fallback */
 function fontSizeOf(value, fallback) {
   return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : fallback;
@@ -85,7 +89,7 @@ export function readSettingsForm(source, fallback = {}) {
   };
 }
 
-/** [반영]을 눌러야 적용되는 항목 가운데 바뀐 것의 이름.
+/** [적용]·[완료]를 눌러야 적용되는 항목 가운데 바뀐 것의 이름.
  * @param {SettingsForm} current @param {SettingsForm} initial @returns {(typeof APPLY_FIELDS)[number][]} */
 export function changedFields(current, initial) {
   return APPLY_FIELDS.filter((name) => current[name] !== initial[name]);
@@ -147,7 +151,7 @@ export const SETTINGS_TABS = Object.freeze([
   { id: 'manage', label: '관리' },
 ]);
 
-// [반영] 전 변경이 어느 탭에 있는지 (탭 이름 옆에 점으로 알려 줍니다)
+// 적용 전 변경이 어느 탭에 있는지 (탭 이름 옆에 점으로 알려 줍니다)
 /** @type {Readonly<Record<(typeof APPLY_FIELDS)[number], SettingsTabId>>} */
 export const FIELD_TABS = Object.freeze({
   themeColor: 'look',
@@ -182,7 +186,7 @@ export const SETTINGS_WINDOW = Object.freeze({ width: 360, height: 560, minHeigh
 /**
  * 설정 창 크기. 화면(작업 표시줄을 뺀 높이)이 낮으면 그 안에 들어가도록 높이를 줄입니다.
  * 왜: 이 창은 크기를 바꿀 수 없어, 작은 노트북·높은 배율 화면에서 창이 화면보다 크면
- *   아래쪽 [취소 · 반영] 버튼이 화면 밖으로 나가 누를 수 없습니다. (본문은 스크롤되므로 줄여도 됩니다)
+ *   아래쪽 [취소 · 완료 · 적용] 버튼이 화면 밖으로 나가 누를 수 없습니다. (본문은 스크롤되므로 줄여도 됩니다)
  * @param {number[]} workAreaHeights 연결된 모니터들의 작업영역 높이(논리 px). 비어 있으면 기본 크기.
  */
 export function settingsWindowSize(workAreaHeights = []) {

@@ -84,7 +84,7 @@
     background: transparent;
     color: var(--ctx-muted);
     font-family: inherit;
-    font-size: clamp(9px, 0.76em, 10px);
+    font-size: clamp(9px, 0.76em, calc(10px * var(--ctx-fs-scale, 1)));
     font-weight: 600;
     letter-spacing: -0.02em;
     white-space: nowrap;

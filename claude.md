@@ -127,6 +127,11 @@
 - **단건 삭제는 되돌리기 알림을 거칩니다.** 알림의 [되돌리기]는 전역 Ctrl+Z가 아니라 `deletionUndo.js` 기록으로 "지운 것만" 원래 이웃 옆에 돌려놓고, D-Day는 삭제 직후 모습 그대로일 때만 되돌립니다. 기록은 메모리 전용이라 `WINDOW_FIELDS`에 넣지 않습니다(삭제 자체는 즉시 저장 — 업데이트 설치 흐름에 새 저장 경로 없음). 전역 되돌리기·내용 초기화·업데이트 잠금 때 알림을 닫습니다.
 - 개발 시 `?memo-layout-preview&sort-qa&sort-motion=full`. 가려진 검수 창에서는 rAF·WAAPI가 멈추므로 `document.getAnimations().forEach(a => a.finish())`로 착지를 끝내고 상태를 봅니다.
 
+### 다중 선택 막대 ([아카이브] · [D-Day] · [마감] · 지우개, 2026-11-20)
+- **[아카이브]**: 고른 할 일을 아카이브(보관함) 카드로 하나씩 넣고(`todos/todoArchive.js` — 제목은 글자만, 본문에 서식 그대로 + 마감일 한 줄), `archiveState.addNotes()`가 **다시 읽어 모두 들어간 것을 확인한 뒤에만** `appState.removeTodosByIds()`로 목록에서 뺍니다. 저장소 잠김(`storageError`)·업데이트 잠금 중에는 하지 않습니다. 되돌리기(Ctrl+Z)는 할 일만 되살리고 보관함 카드는 남습니다.
+- **[D-Day]**: `dday/ddayActions.js`의 `planBulkDdayPin`·`pinTodosAsDdays`(한 개씩 고정하는 `pinTodoAsDday`와 같은 규칙, 이미 이어진 할 일은 건너뜀). 마감일 없는 할 일이 섞여 있으면 버튼 옆에 달력을 띄워 날짜를 한 번 고르고, 그 날을 그 할 일들의 마감일로 함께 정합니다("날짜 없음"이면 마감일 있는 것만).
+- 결과는 `appState.triggerToast('notice', 글)`로 알립니다(`todos/bulkActions.js`). 처리 중에는 버튼을 잠가 두 번 보관·고정되지 않게 합니다. 막대 글자는 em이라 화면 글자 크기를 따르고, 폭이 모자라면(컨테이너 쿼리) 버튼 이름을 숨겨 아이콘만 둡니다.
+
 ### 마감일 달력 (날짜 선택 창, `date-picker`)
 - 할 일 뱃지와 새 할 일 입력줄의 달력은 **메모 창 안이 아니라 별도 창**으로 뜹니다. 왜: 메모 창 최소 높이는 210px인데 달력은 약 240~270px이라, 창 안에서는 어디에 놓아도 잘렸습니다.
 - `main.js`가 `date-picker` 라벨을 **가장 먼저** `DatePickerWindow`로 분기합니다. 이 경로에서 App·appState를 실행하지 않습니다(이 라벨로 저장소 키가 생기면 안 됨).
@@ -141,7 +146,10 @@
 ### 설정 창 (`settings`) · 초기화 · 자동 실행
 - `components/SettingsModal.svelte`는 탭 넷입니다: **모양**(테마+다크 모드 · 상단 디자인 · 보이는 영역) / **글자**(메모 글자 · 화면 글자 · 글꼴 추가) / **동작**(컴퓨터를 켜면 자동 실행 · 알림과 소리 · Tidy 툴킷) / **관리**(새로운 소식 · 앱 업데이트 · 초기화). 묶음 카드는 `components/settings/SettingsPanel.svelte`, 스위치 줄은 `SwitchRow.svelte`. 색은 고른 테마의 강조색(`--st-accent`)을 따르고 글자는 모두 em이라 "UI 글자 크기"에 맞춰 함께 커집니다.
 - 값의 기본값·바뀜 판정·보내는 모양·창 크기는 `src/lib/settings/settingsForm.js` 한 곳입니다. 항목을 추가하면 `SETTINGS_DEFAULTS`·`APPLY_FIELDS`·`FIELD_TABS`·`toApplyPayload`를 함께 고칩니다. 메모 창이 설정 창을 열 때 보내는 값은 `settingsSnapshotFor()`(되돌리기 스냅샷 + 상단 디자인 + 전체 무음)이고, 여는 코드는 `headerWindows.js`의 `handleSettings()` 하나입니다(상단 메뉴·우클릭 메뉴 공용).
-- 적용 시점: "바로 적용" 꼬리표(상단 디자인 · Tidy 툴킷)만 즉시, 나머지는 [반영]. 설정 창은 메모 저장소에 직접 쓰지 않고 `req-apply-settings`·`req-reset-config`로 메모 창에 보냅니다.
+- 적용 시점: "바로 적용" 꼬리표(상단 디자인 · Tidy 툴킷)만 즉시, 나머지는 아래 버튼으로. **[완료]** = 적용하고 닫기, **[적용]** = 창을 연 채 바로 적용(바꾼 것이 있을 때만 켜짐, 누른 뒤 다시 꺼짐), [취소] = 적용 안 한 변경만 버림(2026-11-20, 예전 [반영]). 설정 창은 메모 저장소에 직접 쓰지 않고 `req-apply-settings`·`req-reset-config`로 메모 창에 보냅니다.
+  - 받은 메모 창은 저장을 마친 뒤 `tidy-appearance-changed`(`APPEARANCE_CHANGED_EVENT`)를 알립니다. D-Day 위젯·컨트롤·리마인더는 저장 알림으로, 저장소를 직접 읽는 아카이브 창은 이 알림으로 열린 채 따라 바뀝니다.
+  - **글꼴 이름 → font-family는 반드시 `resolveFontFamilyStack()`**(`fonts/fontCatalog.js`)으로 바꿉니다. 이름을 그대로 CSS에 넣으면 '맑은고딕'처럼 이름과 실제 글꼴 이름이 다른 시스템 글꼴이 적용되지 않습니다(우클릭 메뉴·D-Day 위젯·리마인더·아카이브에서 실제로 났던 문제).
+  - 글자 적용 범위: 메모 글자 = 할 일·메모·마감된 일 본문, 메모 창 D-Day 배너 제목(컨트롤의 배너 미리보기도 같은 글꼴), 아카이브 창. 화면 글자 = 그 밖의 버튼·메뉴·제목, 우클릭 메뉴, D-Day 배너 틀·위젯·컨트롤·리마인더·달력. px로 디자인된 조각은 `--ui-font-scale`(화면 글자 pt/10, `App.svelte`)을 곱해 크기를 따라가게 합니다(D-Day 배너·머리 칩 0.8~1.5배, 우클릭 메뉴 `--ctx-fs-scale` 1~1.25배 — 메뉴 폭이 그만큼만 넓어짐).
   - 알림·무음은 모든 데이터 창이 `applySharedSettings()`로 함께 받습니다. 매니저만 받으면 다른 창의 다음 저장·매니저 승계 때 옛 값이 돌아옵니다. 창별 모양·글자는 요청한 창만 바꿉니다.
 - **컴퓨터를 켜면 자동 실행**(`src/lib/autostart.js`): 기본 켜짐(사용자 결정 2026-09-30). 실제 등록은 Windows 시작 프로그램, "사용자가 껐다"는 선택은 온도계 저장 파일의 `display.windowsStart`(5.6.x부터 쓰던 자리 — 옮기면 이미 끈 사용자의 선택을 잃습니다). 앱은 시작할 때 `ensureLaunchAtStartup()`으로 "끄지 않았는데 등록이 없으면" 등록합니다. 바꾸는 곳은 설정 창뿐입니다.
 - **설정 초기화**: 설정을 연 메모 창의 모양·글자·창 크기(`req-reset-config`) + 알림·무음(기본값을 `req-apply-settings`로 방송) + 자동 실행(켜짐). 할 일·메모는 건드리지 않습니다.

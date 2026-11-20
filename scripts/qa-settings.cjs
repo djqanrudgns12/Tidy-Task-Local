@@ -155,7 +155,7 @@ async function main() {
     await page.setViewportSize({ width: WIDTH, height: HEIGHT });
     check('small-screen-footer-stays-visible');
 
-    // ── 4. 반영 전 변경 표시와 [반영]이 보내는 값 ──
+    // ── 4. 적용 전 변경 표시와 [완료]가 보내는 값 ──
     await open(page, '&theme=amber');
     const pending = page.locator('.st-pending');
     assert.equal((await pending.textContent())?.trim(), '');
@@ -166,7 +166,7 @@ async function main() {
     assert.equal((await pending.textContent())?.trim(), '');
     assert.equal(await page.locator('.st-tab-dot').count(), 0);
 
-    // 상단 디자인은 고르는 즉시 보내고 "반영 전 변경"으로 세지 않습니다.
+    // 상단 디자인은 고르는 즉시 보내고 "적용 전 변경"으로 세지 않습니다.
     await page.getByRole('radio', { name: /클래식/ }).check({ force: true });
     await page.waitForFunction(() => window.__headerQA.events.some((e) => e.name === 'req-set-header-design'));
     assert.equal((await pending.textContent())?.trim(), '');
@@ -176,7 +176,7 @@ async function main() {
     await page.getByRole('switch', { name: /전체 무음 모드/ }).click();
     assert.match((await pending.textContent()) || '', /바꾼 설정 2개/);
     await shot(page, 'pending-changes.png');
-    await page.getByRole('button', { name: '반영' }).click();
+    await page.getByRole('button', { name: '완료', exact: true }).click();
     await page.waitForFunction(() => window.__headerQA.events.some((e) => e.name === 'req-apply-settings'));
     const applied = await page.evaluate(() => window.__headerQA.events.find((e) => e.name === 'req-apply-settings').payload);
     assert.deepEqual(applied, {
@@ -188,6 +188,26 @@ async function main() {
     assert.equal(await page.evaluate(() => window.__headerQA.calls.filter((c) => /autostart\|(enable|disable)/.test(c.command)).length), 0);
     check('pending-indicator-and-apply-payload');
 
+    // ── 4-1. [적용]: 바꾼 것이 있을 때만 눌리고, 창을 닫지 않고 보낸 뒤 다시 꺼집니다 ──
+    await open(page, '&theme=amber');
+    const applyButton = page.getByRole('button', { name: '적용', exact: true });
+    assert.equal(await applyButton.isDisabled(), true, '바꾼 것이 없으면 [적용]은 꺼져 있어야 합니다');
+    await page.getByRole('switch', { name: '다크 모드' }).click();
+    assert.equal(await applyButton.isDisabled(), false, '설정을 하나 바꾸면 [적용]이 켜져야 합니다');
+    await applyButton.click();
+    await page.waitForFunction(() => window.__headerQA.events.some((e) => e.name === 'req-apply-settings'));
+    const appliedNow = await page.evaluate(() => window.__headerQA.events.filter((e) => e.name === 'req-apply-settings'));
+    assert.equal(appliedNow.length, 1);
+    assert.equal(appliedNow[0].payload.isDarkMode, true);
+    await page.waitForFunction(() => document.querySelector('.st-pending')?.textContent?.trim() === '');
+    assert.equal(await applyButton.isDisabled(), true, '적용한 뒤에는 다시 꺼져야 합니다');
+    assert.equal(await page.locator('.st-root').count(), 1, '[적용]은 창을 닫지 않습니다');
+    // 적용한 뒤 [완료]는 같은 값을 다시 보내지 않고 닫기만 합니다.
+    await page.getByRole('button', { name: '완료', exact: true }).click();
+    await page.waitForTimeout(150);
+    assert.equal(await page.evaluate(() => window.__headerQA.events.filter((e) => e.name === 'req-apply-settings').length), 1);
+    check('apply-button-applies-without-closing');
+
     // ── 5. 컴퓨터를 켜면 자동 실행 ──
     await open(page);
     await selectTab(page, '동작');
@@ -196,11 +216,12 @@ async function main() {
     await launch.click();
     assert.match((await pending.textContent()) || '', /바꾼 설정 1개/);
     assert.equal(await page.locator('#st-tab-behavior .st-tab-dot').count(), 1);
-    // [반영] 전에는 등록을 바꾸지 않습니다.
+    // [완료] 전에는 등록을 바꾸지 않습니다.
     assert.equal(await page.evaluate(() => window.__headerQA.calls.some((c) => c.command === 'plugin:autostart|disable')), false);
-    await page.getByRole('button', { name: '반영' }).click();
-    await page.waitForFunction(() => window.__headerQA.events.some((e) => e.name === 'req-apply-settings'));
-    assert.equal(await page.evaluate(() => window.__headerQA.calls.some((c) => c.command === 'plugin:autostart|disable')), true);
+    await page.getByRole('button', { name: '완료', exact: true }).click();
+    await page.waitForFunction(() => window.__headerQA.calls.some((c) => c.command === 'plugin:autostart|disable'));
+    // 자동 실행만 바꿨으면 메모 창에는 같은 설정을 다시 보내지 않습니다.
+    assert.equal(await page.evaluate(() => window.__headerQA.events.some((e) => e.name === 'req-apply-settings')), false);
     const savedChoice = await page.evaluate(() => JSON.parse(localStorage.getItem('tidy-scores-preview-v1:thermometer')).sections.display.data.windowsStart);
     assert.equal(savedChoice, false, '끈 선택을 저장해야 다음 시작 때 다시 켜지지 않습니다');
     check('autostart-off-is-applied-and-remembered');
@@ -210,7 +231,7 @@ async function main() {
     await selectTab(page, '동작');
     assert.equal(await launch.getAttribute('aria-checked'), 'false');
     await launch.click();
-    await page.getByRole('button', { name: '반영' }).click();
+    await page.getByRole('button', { name: '완료', exact: true }).click();
     await page.waitForFunction(() => window.__headerQA.calls.some((c) => c.command === 'plugin:autostart|enable'));
     await page.waitForFunction(() => JSON.parse(localStorage.getItem('tidy-scores-preview-v1:thermometer')).sections.display.data.windowsStart === true);
     check('autostart-on-again');
@@ -221,7 +242,7 @@ async function main() {
     await selectTab(page, '동작');
     await launch.click();
     await selectTab(page, '모양');
-    await page.getByRole('button', { name: '반영' }).click();
+    await page.getByRole('button', { name: '완료', exact: true }).click();
     await page.getByRole('alert').filter({ hasText: '자동 실행 설정을 바꾸지 못했어요' }).waitFor();
     await page.getByRole('tab', { name: '동작', selected: true }).waitFor();
     assert.equal(await page.evaluate(() => window.__headerQA.events.some((e) => e.name === 'req-apply-settings')), false);

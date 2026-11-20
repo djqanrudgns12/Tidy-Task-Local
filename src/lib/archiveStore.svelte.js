@@ -50,6 +50,24 @@ class ArchiveState {
       this.notes = Array.isArray(savedNotes) ? savedNotes : [];
 
       // ✨ [Settings Sync] 글로벌 설정(메인 창 설정) 불러오기
+      await this.refreshGlobalSettings();
+
+      // ✨ [Full Toolbar] 아카이브 툴바의 글꼴 선택을 위한 폰트 목록 + @font-face 등록
+      await this._loadFonts();
+    } catch (e) {
+      console.error("아카이브 로드 중 오류:", e);
+      this.notes = [];
+    } finally {
+      this.isReady = true;
+    }
+  }
+
+  // ✨ [Settings Sync] 메인 창의 글꼴·테마·다크 모드를 다시 읽습니다.
+  // 왜 따로 두는가: 설정 창에서 [적용]하면 아카이브 창이 열린 채로도 곧바로 따라 바뀌어야 하는데,
+  //   init()을 다시 부르면 목록·편집 상태까지 새로 읽어 진행 중인 편집을 잃을 수 있습니다.
+  async refreshGlobalSettings() {
+    if (!tauriStore) return;
+    try {
       const mainData = await tauriStore.get('main');
       if (mainData) {
         this.globalSettings.fontFamily = mainData.fontFamily || '메이플스토리 L';
@@ -61,14 +79,8 @@ class ArchiveState {
         this.globalSettings.themeColor = await tauriStore.get('themeColor') || 'amber';
         this.globalSettings.isDarkMode = await tauriStore.get('isDarkMode') || false;
       }
-
-      // ✨ [Full Toolbar] 아카이브 툴바의 글꼴 선택을 위한 폰트 목록 + @font-face 등록
-      await this._loadFonts();
     } catch (e) {
-      console.error("아카이브 로드 중 오류:", e);
-      this.notes = [];
-    } finally {
-      this.isReady = true;
+      console.warn('아카이브 설정 새로고침 오류:', e);
     }
   }
 
@@ -207,6 +219,47 @@ class ArchiveState {
       try {
         const latest = await tauriStore.get('archivedNotes');
         confirmed = Array.isArray(latest) && latest.some((n) => n.id === newNote.id);
+      } catch (e) {
+        confirmed = false;
+      }
+    }
+
+    if (confirmed) emit('archive-updated');
+    return confirmed;
+  }
+
+  // ✨ 여러 메모를 한 번에 보관합니다(메모 창 다중 선택 [아카이브]).
+  // addNote와 같이 "다시 읽어 모두 들어가 있는 것을 확인했을 때만" true를 돌려줍니다.
+  // 왜: 이 결과가 true여야 메모 창이 그 할 일을 목록에서 뺍니다. 한 건이라도 확인되지 않으면
+  //   할 일을 그대로 두어, 보관함에도 할 일 목록에도 없는 일이 생기지 않게 합니다.
+  // 왜 한 번에 쓰는가: addNote를 여러 번 부르면 건마다 파일 쓰기가 일어나 느리고, 중간에 실패하면 일부만 들어갑니다.
+  async addNotes(items) {
+    const list = Array.isArray(items) ? items : [];
+    if (list.length === 0) return true;
+    const now = Date.now();
+    const newNotes = list.map((item, index) => ({
+      id: crypto.randomUUID(),
+      title: item.title || '제목 없음',
+      content: item.content || '',
+      themeColor: item.themeColor || 'amber',
+      isDarkMode: item.isDarkMode || false,
+      bookmarked: false,
+      // 같은 순간에 넣어도 "보관 시각순" 정렬이 목록 순서를 지키도록 1ms씩 차이를 둡니다(맨 앞이 가장 최근).
+      archivedAt: now - index,
+      sourceLabel: item.sourceLabel || 'unknown',
+    }));
+    const ids = new Set(newNotes.map((n) => n.id));
+
+    let confirmed = false;
+    for (let attempt = 1; attempt <= 3 && !confirmed; attempt++) {
+      const written = await this._safeModify((diskNotes) => {
+        const missing = newNotes.filter((n) => !diskNotes.some((d) => d.id === n.id));
+        return missing.length ? [...missing, ...diskNotes] : diskNotes;
+      });
+      if (!written) continue;
+      try {
+        const latest = await tauriStore.get('archivedNotes');
+        confirmed = Array.isArray(latest) && [...ids].every((id) => latest.some((n) => n.id === id));
       } catch (e) {
         confirmed = false;
       }

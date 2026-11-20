@@ -13,6 +13,8 @@
   import { editable, sanitizeForDisplay } from "../lib/editable.js";
   import { clampFontSizeHtml, STABLE_MAX_PT } from "../lib/fontSize.js";
   import { TINY_NOTE_THEMES, getTinyNoteTheme } from "../lib/themes.js";
+  import { resolveFontFamilyStack } from "../lib/fonts/fontCatalog.js";
+  import { APPEARANCE_CHANGED_EVENT } from "../lib/settings/settingsForm.js";
   import ArchiveToolbar from "./ArchiveToolbar.svelte";
   // ✨ [Compatibility] appState를 import하지 않습니다.
   // 아카이브 창에서 appState.init()이 호출되면 windowLabel="archive"로 세팅되어
@@ -68,6 +70,10 @@
   let showToolbar = $state(false);
 
   let unlistenArchiveUpdate;
+  let unlistenAppearance;
+
+  // 메인 창 글꼴 이름 → 실제 font-family. (이름을 그대로 쓰면 '맑은고딕' 같은 시스템 글꼴이 적용되지 않았습니다)
+  const archiveFontStack = $derived(resolveFontFamilyStack(archiveState.globalSettings.fontFamily, archiveState.customFonts));
 
   onMount(async () => {
     if (!archiveState.isReady) await archiveState.init();
@@ -91,6 +97,11 @@
       setTimeout(recalcMasonry, 300);
     });
 
+    // 설정 창에서 메인 창 설정을 적용하면 열린 아카이브 창도 글꼴·다크 모드를 곧바로 따라갑니다.
+    unlistenAppearance = await listen(APPEARANCE_CHANGED_EVENT, (event) => {
+      if (event.payload?.label === 'main') void archiveState.refreshGlobalSettings();
+    });
+
     // 테마 색상 팝오버는 바깥을 클릭하면 닫히도록 처리
     document.addEventListener('mousedown', handleDocMousedown);
   });
@@ -106,6 +117,7 @@
     if (toastTimer) clearTimeout(toastTimer);
     if (masonryFrame) cancelAnimationFrame(masonryFrame);
     if (unlistenArchiveUpdate) unlistenArchiveUpdate();
+    if (unlistenAppearance) unlistenAppearance();
     // 디바운스 대기 중이던 본문 저장 타이머 정리
     for (const t of contentTimers.values()) clearTimeout(t);
     document.removeEventListener('mousedown', handleDocMousedown);
@@ -665,7 +677,7 @@
 <div 
   class="flex flex-col h-screen w-screen overflow-hidden rounded-lg border shadow-2xl transition-colors duration-300"
   style="
-    font-family: {archiveState.globalSettings.fontFamily};
+    font-family: {archiveFontStack};
     background-color: {archiveState.globalSettings.isDarkMode ? '#1e2028' : '#fdfaf3'};
     color: {archiveState.globalSettings.isDarkMode ? '#e2e8f0' : '#374151'};
     border-color: {archiveState.globalSettings.isDarkMode ? 'rgba(255,255,255,0.1)' : 'rgba(251,191,36,0.5)'};

@@ -19,6 +19,7 @@
   import { closeWindow } from '../../lib/toolkit/windows.js';
   import { watchCustomFonts } from '../../lib/toolkit/appearance.js';
   import { registerFontFace } from '../../lib/fonts.js';
+  import { resolveFontFamilyStack } from '../../lib/fonts/fontCatalog.js';
   import { ensureWindowOnScreen, getMonitorGeometries } from '../../lib/windows/windowRegistry.js';
   import { toolkitDrag } from '../../lib/toolkit/drag.js';
   import { readLaunchAtStartup, setLaunchAtStartup } from '../../lib/autostart.js';
@@ -140,7 +141,8 @@
   );
   const themeStyle = $derived(widgetThemeToStyle(themeTokens));
   const effectiveDark = $derived(themeTokens.effectiveDark);
-  const uiFontCss = $derived(`"${themeSource.uiFontFamily.replace(/[";{}<>\\]/g, '')}", "Malgun Gothic", sans-serif`);
+  // 이름을 그대로 넣으면 '맑은고딕'처럼 실제 글꼴 이름이 다른 시스템 글꼴이 적용되지 않아 카탈로그로 바꿉니다.
+  const uiFontCss = $derived(resolveFontFamilyStack(themeSource.uiFontFamily));
 
   const currentProgress = $derived(
     currentEntry ? computeProgressPercent(currentEntry.item, today) : 0,

@@ -8,7 +8,8 @@
   //
   // 적용 시점은 두 가지입니다.
   //   · "바로 적용" 꼬리표가 붙은 것(상단 디자인 · Tidy 툴킷)은 고르는 즉시 바뀝니다.
-  //   · 나머지는 아래 [반영]을 눌러야 바뀝니다. 바꾼 것이 있으면 탭 이름 옆 점과 아래쪽 문구로 알려 줍니다.
+  //   · 나머지는 아래 [적용](창을 열어 둔 채 바로 적용) 또는 [완료](적용하고 닫기)를 눌러야 바뀝니다.
+  //     바꾼 것이 있으면 탭 이름 옆 점과 아래쪽 문구로 알려 주고, 그때만 [적용]이 눌립니다.
   //
   // 이 창은 저장소에 직접 쓰지 않습니다. 값은 메모 창에 이벤트로 보내고(req-apply-settings 등),
   // 받은 메모 창이 자기 데이터로 저장합니다. (보조 창이 저장하면 다른 창의 데이터를 덮을 수 있습니다)
@@ -54,7 +55,7 @@
   /** @type {(() => void) | undefined} */
   let unlistenTarget;
 
-  // 화면에 보이는 값(form)과 창을 열었을 때의 값(initial). 둘이 다르면 "반영 전 변경"입니다.
+  // 화면에 보이는 값(form)과 창을 열었을 때의 값(initial). 둘이 다르면 "적용 전 변경"입니다.
   let form = $state(readSettingsForm(appState));
   let initial = $state.raw(readSettingsForm(appState));
 
@@ -62,7 +63,7 @@
   let activeTab = $state('look');
 
   // ── 테마에 맞춘 색 ──
-  // 스위치·슬라이더·[반영] 버튼까지 모두 고른 테마의 강조색을 따릅니다.
+  // 스위치·슬라이더·[완료] 버튼까지 모두 고른 테마의 강조색을 따릅니다.
   // (getTidyTheme은 모르는 이름이면 기본 테마를 돌려주지만 타입으로는 드러나지 않아 한 번 더 받쳐 둡니다)
   const theme = $derived((getTidyTheme(form.themeColor) ?? TIDY_THEMES[0]).tidy);
   const accent = $derived(form.isDarkMode ? theme.accentDark : theme.accent);
@@ -88,10 +89,10 @@
     return Math.min(100, Math.max(0, ((value - range.min) / (range.max - range.min)) * 100));
   }
 
-  // ── 반영 전 변경 ──
+  // ── 적용 전 변경 ──
   const pendingFields = $derived(changedFields(form, initial));
 
-  // ── 컴퓨터를 켜면 자동 실행 (앱 전체 · [반영]을 누를 때 적용) ──
+  // ── 컴퓨터를 켜면 자동 실행 (앱 전체 · [적용]·[완료]를 누를 때 적용) ──
   // 처음 값은 실제 Windows 등록 상태입니다. 읽기 전에는 스위치를 잠가 둡니다.
   let launchAtStartup = $state(true);
   let initialLaunch = $state(true);
@@ -388,7 +389,7 @@
       launchAtStartup = initialLaunch = await setLaunchAtStartup(true);
       // 1) 메모 창이 자기 모양·글자·창 크기를 되돌립니다.
       await emitTo(targetLabel, 'req-reset-config');
-      // 2) 알림·무음은 리마인더를 맡은 매니저 창도 함께 바꿔야 하므로, [반영]과 같은 방송으로 기본값을 보냅니다.
+      // 2) 알림·무음은 리마인더를 맡은 매니저 창도 함께 바꿔야 하므로, [적용]과 같은 방송으로 기본값을 보냅니다.
       await emit('req-apply-settings', toApplyPayload(SETTINGS_DEFAULTS, targetLabel));
       await getCurrentWindow().close();
     } catch (e) {
@@ -417,36 +418,67 @@
     }
   }
 
-  // ── 반영 · 취소 ──
+  // ── 완료 · 적용 · 취소 ──
+  // [적용] 창을 열어 둔 채 지금 바꾼 값을 앱 전체에 바로 적용합니다. 바꾼 것이 없으면 눌리지 않습니다.
+  // [완료] 바꾼 것이 있으면 적용한 뒤 창을 닫습니다. (예전 [반영]과 같은 동작)
+  // [취소] 아직 적용하지 않은 값만 버리고 닫습니다. 이미 [적용]한 값은 그대로 남습니다.
   let applying = $state(false);
 
   async function closeWindow() {
     await getCurrentWindow().close();
   }
 
-  async function applySettings() {
+  /**
+   * 바꾼 설정을 메모 창들에 보냅니다. 성공하면 true.
+   * 왜 initial을 지금 값으로 바꾸는가: [적용] 뒤에는 "적용 전 변경"이 없어야 [적용] 버튼이 다시 꺼지고,
+   *   이어서 [완료]·[적용]을 눌러도 같은 값을 두 번 보내지 않습니다.
+   */
+  async function commitSettings() {
+    launchError = '';
+    // 자동 실행은 Windows 등록을 바꾸는 일이라 실패할 수 있습니다.
+    // 실패하면 창을 닫지 않고 그 자리에서 알려, 바뀐 줄 알고 넘어가지 않게 합니다.
+    if (launchChanged) {
+      try {
+        await setLaunchAtStartup(launchAtStartup);
+        initialLaunch = launchAtStartup;
+      } catch (e) {
+        console.error('자동 실행 설정 실패:', e);
+        launchError = '자동 실행 설정을 바꾸지 못했어요. 다시 시도해 주세요.';
+        selectTab('behavior');
+        return false;
+      }
+    }
+    if (pendingFields.length > 0) {
+      const sent = { ...form };
+      // 알림·무음은 모든 데이터 창이, 모양·글자는 targetLabel 창이 받습니다(App.svelte).
+      // 받은 창이 저장하면 D-Day 위젯·컨트롤·리마인더가 저장 알림으로 함께 따라 바뀝니다.
+      await emit('req-apply-settings', toApplyPayload(sent, targetLabel));
+      track('settings_applied');
+      if (sent.themeColor !== initial.themeColor) track('theme_changed', { choice: sent.themeColor });
+      initial = sent;
+    }
+    return true;
+  }
+
+  async function applyNow() {
+    if (applying || pendingCount === 0) return;
+    applying = true;
+    try {
+      await commitSettings();
+    } catch (e) {
+      console.error('설정 적용 실패:', e);
+    } finally {
+      applying = false;
+    }
+  }
+
+  async function finishSettings() {
     if (applying) return;
     applying = true;
-    launchError = '';
     try {
-      // 자동 실행은 Windows 등록을 바꾸는 일이라 실패할 수 있습니다.
-      // 실패하면 창을 닫지 않고 그 자리에서 알려, 바뀐 줄 알고 넘어가지 않게 합니다.
-      if (launchChanged) {
-        try {
-          await setLaunchAtStartup(launchAtStartup);
-          initialLaunch = launchAtStartup;
-        } catch (e) {
-          console.error('자동 실행 설정 실패:', e);
-          launchError = '자동 실행 설정을 바꾸지 못했어요. 다시 시도해 주세요.';
-          selectTab('behavior');
-          return;
-        }
-      }
-      // ✨ Phase 4: 글로벌 킬 스위치 및 통합 리마인더 설정 적용을 전역으로 브로드캐스트
-      await emit('req-apply-settings', toApplyPayload(form, targetLabel));
-      track('settings_applied');
-      if (form.themeColor !== initial.themeColor) track('theme_changed', { choice: form.themeColor });
-      await getCurrentWindow().close();
+      if (pendingCount === 0 || (await commitSettings())) await closeWindow();
+    } catch (e) {
+      console.error('설정 완료 실패:', e);
     } finally {
       applying = false;
     }
@@ -528,7 +560,7 @@
           <TabIcon size="1.15em" strokeWidth={2.2} aria-hidden="true" />
           <!-- 점은 글자 크기가 달라져도 이름 바로 옆에 붙어 있도록 이름표 안에 둡니다. -->
           <span class="st-tab-label">
-            {tab.label}{#if pendingTabs.has(tab.id)}<i class="st-tab-dot" title="반영 전 변경이 있어요"></i>{/if}
+            {tab.label}{#if pendingTabs.has(tab.id)}<i class="st-tab-dot" title="적용 전 변경이 있어요"></i>{/if}
           </span>
         </button>
       {/each}
@@ -843,10 +875,17 @@
 
     <footer class="st-foot">
       <p class="st-pending" aria-live="polite">
-        {#if pendingCount > 0}<i aria-hidden="true"></i>바꾼 설정 {pendingCount}개 · 반영 전{/if}
+        {#if pendingCount > 0}<i aria-hidden="true"></i>바꾼 설정 {pendingCount}개{/if}
       </p>
-      <button type="button" class="st-btn" onclick={closeWindow}>취소</button>
-      <button type="button" class="st-btn st-btn-primary st-btn-apply" onclick={applySettings} disabled={applying}>반영</button>
+      <button type="button" class="st-btn" onclick={closeWindow} title="적용하지 않은 변경은 버리고 닫기">취소</button>
+      <button type="button" class="st-btn st-btn-primary st-btn-done" onclick={finishSettings} disabled={applying} title="적용하고 닫기">완료</button>
+      <button
+        type="button"
+        class="st-btn st-btn-outline st-btn-apply"
+        onclick={applyNow}
+        disabled={applying || pendingCount === 0}
+        title={pendingCount === 0 ? '바꾼 설정이 없어요' : '창을 닫지 않고 바로 적용'}
+      >적용</button>
     </footer>
   </div>
 
@@ -1474,7 +1513,11 @@
     border-radius: 50%;
     background: var(--st-accent);
   }
-  .st-btn-apply { min-width: 5.2em; box-shadow: 0 4px 12px color-mix(in srgb, var(--st-accent) 28%, transparent); }
+  .st-btn-done { min-width: 4.6em; box-shadow: 0 4px 12px color-mix(in srgb, var(--st-accent) 28%, transparent); }
+  .st-btn-apply { min-width: 4.6em; }
+  /* 적용할 것이 없을 때는 흐린 회색으로 둬 "지금은 누를 필요 없음"이 분명히 보이게 합니다. */
+  .st-btn-apply:disabled { background: var(--st-hover); border-color: transparent; color: var(--st-muted); opacity: 0.7; }
+  .st-foot .st-btn { padding-inline: 0.95em; }
 
   /* ── 확인 창 ── */
   .st-scrim {

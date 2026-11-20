@@ -149,11 +149,13 @@
       transform 200ms var(--dd-spring);
   }
 
+  /* 머리 영역(제목줄 옆) 칩은 할 일 줄이 아니라 화면 글자 크기를 따릅니다. 배율 범위는 DdayBanner와 같습니다. */
   .dday-smart-chip.is-header {
+    --dd-s: clamp(0.8, var(--ui-font-scale, 1), 1.5);
     min-height: 0;
-    height: 22px;
+    height: calc(22px * var(--dd-s));
     padding: 0 7px 0 5.5px;
-    font-size: 10.5px;
+    font-size: calc(10.5px * var(--dd-s));
   }
 
   .dday-smart-chip.is-dashed {

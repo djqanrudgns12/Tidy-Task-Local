@@ -147,7 +147,7 @@
                 icon={singleItem.icon}
                 tone={singleItem.tone}
                 accent={resolvedAccent}
-                size={13}
+                size="calc(13px * var(--dd-s, 1))"
                 dark={resolvedDark}
                 variant="bare"
               />
@@ -168,11 +168,11 @@
           {#if resolvedItems.length > 1}
             <div class="b3-nav" role="group" aria-label="D-Day 전환">
               <button type="button" class="b3-nav-btn" aria-label="이전 D-Day" onclick={(e) => cycleSingle(e, -1)}>
-                <ChevronLeft size={11} />
+                <ChevronLeft size="0.85em" />
               </button>
               <span class="b3-nav-count tnum">{focusIdx + 1}/{resolvedItems.length}</span>
               <button type="button" class="b3-nav-btn" aria-label="다음 D-Day" onclick={(e) => cycleSingle(e, 1)}>
-                <ChevronRight size={11} />
+                <ChevronRight size="0.85em" />
               </button>
             </div>
           {/if}
@@ -230,7 +230,7 @@
           </div>
           <button type="button" class="b3-ctrl-link" onclick={openManager}>
             <span class="tnum">전체 {resolvedItems.length}건 관리</span>
-            <ChevronRight size={11} />
+            <ChevronRight size="0.85em" />
           </button>
         </div>
       </div>
@@ -239,7 +239,11 @@
 {/if}
 
 <style>
+  /* 배너 글자·칩 크기는 화면 글자 크기(설정 → 글자 → 화면 글자)를 따라갑니다.
+     왜 배율을 0.8~1.5로 묶는가: 6pt처럼 아주 작게 고르면 D-Day 숫자 칩이 읽을 수 없을 만큼 작아지고,
+     너무 크면 메모 창 머리 영역을 배너가 다 차지하기 때문입니다. (--ui-font-scale = 화면 글자 pt / 10, App.svelte) */
   .b3-wrap {
+    --dd-s: clamp(0.8, var(--ui-font-scale, 1), 1.5);
     container-type: inline-size;
     padding: 5px 10px 6px;
     border-top: 1px solid var(--header-line, rgba(15, 23, 42, 0.08));
@@ -293,7 +297,7 @@
     align-items: center;
     justify-content: center;
     gap: 3.5px;
-    height: 22px;
+    height: calc(22px * var(--dd-s));
     padding: 0 7px 0 4.5px;
     border-radius: 999px;
     border: 1px solid var(--dd-border);
@@ -302,7 +306,7 @@
     /* 할 일 스마트 칩(DdayTodoChip)과 동일한 아래쪽 안쪽 딱지 받침으로 규격을 통일합니다. */
     box-shadow: inset 0 -1.5px 0 var(--dd-rim);
     font-family: var(--ui-font-family);
-    font-size: 10.5px;
+    font-size: calc(10.5px * var(--dd-s));
     font-weight: 800;
     line-height: 1;
     flex-shrink: 0;
@@ -335,8 +339,8 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 13px;
-    height: 13px;
+    width: calc(13px * var(--dd-s));
+    height: calc(13px * var(--dd-s));
     flex: none;
     /* 하단 1.5px 딱지 림을 제외한 칩 표면에 시각 중앙으로 놓습니다. */
     transform: translateY(-0.5px);
@@ -373,7 +377,7 @@
     flex: 1;
     min-width: 0;
     font-family: var(--global-font-family, var(--ui-font-family, 'Maplestory', sans-serif));
-    font-size: min(12px, max(10.5px, 3.8cqi));
+    font-size: calc(min(12px, max(10.5px, 3.8cqi)) * var(--dd-s));
     font-weight: 700;
     color: var(--dd-ctrl-ink, #1f2430);
     white-space: nowrap;
@@ -383,7 +387,7 @@
   .b3-card[data-scheme='dark'] .b3-title { color: var(--dd-ctrl-ink, #e8edf5); }
 
   .b3-date {
-    font-size: 9.5px;
+    font-size: calc(9.5px * var(--dd-s));
     font-weight: 600;
     color: var(--dd-ctrl-sub, #646e7d);
     white-space: nowrap;
@@ -402,8 +406,8 @@
   }
   .b3-card[data-scheme='dark'] .b3-nav { background: rgba(255, 255, 255, 0.07); }
   .b3-nav-btn {
-    width: 16px;
-    height: 16px;
+    width: calc(16px * var(--dd-s));
+    height: calc(16px * var(--dd-s));
     border: 0;
     border-radius: 5px;
     background: transparent;
@@ -416,7 +420,7 @@
   .b3-card[data-scheme='dark'] .b3-nav-btn { color: #aeb9c9; }
   .b3-card[data-scheme='dark'] .b3-nav-btn:hover { background: rgba(255, 255, 255, 0.12); color: #fff; }
   .b3-nav-count {
-    font-size: 9px;
+    font-size: calc(9px * var(--dd-s));
     font-weight: 700;
     color: #646e7d;
     padding: 0 2px;
@@ -482,7 +486,7 @@
     flex: 1;
     min-width: 0;
     font-family: var(--global-font-family, var(--ui-font-family, 'Maplestory', sans-serif));
-    font-size: 10.5px;
+    font-size: calc(10.5px * var(--dd-s));
     font-weight: 700;
     color: var(--dd-ctrl-ink, #1f2430);
     white-space: nowrap;
@@ -494,7 +498,7 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    height: 18px;
+    height: calc(18px * var(--dd-s));
     padding: 0 5.5px;
     border-radius: 999px;
     border: 1px solid var(--dd-border);
@@ -502,7 +506,7 @@
     color: var(--dd-ink);
     box-shadow: inset 0 -1px 0 var(--dd-rim);
     font-family: var(--ui-font-family);
-    font-size: 9px;
+    font-size: calc(9px * var(--dd-s));
     font-weight: 800;
     line-height: 1;
     flex-shrink: 0;
@@ -558,7 +562,7 @@
     padding: 1px 4px;
     border-radius: 5px;
     background: transparent;
-    font-size: 9.5px;
+    font-size: calc(9.5px * var(--dd-s));
     font-weight: 700;
     color: var(--header-accent, #d97706);
     cursor: pointer;

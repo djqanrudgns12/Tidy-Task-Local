@@ -154,7 +154,7 @@
   background: #181c24;
   color: #f8fafc;
   font-family: system-ui, -apple-system, sans-serif;
-  font-size: 9.5px;
+  font-size: calc(9.5px * var(--ctx-fs-scale, 1));
   font-weight: 600;
   line-height: 1.1;
   white-space: nowrap;

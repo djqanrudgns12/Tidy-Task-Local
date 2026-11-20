@@ -280,7 +280,7 @@
     background: var(--ctx-field);
     color: var(--ctx-ink);
     font-family: inherit;
-    font-size: clamp(9.5px, 0.8em, 10.5px);
+    font-size: clamp(9.5px, 0.8em, calc(10.5px * var(--ctx-fs-scale, 1)));
     font-weight: 700;
     letter-spacing: -0.02em;
     white-space: nowrap;
@@ -331,7 +331,7 @@
     background: transparent;
     color: var(--ctx-ink);
     font-family: inherit;
-    font-size: clamp(9.5px, 0.8em, 10.5px);
+    font-size: clamp(9.5px, 0.8em, calc(10.5px * var(--ctx-fs-scale, 1)));
     font-weight: 700;
     letter-spacing: -0.02em;
     display: flex;

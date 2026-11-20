@@ -3,11 +3,17 @@
   import { applyHeaderDesignChoice } from './lib/headerDesign.js';
   import { onMount, onDestroy } from "svelte";
   import { slide, fade, scale } from "svelte/transition";
-  import { Check, Eraser, Flag } from "lucide-svelte";
+  import { Archive, Check, Eraser, Flag } from "lucide-svelte";
   import { computeDdayCounter, formatDotDate, stripHtmlToTitle } from "./lib/dday/ddayModel.js";
   import { STABLE_MAX_PT } from "./lib/fontSize.js";
   import { formatDeadlineChip, resolveDeadlineTone } from "./lib/editor/richTextFormat.js";
   import { appState } from "./lib/appState.svelte.js";
+  import { archiveState } from "./lib/archiveStore.svelte.js";
+  import { planBulkDdayPin } from "./lib/dday/ddayActions.js";
+  import { pickSelectedTodos, todoToArchiveNote } from "./lib/todos/todoArchive.js";
+  import { describeArchiveResult } from "./lib/todos/bulkActions.js";
+  import { datePicker } from "./lib/datePicker/datePickerClient.svelte.js";
+  import { memoPickerAppearance } from "./lib/datePicker/memoAppearance.js";
   import { TINY_NOTE_MIN_WIDTH, TINY_NOTE_ROLLED_HEIGHT } from "./lib/tinyNoteWindow.js";
   import { getTidyTheme } from "./lib/themes.js";
   import { isDataWindowLabel } from "./lib/windows/windowLabels.js";
@@ -47,7 +53,7 @@
     nextBannerToggleMode,
     rememberVisibleBannerMode,
   } from "./lib/windows/contextMenuLayout.js";
-  import { applySharedSettings } from "./lib/settings/settingsForm.js";
+  import { APPEARANCE_CHANGED_EVENT, applySharedSettings } from "./lib/settings/settingsForm.js";
   import { listen, emit, emitTo } from "@tauri-apps/api/event";
   import { WebviewWindow } from "@tauri-apps/api/webviewWindow";
   import { LazyStore } from "@tauri-apps/plugin-store";
@@ -550,6 +556,9 @@
       `${appState.fontSize || 10}pt`,
     );
     root.style.setProperty("--ui-font-size", `${appState.uiFontSize || 10}pt`);
+    // 기본 크기(10pt)에 대한 배율. px로 디자인된 조각(D-Day 배너·머리 칩 등)이 calc(px * 배율)로
+    // 화면 글자 크기를 따라가게 합니다. (CSS는 길이끼리 나눌 수 없어 숫자 배율을 따로 둡니다)
+    root.style.setProperty("--ui-font-scale", String((appState.uiFontSize || 10) / 10));
     root.style.setProperty("--global-letter-spacing", `${appState.letterSpacing ?? 0}em`);
 
     const theme = getTidyTheme(appState.themeColor).tidy;
@@ -1009,7 +1018,10 @@
           }
 
           applyCSSVars();
-          appState.saveNow();
+          // 저장이 끝난 뒤 알립니다. D-Day 위젯·컨트롤·리마인더는 저장 알림(dday:window-updated 등)으로,
+          // 저장소를 직접 읽는 아카이브 창은 이 알림으로 열린 채 바로 따라 바뀝니다(설정 창 [적용]).
+          await appState.saveNow();
+          void emit(APPEARANCE_CHANGED_EVENT, { label: currentWindow.label }).catch(() => {});
         },
       );
 
@@ -1052,7 +1064,8 @@
 
           appState.applyFontToAllText("메이플스토리 L");
           applyCSSVars();
-          appState.save();
+          await appState.saveNow();
+          void emit(APPEARANCE_CHANGED_EVENT, { label: currentWindow.label }).catch(() => {});
         },
       );
     }
@@ -1441,6 +1454,88 @@
     showDeleteModal = false;
   }
 
+  // ── 다중 선택 [아카이브] · [D-Day] ──
+  // 한 번 누른 동작이 끝나기 전에 다시 누르면 같은 할 일이 두 번 보관·고정되므로 막습니다.
+  let bulkBusy = $state(false);
+  const BULK_DDAY_PICKER_KEY = "bulk-dday";
+  // 달력이 이미 열려 있을 때 다시 누르면 닫기. (달력의 "초점 잃음"이 click보다 먼저 와서 pointerdown 때 봅니다)
+  let bulkDdayToggleIntent = false;
+
+  // 고른 할 일을 아카이브(보관함) 카드로 하나씩 넣고, 들어간 것을 확인한 뒤에만 할 일 목록에서 뺍니다.
+  // 왜 확인 뒤에 빼는가: 보관이 실패했는데 먼저 지우면 할 일이 어디에도 남지 않습니다.
+  async function archiveSelectedToBox() {
+    if (bulkBusy || appState.isUpdateFrozen) return;
+    // 저장소가 잠긴 동안(storageError)에는 목록에서 뺀 결과를 저장할 수 없어, 보관함에만 들어가고 할 일이 되살아납니다.
+    if (appState.storageError) {
+      appState.triggerToast("notice", "저장소를 읽지 못해 지금은 보관할 수 없어요");
+      return;
+    }
+    const picked = pickSelectedTodos($state.snapshot(appState.todos), $state.snapshot(appState.selectedTodoIds));
+    if (picked.length === 0) return;
+    bulkBusy = true;
+    try {
+      if (!archiveState.isReady) await archiveState.init();
+      const look = { themeColor: appState.themeColor, isDarkMode: appState.isDarkMode, sourceLabel: appState.windowLabel };
+      const ok = await archiveState.addNotes(picked.map((todo) => todoToArchiveNote(todo, look)));
+      if (ok) await appState.removeTodosByIds(picked.map((todo) => todo.id));
+      appState.triggerToast("notice", describeArchiveResult(picked.length, ok));
+    } catch (error) {
+      console.error("아카이브 보관 실패:", error);
+      appState.triggerToast("notice", describeArchiveResult(picked.length, false));
+    } finally {
+      bulkBusy = false;
+    }
+  }
+
+  /** @param {PointerEvent} event */
+  function handleBulkDdayPointerDown(event) {
+    if (event.button !== 0) return;
+    bulkDdayToggleIntent = datePicker.isToggleTarget(BULK_DDAY_PICKER_KEY);
+  }
+
+  // 고른 할 일을 한 번에 D-Day로 고정합니다. 마감일 없는 할 일이 섞여 있으면 달력을 띄워 날짜를 한 번 고르게 하고,
+  // 고른 날을 그 할 일들의 마감일로 함께 정합니다(한 개씩 고정할 때와 같은 흐름).
+  /** @param {MouseEvent & { currentTarget: HTMLElement }} event */
+  async function handleBulkDday(event) {
+    const anchor = event.currentTarget;
+    const viaKeyboard = event.detail === 0;
+    const intent = bulkDdayToggleIntent;
+    bulkDdayToggleIntent = false;
+    if (intent && !viaKeyboard) {
+      if (datePicker.openKey === BULK_DDAY_PICKER_KEY) datePicker.close("toggle");
+      return;
+    }
+    if (bulkBusy || appState.isUpdateFrozen || appState.selectedTodoIds.length === 0) return;
+    const plan = planBulkDdayPin(
+      { todos: $state.snapshot(appState.todos), archivedTodos: [], ddayItems: $state.snapshot(appState.ddayItems) },
+      $state.snapshot(appState.selectedTodoIds),
+    );
+    if (plan.needDate.length === 0) {
+      bulkBusy = true;
+      try { await appState.pinSelectedAsDdays(); } finally { bulkBusy = false; }
+      return;
+    }
+    void datePicker.open({
+      key: BULK_DDAY_PICKER_KEY,
+      anchor,
+      value: "",
+      viaKeyboard,
+      appearance: memoPickerAppearance(appState),
+      // "날짜 없음"을 고르면(빈 값) 마감일이 있는 할 일만 고정합니다.
+      onSelect: (value) => {
+        if (bulkBusy) return;
+        bulkBusy = true;
+        appState.pinSelectedAsDdays(value || "").finally(() => { bulkBusy = false; });
+      },
+    });
+  }
+
+  // 선택 모드를 끝내거나 고른 것이 없어지면 일괄 [D-Day]용 달력도 닫습니다(가리킬 선택이 없음).
+  $effect(() => {
+    if (datePicker.openKey !== BULK_DDAY_PICKER_KEY) return;
+    if (!appState.isEditMode || appState.selectedTodoIds.length === 0 || appState.isUpdateFrozen) datePicker.close("gone");
+  });
+
   function isEditingActive() {
     const el = document.activeElement;
     return (
@@ -1630,18 +1725,18 @@
     {#if appState.isEditMode}
       <div
         transition:slide={{ duration: 150 }}
-        class="flex items-center justify-between px-3 py-[3px] border-b shrink-0 z-10"
+        class="bulk-bar flex items-center justify-between px-3 py-[3px] border-b shrink-0 z-10"
         style="background-color: {appState.isDarkMode
           ? 'rgba(245, 158, 11, 0.05)'
           : '#fffbeb'}; border-color: {appState.isDarkMode
           ? 'rgba(245, 158, 11, 0.1)'
           : '#fde68a'};"
       >
-        <div class="flex items-center gap-2 pl-[24px]">
+        <div class="bulk-lead flex items-center gap-2 pl-[24px]">
           <!-- ✨ [추가] 지능형 정렬 버튼 -->
           <button
             onclick={() => appState.toggleDeadlineSort()}
-            class="text-[10px] font-bold px-2 py-[2px] rounded-full transition-all active:scale-95 flex items-center justify-center border shrink-0 hover:border-amber-400 hover:bg-amber-50 hover:text-amber-600 shadow-sm"
+            class="text-[0.75em] font-bold whitespace-nowrap px-2 py-[2px] rounded-full transition-all active:scale-95 flex items-center justify-center border shrink-0 hover:border-amber-400 hover:bg-amber-50 hover:text-amber-600 shadow-sm"
             style="background-color: {appState.isDarkMode ? 'rgba(255,255,255,0.05)' : '#ffffff'}; border-color: {appState.isDarkMode ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)'}; color: {appState.isDarkMode ? '#e2e8f0' : '#4b5563'};"
             title="마감일 기준 정렬"
           >
@@ -1665,11 +1760,40 @@
           </button>
         </div>
 
-        <div class="flex items-center gap-1.5">
+        <!-- 선택한 할 일 일괄 동작: [아카이브] [D-Day] [마감] [지우개]
+             글자 크기는 em이라 화면 글자 크기(설정 → 글자)를 따라 커집니다(기본 10pt에서 예전과 같은 9px). -->
+        <div class="bulk-actions flex items-center gap-1.5">
+          <button
+            type="button"
+            onclick={archiveSelectedToBox}
+            disabled={appState.selectedTodoIds.length === 0 || bulkBusy}
+            class="bulk-btn bulk-btn-soft"
+            style="--bulk-accent: {appState.getThemeAccentColor()};"
+            title="고른 할 일을 아카이브(보관함)에 하나씩 넣고 목록에서 빼기"
+            aria-label="아카이브에 보관"
+          >
+            <Archive size="1.15em" strokeWidth={2.4} /><span class="bulk-label">아카이브</span>
+          </button>
+
+          <button
+            type="button"
+            onpointerdown={handleBulkDdayPointerDown}
+            onclick={handleBulkDday}
+            disabled={appState.selectedTodoIds.length === 0 || bulkBusy}
+            class="bulk-btn bulk-btn-soft"
+            style="--bulk-accent: {appState.getThemeAccentColor()}; outline: {datePicker.openKey === BULK_DDAY_PICKER_KEY ? `2px solid ${appState.getThemeAccentColor()}` : 'none'}; outline-offset: 1px;"
+            title="고른 할 일을 한 번에 D-Day로 고정 (마감일이 없으면 날짜를 먼저 골라요)"
+            aria-label="D-Day로 고정"
+            aria-haspopup="dialog"
+            aria-expanded={datePicker.openKey === BULK_DDAY_PICKER_KEY}
+          >
+            <Flag size="1.15em" strokeWidth={2.4} /><span class="bulk-label">D-Day</span>
+          </button>
+
           <button
             onclick={() => appState.archiveSelected()}
-            disabled={appState.selectedTodoIds.length === 0}
-            class="text-[9px] font-bold px-2 py-[3px] rounded text-white hover:brightness-110 disabled:opacity-30 disabled:grayscale transition-all active:scale-95 flex items-center justify-center"
+            disabled={appState.selectedTodoIds.length === 0 || bulkBusy}
+            class="bulk-btn text-white hover:brightness-110 disabled:grayscale"
             style="background-color: {appState.getThemeAccentColor()};"
           >
             마감
@@ -1677,11 +1801,12 @@
 
           <button
             onclick={() => (showDeleteModal = true)}
-            disabled={appState.selectedTodoIds.length === 0}
-            class="w-5 h-5 flex items-center justify-center rounded-md text-red-400 hover:text-red-500 hover:bg-red-50/50 disabled:opacity-30 disabled:grayscale transition-all active:scale-95"
+            disabled={appState.selectedTodoIds.length === 0 || bulkBusy}
+            class="flex items-center justify-center rounded-md text-red-400 hover:text-red-500 hover:bg-red-50/50 disabled:opacity-30 disabled:grayscale transition-all active:scale-95"
+            style="width: 1.5em; height: 1.5em;"
             title="삭제"
           >
-            <Eraser size={13} strokeWidth={2.5} />
+            <Eraser size="1em" strokeWidth={2.5} />
           </button>
         </div>
       </div>
@@ -1780,7 +1905,7 @@
       </div>
     {/if}
 
-    {#if appState.showPasteLimitToast || appState.showCopySuccessToast || appState.showPasteSuccessToast || appState.showSaveToast || appState.showDdayKeptToast}
+    {#if appState.showPasteLimitToast || appState.showCopySuccessToast || appState.showPasteSuccessToast || appState.showSaveToast || appState.showDdayKeptToast || appState.noticeToastMessage}
       <div
         transition:scale={{ duration: 300, start: 0.8, opacity: 0 }}
         class="absolute inset-x-0 top-1/2 -translate-y-1/2 flex items-center justify-center pointer-events-none px-4"
@@ -1912,6 +2037,40 @@
               할 일만 지우고 D-Day는 컨트롤 타워에 남겼어요
             </span>
           </div>
+        {:else if appState.noticeToastMessage}
+          <!-- 다중 선택 [아카이브]·[D-Day] 결과 안내 (D-Day 남김 안내와 같은 모양) -->
+          <div
+            class="px-3.5 py-2.5 rounded-[18px] shadow-xl flex items-center gap-2 border max-w-full"
+            role="status"
+            style="
+              background-color: {appState.isDarkMode
+              ? 'rgba(30, 41, 59, 0.96)'
+              : 'rgba(255, 251, 235, 0.97)'};
+              backdrop-filter: blur(6px);
+              border-color: {appState.isDarkMode
+              ? 'rgba(251, 191, 36, 0.35)'
+              : 'rgba(217, 119, 6, 0.35)'};
+              box-shadow: 0 10px 26px rgba(15, 23, 42, 0.18);
+            "
+          >
+            <span
+              class="w-5 h-5 rounded-md flex items-center justify-center shrink-0"
+              style="
+                background-color: {appState.isDarkMode
+                ? 'rgba(251, 191, 36, 0.2)'
+                : 'rgba(217, 119, 6, 0.14)'};
+                color: {appState.isDarkMode ? '#fbbf24' : '#b45309'};
+              "
+            >
+              <Check size={12} strokeWidth={3} />
+            </span>
+            <span
+              class="text-[11px] font-extrabold tracking-tight leading-snug"
+              style="color: {appState.isDarkMode ? '#fef3c7' : '#92400e'};"
+            >
+              {appState.noticeToastMessage}
+            </span>
+          </div>
         {/if}
       </div>
     {/if}
@@ -1976,3 +2135,39 @@
 {#if appState.isUpdateFrozen || (getCurrentWindow().label === "settings" && (appState.updateInstallPhase === "preparing" || appState.updateInstallPhase === "installing"))}
   <UpdateInstallOverlay />
 {/if}
+
+<style>
+  /* ── 다중 선택 막대 ──
+     글자·여백을 em으로 두어 화면 글자 크기(설정 → 글자 → 화면 글자)를 따라갑니다. 기본 10pt에서 9px로 예전과 같습니다. */
+  .bulk-bar { container-type: inline-size; }
+  .bulk-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.3em;
+    padding: 0.33em 0.75em;
+    border: 1px solid transparent;
+    border-radius: 0.45em;
+    font-size: 0.675em;
+    font-weight: 700;
+    line-height: 1.15;
+    white-space: nowrap;
+    transition: filter 0.12s, transform 0.1s, background-color 0.12s, opacity 0.12s;
+  }
+  .bulk-btn:active:not(:disabled) { transform: scale(0.95); }
+  .bulk-btn:disabled { opacity: 0.3; cursor: default; }
+  /* [아카이브]·[D-Day]: 꽉 찬 [마감]보다 한 단계 옅게 — "옮기기/고정"은 "마감 처리"와 다른 일이라는 것이 한눈에 보이게 */
+  .bulk-btn-soft {
+    color: var(--bulk-accent);
+    background: color-mix(in srgb, var(--bulk-accent) 10%, transparent);
+    border-color: color-mix(in srgb, var(--bulk-accent) 38%, transparent);
+  }
+  .bulk-btn-soft:hover:not(:disabled) { background: color-mix(in srgb, var(--bulk-accent) 18%, transparent); }
+  /* 버튼 이름까지 다 들어가지 않는 폭(창 최소 250px · 큰 글자)에서는 이름을 숨기고 아이콘만 둡니다(이름은 마우스를 올리면 보임).
+     기준 폭은 글자 크기에 따라 늘어납니다: 필요한 폭 ≈ 고정 여백 130px + 글자 크기 13.5배(6~15pt 실측). */
+  @container (max-width: calc(130px + 13.5em)) {
+    .bulk-label { display: none; }
+    .bulk-btn-soft { padding-inline: 0.5em; }
+    .bulk-lead { padding-left: 4px; }
+  }
+</style>

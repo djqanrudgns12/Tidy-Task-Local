@@ -70,7 +70,7 @@
     width: 26px;
     flex-shrink: 0;
     text-align: center;
-    font-size: clamp(8.5px, 0.74em, 9.5px);
+    font-size: clamp(8.5px, 0.74em, calc(9.5px * var(--ctx-fs-scale, 1)));
     font-weight: 700;
     color: var(--ctx-muted);
     letter-spacing: -0.02em;
@@ -129,7 +129,7 @@
   .ctx-seg-btn.multi {
     height: 23px;
     border-radius: var(--ctx-radius-ctrl, 6px);
-    font-size: clamp(9px, 0.76em, 10px);
+    font-size: clamp(9px, 0.76em, calc(10px * var(--ctx-fs-scale, 1)));
   }
   .ctx-seg-btn.multi.on {
     background: var(--ctx-accent-soft);
@@ -143,7 +143,7 @@
   .ctx-seg-btn.radio {
     height: 20px;
     border-radius: 4.5px;
-    font-size: clamp(8.5px, 0.74em, 9.5px);
+    font-size: clamp(8.5px, 0.74em, calc(9.5px * var(--ctx-fs-scale, 1)));
   }
   .ctx-seg-btn.radio.on {
     background: var(--ctx-surface);

@@ -35,7 +35,7 @@ test('보낸 값을 그대로 읽는다 — 슬라이더 범위 밖의 글자 �
     fontFamily: '리디바탕', fontSize: 30, uiFontFamily: '굴림', uiFontSize: 5,
     showArchived: false, showNotes: false, showReminders: false, globalMuteSound: true,
   };
-  // 여기서 범위 안으로 고치면 설정 창을 열고 [반영]만 눌러도 글자 크기가 바뀝니다.
+  // 여기서 범위 안으로 고치면 설정 창을 열고 [완료]만 눌러도 글자 크기가 바뀝니다.
   assert.deepEqual(readSettingsForm(sent), sent);
 });
 
@@ -49,7 +49,7 @@ test('쓸 수 없는 값은 기본값으로 바꾼다', () => {
 });
 
 test('보낸 값에 없는 항목은 설정 창이 읽어 둔 값을 쓴다', () => {
-  // 예전 메모 창(5.6.3)이 보낸 값에는 전체 무음이 없습니다. 그때 꺼짐으로 읽으면 [반영]만 눌러도 무음이 풀립니다.
+  // 예전 메모 창(5.6.3)이 보낸 값에는 전체 무음이 없습니다. 그때 꺼짐으로 읽으면 [완료]만 눌러도 무음이 풀립니다.
   assert.equal(readSettingsForm({ themeColor: 'blue' }, { globalMuteSound: true }).globalMuteSound, true);
   assert.equal(readSettingsForm({ globalMuteSound: false }, { globalMuteSound: true }).globalMuteSound, false);
 });

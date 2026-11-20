@@ -17,9 +17,14 @@
   import { getThemeAccent, getTidyTheme } from "../lib/themes.js";
   import { htmlToText } from "../lib/text.js";
   import { playChime } from "../lib/sound.js";
+  import { resolveFontFamilyStack } from "../lib/fonts/fontCatalog.js";
+  import { registerFontFace } from "../lib/fonts.js";
+  import { watchCustomFonts } from "../lib/toolkit/appearance.js";
 
   let isDarkMode = $state(false);
-  let uiFontFamily = $state('"Gulim", sans-serif');
+  // 매니저 창이 보내는 것은 글꼴 "이름"입니다. 실제 font-family로 바꿔 써야 '맑은고딕' 같은 시스템 글꼴·내 글꼴도 그대로 보입니다.
+  let uiFontFamily = $state('메이플스토리 L');
+  const uiFontStack = $derived(resolveFontFamilyStack(uiFontFamily));
   let uiFontSize = $state(10);
   let themeColor = $state("amber");
   let letterSpacing = $state(0);
@@ -34,6 +39,8 @@
   let customMinutes = $state(30);
 
   let unlistenUpdate;
+  /** @type {(() => void) | undefined} */
+  let unwatchFonts;
 
   onMount(async () => {
     unlistenUpdate = await listen("reminder-update", (event) => {
@@ -53,6 +60,11 @@
       if (payload.playSound && !globalMuteSound) playChime("alert");
     });
 
+    // 사용자가 등록한 글꼴은 이 창 문서에도 불러와야 보입니다.
+    void watchCustomFonts((fonts) => { for (const font of fonts) void registerFontFace(font.name, font.path); })
+      .then((stop) => { unwatchFonts = stop; })
+      .catch(() => {});
+
     await emit("reminder-ready");
 
     const win = getCurrentWindow();
@@ -61,6 +73,7 @@
 
   onDestroy(() => {
     if (unlistenUpdate) unlistenUpdate();
+    if (unwatchFonts) unwatchFonts();
   });
 
   async function dismiss(mode, payload = null) {
@@ -128,7 +141,7 @@
     border-color: {isDarkMode
     ? 'rgba(255,255,255,0.1)'
     : getTidyTheme(themeColor).tidy.border};
-    font-family: {uiFontFamily};
+    font-family: {uiFontStack};
     font-size: {uiFontSize}pt;
     letter-spacing: {letterSpacing}em;
     opacity: {opacity};

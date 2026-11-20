@@ -10,6 +10,7 @@
   import { registerFontFace } from '../lib/fonts.js';
   import { getMonitorGeometries } from '../lib/windows/windowRegistry.js';
   import { BUILTIN_FONTS } from '../lib/builtinFonts.js';
+  import { resolveFontFamilyStack } from '../lib/fonts/fontCatalog.js';
   import { STABLE_MAX_PT } from '../lib/fontSize.js';
   import { computeMenuBounds } from '../lib/editor/richTextFormat.js';
   import { resolveMenuWidth } from '../lib/windows/contextMenuLayout.js';
@@ -80,6 +81,13 @@
   let resizeFrame = 0;
 
   const menuWidth = $derived(resolveMenuWidth(type, config.uiFontSize || 10));
+  // 글꼴 이름을 실제 font-family로 바꿉니다. 예전에는 이름을 그대로 넣어 '맑은고딕'처럼
+  // 이름과 실제 글꼴 이름이 다른 시스템 글꼴을 고르면 우클릭 메뉴만 기본 글꼴로 보였습니다.
+  const menuFontStack = $derived(resolveFontFamilyStack(config.uiFontFamily || '메이플스토리 L'));
+  // 화면 글자를 10pt보다 키우면 메뉴 글자도 따라 커지게 하는 배율(작게 고를 때는 지금 크기 유지).
+  // 왜 1.25에서 멈추는가: 메뉴 폭(resolveMenuWidth)은 14pt까지 약 10%만 넓어져, 글자를 더 키우면
+  //   타일 이름이 잘립니다. 예전에는 글자마다 px 상한이 있어 화면 글자를 키워도 메뉴 글자는 그대로였습니다.
+  const menuFontScale = $derived(Math.min(1.25, Math.max(1, (Number(config.uiFontSize) || 10) / 10)));
   const menuAriaLabel = $derived(
     type === 'todo' ? '할 일 메뉴'
       : type === 'dday-banner' ? 'D-Day 메뉴'
@@ -166,7 +174,7 @@
       config = {
         ...config,
         themeColor: params.get('theme') || 'periwinkle',
-        uiFontFamily: '메이플스토리 L',
+        uiFontFamily: params.get('uifamily') || '메이플스토리 L',
         uiFontSize: Number(params.get('uifont')) || 10,
         hasEditor: true,
         isRichTextEditor: !params.has('plain'),
@@ -425,7 +433,7 @@
     aria-label={menuAriaLabel}
     onkeydown={keydown}
     oncontextmenu={e => e.preventDefault()}
-    style="--surface:{config.isDarkMode ? '#242730' : (getTidyTheme(config.themeColor)?.tidy?.bg || '#ffffff')}; --accent:{getThemeAccent(config.themeColor, config.isDarkMode)}; --ctx-width:{menuWidth}px; --limit:{maxHeight}px; font-family:'{config.uiFontFamily || '메이플스토리 L'}','Maplestory',system-ui,sans-serif; font-size:{Math.max(9, config.uiFontSize || 10)}pt;"
+    style="--surface:{config.isDarkMode ? '#242730' : (getTidyTheme(config.themeColor)?.tidy?.bg || '#ffffff')}; --accent:{getThemeAccent(config.themeColor, config.isDarkMode)}; --ctx-width:{menuWidth}px; --limit:{maxHeight}px; font-family:{menuFontStack}; --ctx-fs-scale:{menuFontScale}; font-size:{Math.max(9, config.uiFontSize || 10)}pt;"
   >
     {#if type === 'todo'}
       {@const meta = config.todoMeta || {}}
@@ -668,7 +676,7 @@
     flex-shrink: 0;
     padding: 1.5px 5px;
     border-radius: var(--ctx-radius-pill);
-    font-size: 9px;
+    font-size: calc(9px * var(--ctx-fs-scale, 1));
     font-weight: 800;
     line-height: 1.1;
     font-variant-numeric: tabular-nums;
@@ -687,7 +695,7 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    font-size: clamp(10px, 0.86em, 11.5px);
+    font-size: clamp(10px, 0.86em, calc(11.5px * var(--ctx-fs-scale, 1)));
     font-weight: 700;
     letter-spacing: -0.015em;
     color: var(--ctx-ink);
@@ -702,7 +710,7 @@
     border-radius: var(--ctx-radius-pill);
     background: var(--ctx-accent);
     color: var(--ctx-accent-ink);
-    font-size: 9px;
+    font-size: calc(9px * var(--ctx-fs-scale, 1));
     font-weight: 800;
     line-height: 1.1;
     font-variant-numeric: tabular-nums;
@@ -758,7 +766,7 @@
     line-height: 1;
   }
   .tile-label {
-    font-size: clamp(9px, 0.76em, 10px);
+    font-size: clamp(9px, 0.76em, calc(10px * var(--ctx-fs-scale, 1)));
     font-weight: 700;
     line-height: 1.05;
     letter-spacing: -0.025em;
@@ -831,7 +839,7 @@
     background: transparent;
     color: var(--ctx-ink);
     font-family: inherit;
-    font-size: clamp(9.5px, 0.8em, 10.5px);
+    font-size: clamp(9.5px, 0.8em, calc(10.5px * var(--ctx-fs-scale, 1)));
     font-weight: 700;
     letter-spacing: -0.02em;
     display: flex;
@@ -906,7 +914,7 @@
     justify-content: center;
     gap: 4px;
     font-family: inherit;
-    font-size: 9.5px;
+    font-size: calc(9.5px * var(--ctx-fs-scale, 1));
     font-weight: 600;
     cursor: pointer;
     transition: background-color 110ms ease, color 110ms ease;

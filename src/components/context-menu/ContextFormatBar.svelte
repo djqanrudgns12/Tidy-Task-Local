@@ -418,7 +418,7 @@
     align-items: center;
     justify-content: space-between;
     gap: 3px;
-    font-size: 10px;
+    font-size: calc(10px * var(--ctx-fs-scale, 1));
     font-weight: 600;
     cursor: pointer;
     transition: border-color 110ms ease, background-color 110ms ease;
@@ -471,7 +471,7 @@
     border: 0;
     background: transparent;
     color: var(--ctx-muted);
-    font-size: 11px;
+    font-size: calc(11px * var(--ctx-fs-scale, 1));
     font-weight: 700;
     display: grid;
     place-items: center;
@@ -502,7 +502,7 @@
     background: transparent;
     color: var(--ctx-ink);
     font-family: inherit;
-    font-size: 9.5px;
+    font-size: calc(9.5px * var(--ctx-fs-scale, 1));
     font-weight: 700;
     text-align: right;
     font-variant-numeric: tabular-nums;
@@ -514,7 +514,7 @@
     background: transparent;
     color: var(--ctx-muted);
     font-family: inherit;
-    font-size: 8.5px;
+    font-size: calc(8.5px * var(--ctx-fs-scale, 1));
     font-weight: 600;
     cursor: pointer;
     display: grid;
@@ -614,7 +614,7 @@
     border-radius: 5px;
     background: transparent;
     color: var(--ctx-ink);
-    font-size: 9.5px;
+    font-size: calc(9.5px * var(--ctx-fs-scale, 1));
     font-weight: 700;
     font-variant-numeric: tabular-nums;
     display: grid;
@@ -637,7 +637,7 @@
     margin-bottom: 5px;
   }
   .fmt-pal-title {
-    font-size: 9.5px;
+    font-size: calc(9.5px * var(--ctx-fs-scale, 1));
     font-weight: 700;
     color: var(--ctx-muted);
   }
@@ -652,7 +652,7 @@
     border: 1px solid var(--ctx-line);
     background: transparent;
     color: var(--ctx-muted);
-    font-size: 9px;
+    font-size: calc(9px * var(--ctx-fs-scale, 1));
     font-weight: 600;
     cursor: pointer;
   }
@@ -666,7 +666,7 @@
     border-radius: 4px;
     background: transparent;
     color: var(--ctx-accent);
-    font-size: 9px;
+    font-size: calc(9px * var(--ctx-fs-scale, 1));
     font-weight: 700;
     cursor: pointer;
   }

@@ -16,6 +16,7 @@
   import { daysUntil } from "../lib/dateUtils.js";
   import { formatShortDate } from "../lib/datePicker/calendarModel.js";
   import { datePicker, dateTrigger } from "../lib/datePicker/datePickerClient.svelte.js";
+  import { memoPickerAppearance } from "../lib/datePicker/memoAppearance.js";
 
   let newTaskText = $state("");
   let newTaskDeadline = $state("");
@@ -31,18 +32,7 @@
   let newTaskInputEl = $state(null);
 
   // 달력 창이 메모 창과 같은 모양(테마·다크 모드·UI 글꼴·크기)으로 보이도록 넘길 값
-  function pickerAppearance() {
-    const name = appState.uiFontFamily || "메이플스토리 L";
-    const font = appState.allFonts.find((f) => f.name === name);
-    const custom = appState.customFonts.find((f) => f.name === name);
-    return {
-      isDarkMode: !!appState.isDarkMode,
-      themeColor: appState.themeColor,
-      fontFamily: font ? font.family : '"Gulim", sans-serif',
-      fontSizePt: appState.uiFontSize || 10,
-      customFont: custom && custom.path ? { name: custom.name, path: custom.path } : null,
-    };
-  }
+  const pickerAppearance = () => memoPickerAppearance(appState);
 
   /** @param {string} id */
   const todoPickerKey = (id) => `todo:${id}`;

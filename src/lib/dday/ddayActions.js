@@ -124,6 +124,72 @@ export function pinTodoAsDday(state, todoId, settings, today = todayDateKey(), c
 }
 
 /**
+ * 다중 선택한 할 일 가운데 "D-Day로 만들 수 있는 것"을 나눕니다. (화면이 달력을 띄울지 정할 때 씁니다)
+ * - ready: 마감일이 있어 바로 고정할 수 있는 할 일
+ * - needDate: 마감일이 없어 날짜를 먼저 골라야 하는 할 일
+ * - alreadyLinked: 이미 활성 D-Day와 이어진 할 일(다시 만들지 않음)
+ * 목록에 없는 id(마감된 일·지워진 할 일)는 세지 않습니다. 순서는 할 일 목록 순서입니다.
+ * @param {DdayWindowState} state
+ * @param {readonly string[]} todoIds
+ * @returns {{ ready: string[], needDate: string[], alreadyLinked: string[] }}
+ */
+export function planBulkDdayPin(state, todoIds) {
+  const wanted = new Set(todoIds || []);
+  const linkedIds = new Set(
+    normalizeDdayList(state.ddayItems)
+      .filter((d) => d.status === 'active' && d.linkedTodoId)
+      .map((d) => d.linkedTodoId),
+  );
+  /** @type {{ ready: string[], needDate: string[], alreadyLinked: string[] }} */
+  const plan = { ready: [], needDate: [], alreadyLinked: [] };
+  for (const todo of state.todos || []) {
+    if (!wanted.has(todo.id)) continue;
+    if (linkedIds.has(todo.id)) plan.alreadyLinked.push(todo.id);
+    else if (parseDateKey(todo.deadline || '')) plan.ready.push(todo.id);
+    else plan.needDate.push(todo.id);
+  }
+  return plan;
+}
+
+/**
+ * 여러 할 일을 한 번에 D-Day로 고정합니다. (다중 선택 [D-Day])
+ * 한 개씩 고정할 때(pinTodoAsDday)와 규칙이 같습니다 — 이미 이어진 할 일은 건너뛰고,
+ * "할 일에도 보이기" 설정이 꺼져 있으면 할 일 목록에서 빠집니다.
+ * fallbackDate: 마감일이 없는 할 일에 줄 날짜(달력에서 고른 날). 그 할 일의 마감일도 이 날로 정해집니다.
+ *   비어 있으면 마감일 없는 할 일은 만들지 않고 missingDate로 셉니다.
+ * 할 일 목록 순서대로 만들어, D-Day 순서가 화면에 보이던 할 일 순서와 같게 합니다.
+ * @param {DdayWindowState} state
+ * @param {readonly string[]} todoIds
+ * @param {DdaySettings} settings
+ * @param {string} [today]
+ * @param {{ fallbackDate?: string }} [options]
+ * @returns {{ state: DdayWindowState, created: DdayItem[], alreadyLinked: number, missingDate: number }}
+ */
+export function pinTodosAsDdays(state, todoIds, settings, today = todayDateKey(), options = {}) {
+  const plan = planBulkDdayPin(state, todoIds);
+  const fallbackDate = parseDateKey(options.fallbackDate || '') ? /** @type {string} */ (options.fallbackDate) : '';
+  const order = [...plan.ready, ...plan.needDate];
+  const listOrder = (state.todos || []).map((t) => t.id).filter((id) => order.includes(id));
+  let current = state;
+  /** @type {DdayItem[]} */
+  const created = [];
+  let missingDate = 0;
+  for (const id of listOrder) {
+    const needsDate = plan.needDate.includes(id);
+    if (needsDate && !fallbackDate) {
+      missingDate += 1;
+      continue;
+    }
+    const res = pinTodoAsDday(current, id, settings, today, needsDate ? { date: fallbackDate } : {});
+    if (res.created && res.item) {
+      created.push(res.item);
+      current = res.state;
+    }
+  }
+  return { state: current, created, alreadyLinked: plan.alreadyLinked.length, missingDate };
+}
+
+/**
  * 컨트롤 타워에서 새 D-Day를 추가합니다.
  * @param {DdayWindowState} state
  * @param {Partial<DdayItem>} draft

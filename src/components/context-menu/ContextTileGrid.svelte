@@ -134,7 +134,7 @@
     position: absolute;
     top: 2px;
     right: 3.5px;
-    font-size: 8px;
+    font-size: calc(8px * var(--ctx-fs-scale, 1));
     font-weight: 800;
     line-height: 1;
     font-variant-numeric: tabular-nums;
@@ -149,7 +149,7 @@
   }
 
   .ctx-tile-label {
-    font-size: clamp(9px, 0.76em, 10px);
+    font-size: clamp(9px, 0.76em, calc(10px * var(--ctx-fs-scale, 1)));
     font-weight: 700;
     line-height: 1.05;
     letter-spacing: -0.025em;

@@ -58,6 +58,7 @@ const closedWindowWriteQueue = createSerialQueue();
  *   isDarkMode: boolean,
  *   uiFontFamily: string,
  *   uiFontSize: number,
+ *   fontFamily: string,
  *   ddayBannerMode: import('./ddayModel.js').DdayBannerMode,
  *   ddayItems: import('./ddayModel.js').DdayItem[],
  *   todos: { id: string, text: string, completed: boolean, deadline?: string }[],
@@ -80,6 +81,8 @@ export function buildWindowDdaySnapshot(label, src) {
     isDarkMode: Boolean(s.isDarkMode),
     uiFontFamily: typeof s.uiFontFamily === 'string' ? s.uiFontFamily : '메이플스토리 L',
     uiFontSize: Number.isFinite(Number(s.uiFontSize)) && Number(s.uiFontSize) > 0 ? Number(s.uiFontSize) : 10,
+    // 메모 글꼴: 메모 창의 D-Day 배너 제목이 이 글꼴이라, 컨트롤 안 배너 미리보기도 같은 글꼴로 보여 줍니다.
+    fontFamily: typeof s.fontFamily === 'string' && s.fontFamily ? s.fontFamily : '메이플스토리 L',
     ddayBannerMode: DDAY_BANNER_MODES.includes(s.ddayBannerMode) ? s.ddayBannerMode : 'single',
     ddayItems: normalizeDdayList(s.ddayItems),
     todos: Array.isArray(s.todos) ? s.todos.map((/** @type {any} */ t) => ({
@@ -106,6 +109,7 @@ export function ddayWindowSignature(snap) {
     snap.isDarkMode,
     snap.uiFontFamily,
     snap.uiFontSize,
+    snap.fontFamily,
     snap.ddayBannerMode,
     snap.ddayItems,
     snap.todos.map((t) => [t.id, t.deadline, t.text]),

@@ -232,6 +232,12 @@
   const themeStyle = $derived(controlThemeToStyle(themeTokens));
   const accent = $derived(themeTokens.accentInk);
   const uiFontStack = $derived(resolveUiFontStack(uiFontFamily, BUILTIN_FONTS, customFonts));
+  // 배너 미리보기의 D-Day 제목은 메모 창 배너와 같이 메모 글꼴을 씁니다(없으면 화면 글꼴).
+  const memoFontStack = $derived(
+    currentWindowSnap?.fontFamily
+      ? resolveUiFontStack(currentWindowSnap.fontFamily, BUILTIN_FONTS, customFonts)
+      : uiFontStack,
+  );
 
   const activeItems = $derived.by(() =>
     (currentWindowSnap?.ddayItems || [])
@@ -323,9 +329,9 @@
   // 창별 등록 글꼴(커스텀 .ttf/.otf)이 선택되면 이 WebView 문서에도 동적으로 적재합니다.
   $effect(() => {
     if (!isTauri()) return;
-    const match = customFonts.find((f) => f.name === uiFontFamily);
-    if (match) {
-      void registerFontFace(match.name, match.path);
+    const memoFontName = currentWindowSnap?.fontFamily;
+    for (const font of customFonts) {
+      if (font.name === uiFontFamily || font.name === memoFontName) void registerFontFace(font.name, font.path);
     }
   });
 
@@ -1326,7 +1332,7 @@
     data-scheme={dark ? 'dark' : 'light'}
     data-theme={themeTokens.themeId}
     data-tier={layout.tier}
-    style="--ui-font-family: {uiFontStack}; --global-font-family: {uiFontStack}; --ctrl-font-size: {metrics.fsBody}px; {metricsStyle}; {previewFrameStyle}"
+    style="--ui-font-family: {uiFontStack}; --global-font-family: {memoFontStack}; --ui-font-scale: {uiFontSize / 10}; --ctrl-font-size: {metrics.fsBody}px; {metricsStyle}; {previewFrameStyle}"
     role="dialog"
     aria-label="D-Day 컨트롤 타워"
   >

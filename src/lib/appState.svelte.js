@@ -16,7 +16,9 @@ import {
   syncTodoRestoredToDdays,
   syncTodosCompletedToDdays,
   syncTodosDeletedToDdays,
+  pinTodosAsDdays,
 } from './dday/ddayActions.js';
+import { describeBulkDdayResult } from './todos/bulkActions.js';
 import { captureDeletion, previewTitle, restoreDeletions } from './todos/deletionUndo.js';
 import { createUndoToastModel } from './todos/undoToastModel.js';
 import {
@@ -333,14 +335,17 @@ export class AppState {
 
   // Ctrl+S 즉시 저장 안내 (도움말에 적힌 단축키)
   showSaveToast = $state(false);
+  // 다중 선택 [아카이브]·[D-Day]처럼 결과가 매번 다른 짧은 안내. 비어 있으면 숨김.
+  noticeToastMessage = $state('');
 
-  /** @param {'copy' | 'paste' | 'limit' | 'save' | 'dday-kept'} type */
-  triggerToast(type) {
+  /** @param {'copy' | 'paste' | 'limit' | 'save' | 'dday-kept' | 'notice'} type @param {string} [message] 'notice'일 때 보일 글 */
+  triggerToast(type, message = '') {
     this.showCopySuccessToast = false;
     this.showPasteSuccessToast = false;
     this.showPasteLimitToast = false;
     this.showSaveToast = false;
     this.showDdayKeptToast = false;
+    this.noticeToastMessage = '';
     if (this.toastTimer) clearTimeout(this.toastTimer);
 
     if (type === 'copy') this.showCopySuccessToast = true;
@@ -348,6 +353,7 @@ export class AppState {
     else if (type === 'limit') this.showPasteLimitToast = true;
     else if (type === 'save') this.showSaveToast = true;
     else if (type === 'dday-kept') this.showDdayKeptToast = true;
+    else if (type === 'notice') this.noticeToastMessage = message;
 
     this.toastTimer = setTimeout(() => {
       this.showCopySuccessToast = false;
@@ -355,6 +361,7 @@ export class AppState {
       this.showPasteLimitToast = false;
       this.showSaveToast = false;
       this.showDdayKeptToast = false;
+      this.noticeToastMessage = '';
     }, 2500);
   }
 
@@ -2467,10 +2474,22 @@ async init() {
 
   async deleteSelected() {
     if (this.selectedTodoIds.length === 0) return;
-    const removedActiveIds = this.todos.filter(t => this.selectedTodoIds.includes(t.id)).map(t => t.id);
-    const removedArchivedIds = this.archivedTodos.filter(t => this.selectedTodoIds.includes(t.id)).map(t => t.id);
-    this.todos = this.todos.filter(t => !this.selectedTodoIds.includes(t.id));
-    this.archivedTodos = this.archivedTodos.filter(t => !this.selectedTodoIds.includes(t.id));
+    const ids = [...this.selectedTodoIds];
+    // 예전처럼 선택을 모두 비웁니다(목록에 없는 옛 id가 선택에 남지 않게).
+    this.selectedTodoIds = [];
+    await this.removeTodosByIds(ids);
+  }
+
+  // 할 일(활성·마감된 일)을 목록에서 빼고, 이어진 D-Day를 설정대로 정리한 뒤 저장합니다.
+  // 다중 선택 [삭제]와 [아카이브](보관함에 넣은 것을 확인한 뒤 목록에서 빼기)가 함께 씁니다.
+  /** @param {readonly string[]} ids */
+  async removeTodosByIds(ids) {
+    const gone = new Set(ids);
+    if (gone.size === 0) return;
+    const removedActiveIds = this.todos.filter(t => gone.has(t.id)).map(t => t.id);
+    const removedArchivedIds = this.archivedTodos.filter(t => gone.has(t.id)).map(t => t.id);
+    this.todos = this.todos.filter(t => !gone.has(t.id));
+    this.archivedTodos = this.archivedTodos.filter(t => !gone.has(t.id));
     const synced = syncTodosDeletedToDdays(
       this._ddayWindowState(),
       removedActiveIds,
@@ -2479,7 +2498,7 @@ async init() {
     this.ddayItems = syncArchivedTodosDeletedToDdays(synced.state, removedArchivedIds).ddayItems;
     if (synced.deletedCount > 0) track('dday_deleted', { count: synced.deletedCount });
     if (synced.keptCount > 0) this.triggerToast('dday-kept');
-    this.selectedTodoIds = [];
+    this.selectedTodoIds = this.selectedTodoIds.filter(id => !gone.has(id));
     await this.saveNow(); 
   }
 
@@ -2710,6 +2729,7 @@ async init() {
       isDarkMode: this.isDarkMode,
       uiFontFamily: this.uiFontFamily,
       uiFontSize: this.uiFontSize,
+      fontFamily: this.fontFamily,
       ddayBannerMode: this.ddayBannerMode,
       ddayItems: $state.snapshot(this.ddayItems),
       todos: $state.snapshot(this.todos),
@@ -2785,6 +2805,39 @@ async init() {
   /** @param {string} todoId @param {Partial<import('./dday/ddayModel.js').DdayItem>} [customPatch] */
   async pinTodoAsDday(todoId, customPatch = {}) {
     return this.applyDdayCommand('pin-todo', { todoId, customPatch });
+  }
+
+  /**
+   * 다중 선택한 할 일을 한 번에 D-Day로 고정합니다(선택 막대 [D-Day]).
+   * 마감일이 없는 할 일은 fallbackDate(달력에서 고른 날)를 마감일로 함께 정해 고정하고,
+   * 날짜를 고르지 않았으면 건너뜁니다. 끝나면 결과를 짧게 알리고 선택을 비웁니다.
+   * @param {string} [fallbackDate]
+   */
+  async pinSelectedAsDdays(fallbackDate = '') {
+    if (this.isUpdateFrozen || this.selectedTodoIds.length === 0) return null;
+    const result = pinTodosAsDdays(
+      {
+        todos: $state.snapshot(this.todos),
+        archivedTodos: $state.snapshot(this.archivedTodos),
+        ddayItems: $state.snapshot(this.ddayItems),
+        sortOrder: this.sortOrder === 'desc' ? 'desc' : 'asc',
+      },
+      $state.snapshot(this.selectedTodoIds),
+      this.ddaySettings,
+      this.todayKey,
+      { fallbackDate },
+    );
+    if (result.created.length > 0) {
+      this.todos = result.state.todos;
+      this.archivedTodos = result.state.archivedTodos;
+      this.ddayItems = result.state.ddayItems;
+      // 한 개씩 고정할 때와 같은 이벤트를 만든 개수만큼 보냅니다(이벤트 계약에 개수 필드가 없음).
+      for (let i = 0; i < result.created.length; i++) track('dday_created', { choice: 'todo' });
+      this.selectedTodoIds = [];
+      await this.saveNow();
+    }
+    this.triggerToast('notice', describeBulkDdayResult(result));
+    return result;
   }
 
   /** @param {string} todoId */

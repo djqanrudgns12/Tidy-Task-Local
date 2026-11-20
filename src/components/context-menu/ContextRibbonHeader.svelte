@@ -88,7 +88,7 @@
     flex-shrink: 0;
     padding: 1.5px 5px;
     border-radius: var(--ctx-radius-pill, 999px);
-    font-size: 9px;
+    font-size: calc(9px * var(--ctx-fs-scale, 1));
     font-weight: 800;
     line-height: 1.1;
     font-variant-numeric: tabular-nums;
@@ -107,7 +107,7 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    font-size: clamp(10px, 0.86em, 11.5px);
+    font-size: clamp(10px, 0.86em, calc(11.5px * var(--ctx-fs-scale, 1)));
     font-weight: 700;
     letter-spacing: -0.015em;
     color: var(--ctx-ink);
@@ -120,7 +120,7 @@
 
   .ctx-ribbon-meta {
     flex-shrink: 0;
-    font-size: clamp(8.5px, 0.72em, 9.5px);
+    font-size: clamp(8.5px, 0.72em, calc(9.5px * var(--ctx-fs-scale, 1)));
     font-weight: 600;
     color: var(--ctx-muted);
     font-variant-numeric: tabular-nums;
