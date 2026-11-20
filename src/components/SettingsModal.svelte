@@ -770,7 +770,7 @@
               <span class="st-news-icon" aria-hidden="true"><Sparkles size={15} strokeWidth={2.3} /></span>
               <span class="st-news-text">
                 <strong>새로운 소식</strong>
-                <small>6.0.0 업데이트 · 툴킷 전체</small>
+                <small>6.1.0 업데이트 · 툴킷 전체</small>
               </span>
               <ArrowUpRight size={16} aria-hidden="true" />
             </button>

@@ -122,20 +122,21 @@
 <style>
   .dday-smart-chip {
     --dd-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+    --dd-gloss: rgba(255, 255, 255, 0.60);
     display: inline-flex;
     align-items: center;
     justify-content: center;
     gap: 3.5px;
-    min-height: 20px;
-    padding: 0.22em 0.56em 0.22em 0.42em;
-    border-radius: 999px;
+    height: var(--tb-h, 22px);
+    padding: 0 0.56em 0 0.42em;
+    border-radius: var(--tb-radius, 999px);
     border: 1px solid var(--dd-border);
     background-color: var(--dd-bg);
     color: var(--dd-ink);
-    /* UndoToast와 동일한 아래쪽 안쪽 받침으로 딱지처럼 도톰한 손맛을 줍니다. */
-    box-shadow: inset 0 -1.5px 0 var(--dd-rim);
+    /* 상단 1px 미세 광택 + 하단 1.5px 딱지 림: 목록 날짜 뱃지(.todo-badge)와 1:1 쌍둥이 질감 */
+    box-shadow: inset 0 -1.5px 0 var(--dd-rim), inset 0 1px 0 var(--dd-gloss);
     font-family: var(--ui-font-family);
-    font-size: clamp(9.5px, calc(var(--global-font-size, 10pt) * 0.78), 13.5px);
+    font-size: var(--tb-fs, 10.5px);
     font-weight: 800;
     line-height: 1;
     white-space: nowrap;
@@ -149,10 +150,19 @@
       transform 200ms var(--dd-spring);
   }
 
-  /* 머리 영역(제목줄 옆) 칩은 할 일 줄이 아니라 화면 글자 크기를 따릅니다. 배율 범위는 DdayBanner와 같습니다. */
+  .dday-smart-chip[data-scheme='dark'] {
+    --dd-gloss: rgba(255, 255, 255, 0.06);
+  }
+  .dday-smart-chip.is-solid[data-scheme='light'] {
+    --dd-gloss: rgba(255, 255, 255, 0.22);
+  }
+  .dday-smart-chip.is-solid[data-scheme='dark'] {
+    --dd-gloss: rgba(255, 255, 255, 0.14);
+  }
+
+  /* 머리 영역(제목줄 옆) 칩은 할 일 줄이 아니라 화면 글자 크기 배율(--dd-s)을 따릅니다. */
   .dday-smart-chip.is-header {
     --dd-s: clamp(0.8, var(--ui-font-scale, 1), 1.5);
-    min-height: 0;
     height: calc(22px * var(--dd-s));
     padding: 0 7px 0 5.5px;
     font-size: calc(10.5px * var(--dd-s));
@@ -160,16 +170,17 @@
 
   .dday-smart-chip.is-dashed {
     border-style: dashed;
+    box-shadow: none;
   }
 
   .dday-smart-chip:hover {
     background-color: var(--dd-hover-bg);
     border-color: var(--dd-hover-border);
-    transform: translateY(-0.5px) scale(1.05);
+    transform: translateY(-0.5px) scale(1.04);
   }
 
   .dday-smart-chip:active {
-    transform: scale(1.03, 0.90);
+    transform: scale(1.03, 0.92);
     transition-duration: 140ms, 140ms, 90ms;
   }
 
@@ -179,14 +190,16 @@
   }
 
   .chip-glyph {
-    width: 1.15em;
-    height: 1.15em;
-    min-width: 11px;
-    min-height: 11px;
+    width: var(--tb-icon, 12.5px);
+    height: var(--tb-icon, 12.5px);
     display: block;
     flex: none;
     /* 하단 1.5px 딱지 받침을 제외한 시각 표면에 아이콘 중심을 맞춥니다. */
     transform: translateY(-0.5px);
+  }
+  .dday-smart-chip.is-header .chip-glyph {
+    width: calc(12.5px * var(--dd-s));
+    height: calc(12.5px * var(--dd-s));
   }
 
   .chip-label {

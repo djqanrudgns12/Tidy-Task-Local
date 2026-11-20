@@ -53,6 +53,10 @@ async function start() {
     const { default: FontPickerPreview } = await import("./dev/FontPickerPreview.svelte");
     return mount(FontPickerPreview, { target });
   }
+  if (!isTauri() && import.meta.env.DEV && new URLSearchParams(location.search).has("bulk-archive-preview")) {
+    const { default: BulkArchiveMenuPreview } = await import("./dev/BulkArchiveMenuPreview.svelte");
+    return mount(BulkArchiveMenuPreview, { target });
+  }
   if (
     label === DDAY_WIDGET_MENU_LABEL ||
     (!isTauri() && import.meta.env.DEV && new URLSearchParams(location.search).has("dday-widget-menu-preview"))

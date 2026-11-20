@@ -55,6 +55,16 @@
 .rn-safe svg{flex-shrink:0}
 .rn-safe b{font-weight:700;color:#2d5233}
 
+/* 치명적 오류 수정 안내 (6.1.0) */
+.rn-bugfix{margin-top:16px;padding:16px 18px;border:1.5px solid #eec7bb;border-radius:20px;background:#fff7f4;box-shadow:0 3px 0 #f2d5cb}
+.rn-bugfix-head{display:flex;flex-wrap:wrap;align-items:center;gap:9px}
+.rn-bugfix-badge{padding:2px 9px;border-radius:8px;background:#c2412d;color:#fff;font:700 12px/1.45 NewsSans,sans-serif}
+.rn-bugfix h2{font:700 16.5px/1.4 NewsHeading,NewsSans,sans-serif;color:#7f2d20}
+.rn-bugfix ul{display:grid;gap:10px;margin-top:12px}
+.rn-bugfix li{display:flex;flex-direction:column;gap:2px;padding-left:12px;border-left:3px solid #e7a998;font-size:13.5px;line-height:1.6}
+.rn-bugfix li b{font-size:14px;font-weight:700;color:#5a2117}
+.rn-bugfix li span{color:#664943}
+
 /* 한눈에 보기 */
 .rn-glance{margin-top:16px;padding:14px 16px;border:1.5px dashed #ddd3bd;border-radius:20px;background:#fffdf8cc}
 .rn-glance-title{display:block;font:700 14px NewsHeading,NewsSans,sans-serif;color:#4c5a43}

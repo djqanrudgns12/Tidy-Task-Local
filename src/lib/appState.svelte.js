@@ -19,6 +19,7 @@ import {
   pinTodosAsDdays,
 } from './dday/ddayActions.js';
 import { describeBulkDdayResult } from './todos/bulkActions.js';
+import { createHistoryEffects } from './storage/historyEffects.js';
 import { captureDeletion, previewTitle, restoreDeletions } from './todos/deletionUndo.js';
 import { createUndoToastModel } from './todos/undoToastModel.js';
 import {
@@ -413,6 +414,8 @@ export class AppState {
   /** @type {any[]} */
   historyStack = $state.raw([]);
   currentIndex = $state(-1);
+  // 되돌리기 기록 한 칸에 딸린 "저장소 밖의 일"(예: 다중 선택 [아카이브]가 넣은 보관함 카드). storage/historyEffects.js
+  _historyEffects = createHistoryEffects();
   isRestoring = false; // 복원 중 무한루프 방지 락(Lock)
   /** @type {TimerHandle | null} */
   historyTimeout = null; // 타자 입력 디바운스용
@@ -1514,14 +1517,16 @@ async init() {
   }
 
   // ✨ [엔진 코어 2] 사진(스냅샷)을 역사 앨범에 끼워넣기 (최대 20개)
-  pushToHistory() {
+  /** @param {{ force?: boolean }} [options] */
+  pushToHistory(options = {}) {
     // 복원 중이거나 준비되지 않았으면 무시
     if (this.isRestoring || !this.isReady) return;
     
     const snap = this.takeSnapshot();
 
     // 중복 저장 방지 (직전 기록과 똑같으면 기록 안 함)
-    if (this.currentIndex >= 0) {
+    // force: 메모 창 내용은 그대로지만 저장소 밖에서 일이 생긴 경우(예: [아카이브] 복사해서 보관)에도 칸을 남깁니다.
+    if (this.currentIndex >= 0 && !options.force) {
       const currentSnap = this.historyStack[this.currentIndex];
       if (JSON.stringify(currentSnap) === JSON.stringify(snap)) return;
     }
@@ -1541,13 +1546,31 @@ async init() {
     }
   }
 
+  /**
+   * 메모 창 내용은 바뀌지 않았지만 Ctrl+Z로 되돌릴 수 있어야 하는 "저장소 밖의 일"을 기록합니다.
+   * 예: 다중 선택 [아카이브] → 복사해서 보관(할 일은 그대로, 보관함 카드만 생김).
+   * 같은 스냅샷이라 보통은 칸이 생기지 않으므로 강제로 한 칸 남기고 거기에 딸린 일을 붙입니다.
+   * @param {{ undo: () => unknown, redo: () => unknown }} effect
+   * @returns {boolean} 붙였는지
+   */
+  recordHistoryEffect(effect) {
+    if (this.isRestoring || !this.isReady) return false;
+    // 타자 뒤 1초 늦게 남기는 기록이 기다리고 있으면 먼저 남겨, 이 칸이 그 글자까지 함께 되돌리지 않게 합니다.
+    if (this.historyTimeout) { clearTimeout(this.historyTimeout); this.historyTimeout = null; this.pushToHistory(); }
+    const before = this.historyStack[this.currentIndex];
+    this.pushToHistory({ force: true });
+    return this._historyEffects.attach(before, this.historyStack[this.currentIndex], effect);
+  }
+
   // ✨ [엔진 코어 3] 이전으로 되돌리기 (Undo)
   async undo() {
     // 전역 되돌리기를 쓰면 기록이 갈라져, 떠 있는 삭제 알림의 결과를 예측할 수 없게 됩니다.
     this.dismissDeletionToast();
     if (this.canUndo) {
+      const leaving = this.historyStack[this.currentIndex];
       this.currentIndex--;
       await this.applySnapshot(this.historyStack[this.currentIndex]);
+      await this._historyEffects.run(leaving, 'undo');
     }
   }
 
@@ -1556,7 +1579,9 @@ async init() {
     this.dismissDeletionToast();
     if (this.canRedo) {
       this.currentIndex++;
-      await this.applySnapshot(this.historyStack[this.currentIndex]);
+      const entering = this.historyStack[this.currentIndex];
+      await this.applySnapshot(entering);
+      await this._historyEffects.run(entering, 'redo');
     }
   }
 
@@ -2482,8 +2507,12 @@ async init() {
 
   // 할 일(활성·마감된 일)을 목록에서 빼고, 이어진 D-Day를 설정대로 정리한 뒤 저장합니다.
   // 다중 선택 [삭제]와 [아카이브](보관함에 넣은 것을 확인한 뒤 목록에서 빼기)가 함께 씁니다.
-  /** @param {readonly string[]} ids */
-  async removeTodosByIds(ids) {
+  /**
+   * @param {readonly string[]} ids
+   * @param {{ historyEffect?: { undo: () => unknown, redo: () => unknown } }} [options]
+   *   historyEffect: 이 동작과 함께 저장소 밖에서 한 일(예: 보관함 카드 추가). Ctrl+Z · Ctrl+Y 때 같이 되돌리고 다시 합니다.
+   */
+  async removeTodosByIds(ids, options = {}) {
     const gone = new Set(ids);
     if (gone.size === 0) return;
     const removedActiveIds = this.todos.filter(t => gone.has(t.id)).map(t => t.id);
@@ -2499,7 +2528,10 @@ async init() {
     if (synced.deletedCount > 0) track('dday_deleted', { count: synced.deletedCount });
     if (synced.keptCount > 0) this.triggerToast('dday-kept');
     this.selectedTodoIds = this.selectedTodoIds.filter(id => !gone.has(id));
-    await this.saveNow(); 
+    const before = this.historyStack[this.currentIndex];
+    await this.saveNow();
+    // saveNow가 새로 남긴 기록 칸에만 붙입니다. (복원 중이거나 기록이 남지 않았으면 붙이지 않음)
+    this._historyEffects.attach(before, this.historyStack[this.currentIndex], options.historyEffect);
   }
 
   // ✨ 초강력 텍스트 정제 및 HTML 태그 제거 유틸 (외부 복붙 찌꺼기 완벽 차단)

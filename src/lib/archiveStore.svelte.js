@@ -229,13 +229,15 @@ class ArchiveState {
   }
 
   // ✨ 여러 메모를 한 번에 보관합니다(메모 창 다중 선택 [아카이브]).
-  // addNote와 같이 "다시 읽어 모두 들어가 있는 것을 확인했을 때만" true를 돌려줍니다.
+  // addNote와 같이 "다시 읽어 모두 들어가 있는 것을 확인했을 때만" 성공입니다.
+  // 성공하면 넣은 카드(id 포함) 배열을, 실패하면 null을 돌려줍니다 — 메모 창이 Ctrl+Z로 그 카드만 되돌리고(removeNotes)
+  // Ctrl+Y로 같은 카드를 다시 넣을(reinsertNotes) 수 있게 하기 위해서입니다.
   // 왜: 이 결과가 true여야 메모 창이 그 할 일을 목록에서 뺍니다. 한 건이라도 확인되지 않으면
   //   할 일을 그대로 두어, 보관함에도 할 일 목록에도 없는 일이 생기지 않게 합니다.
   // 왜 한 번에 쓰는가: addNote를 여러 번 부르면 건마다 파일 쓰기가 일어나 느리고, 중간에 실패하면 일부만 들어갑니다.
   async addNotes(items) {
     const list = Array.isArray(items) ? items : [];
-    if (list.length === 0) return true;
+    if (list.length === 0) return [];
     const now = Date.now();
     const newNotes = list.map((item, index) => ({
       id: crypto.randomUUID(),
@@ -248,8 +250,19 @@ class ArchiveState {
       archivedAt: now - index,
       sourceLabel: item.sourceLabel || 'unknown',
     }));
-    const ids = new Set(newNotes.map((n) => n.id));
+    return (await this._insertConfirmed(newNotes)) ? newNotes : null;
+  }
 
+  // Ctrl+Y(다시 하기): 되돌리기로 뺐던 카드를 같은 id·내용 그대로 다시 넣습니다. 이미 있는 카드는 두 번 넣지 않습니다.
+  async reinsertNotes(notes) {
+    const list = Array.isArray(notes) ? notes.filter((n) => n && n.id) : [];
+    if (list.length === 0) return true;
+    return this._insertConfirmed(list.map((n) => ({ ...n })));
+  }
+
+  // 카드들을 맨 앞에 넣고 다시 읽어 모두 들어간 것을 확인합니다(최대 3번). 다른 창과 거의 동시에 써도 빠지지 않게 합니다.
+  async _insertConfirmed(newNotes) {
+    const ids = new Set(newNotes.map((n) => n.id));
     let confirmed = false;
     for (let attempt = 1; attempt <= 3 && !confirmed; attempt++) {
       const written = await this._safeModify((diskNotes) => {
@@ -264,7 +277,6 @@ class ArchiveState {
         confirmed = false;
       }
     }
-
     if (confirmed) emit('archive-updated');
     return confirmed;
   }

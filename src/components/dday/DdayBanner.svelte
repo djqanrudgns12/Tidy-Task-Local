@@ -207,6 +207,8 @@
                 <span
                   class="b3-mini-badge"
                   class:is-dashed={badge.dashed}
+                  class:is-solid={badge.palette.solid}
+                  data-scheme={resolvedDark ? 'dark' : 'light'}
                   style={badgePaletteToStyle(badge.palette)}
                 >
                   <span class="b3-mini-badge-label tnum">{badge.label}</span>
@@ -256,7 +258,7 @@
 
   .tnum {
     font-variant-numeric: tabular-nums;
-    letter-spacing: -0.02em;
+    letter-spacing: -0.025em;
   }
 
   .b3-card {
@@ -293,6 +295,7 @@
 
   .b3-chip-btn {
     --dd-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+    --dd-gloss: rgba(255, 255, 255, 0.60);
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -303,8 +306,8 @@
     border: 1px solid var(--dd-border);
     background-color: var(--dd-bg);
     color: var(--dd-ink);
-    /* 할 일 스마트 칩(DdayTodoChip)과 동일한 아래쪽 안쪽 딱지 받침으로 규격을 통일합니다. */
-    box-shadow: inset 0 -1.5px 0 var(--dd-rim);
+    /* 할 일 스마트 칩(DdayTodoChip)·날짜 뱃지와 동일한 상단 광택 + 하단 1.5px 딱지 받침으로 규격을 통일합니다. */
+    box-shadow: inset 0 -1.5px 0 var(--dd-rim), inset 0 1px 0 var(--dd-gloss);
     font-family: var(--ui-font-family);
     font-size: calc(10.5px * var(--dd-s));
     font-weight: 800;
@@ -319,16 +322,26 @@
       border-color 140ms ease,
       transform 200ms var(--dd-spring);
   }
+  .b3-chip-btn[data-scheme='dark'] {
+    --dd-gloss: rgba(255, 255, 255, 0.06);
+  }
+  .b3-chip-btn.is-solid[data-scheme='light'] {
+    --dd-gloss: rgba(255, 255, 255, 0.22);
+  }
+  .b3-chip-btn.is-solid[data-scheme='dark'] {
+    --dd-gloss: rgba(255, 255, 255, 0.14);
+  }
   .b3-chip-btn.is-dashed {
     border-style: dashed;
+    box-shadow: none;
   }
   .b3-chip-btn:hover {
     background-color: var(--dd-hover-bg);
     border-color: var(--dd-hover-border);
-    transform: translateY(-0.5px) scale(1.03);
+    transform: translateY(-0.5px) scale(1.04);
   }
   .b3-chip-btn:active {
-    transform: scale(1.02, 0.92);
+    transform: scale(1.03, 0.92);
     transition-duration: 140ms, 140ms, 90ms;
   }
   .b3-chip-btn:focus-visible {
@@ -495,6 +508,7 @@
   }
   .b3-mini-card[data-scheme='dark'] .b3-mini-ttl { color: var(--dd-ctrl-ink, #e8edf5); }
   .b3-mini-badge {
+    --dd-gloss: rgba(255, 255, 255, 0.60);
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -504,7 +518,7 @@
     border: 1px solid var(--dd-border);
     background-color: var(--dd-bg);
     color: var(--dd-ink);
-    box-shadow: inset 0 -1px 0 var(--dd-rim);
+    box-shadow: inset 0 -1px 0 var(--dd-rim), inset 0 1px 0 var(--dd-gloss);
     font-family: var(--ui-font-family);
     font-size: calc(9px * var(--dd-s));
     font-weight: 800;
@@ -513,8 +527,18 @@
     white-space: nowrap;
     box-sizing: border-box;
   }
+  .b3-mini-badge[data-scheme='dark'] {
+    --dd-gloss: rgba(255, 255, 255, 0.06);
+  }
+  .b3-mini-badge.is-solid[data-scheme='light'] {
+    --dd-gloss: rgba(255, 255, 255, 0.22);
+  }
+  .b3-mini-badge.is-solid[data-scheme='dark'] {
+    --dd-gloss: rgba(255, 255, 255, 0.14);
+  }
   .b3-mini-badge.is-dashed {
     border-style: dashed;
+    box-shadow: none;
   }
   .b3-mini-badge-label {
     display: inline-block;

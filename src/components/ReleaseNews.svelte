@@ -1,9 +1,9 @@
 <script lang="ts">
-  // 6.0.0 새 소식 창 (release-news). 지난 공지(5.6.3 소식 · 지난 업데이트 · 롤링 썬더)는 사용자 요청으로 모두 내렸습니다.
+  // 6.1.0 새 소식 창 (release-news). 6.0.0 소식을 그대로 보존하면서 치명적 오류 수정 내역과 6.1.0 새 기능을 맨 앞에 더했습니다.
   // 처음 설정(initial-setup 창)은 이 창과 별개라 그대로이며, 새 사용자는 설정을 마친 뒤 이 창을 봅니다.
   // 글자 크기는 "본문 14px · 작은 글 12px 이상"을 지킵니다(이전 공지의 9~11px 글자가 읽기 어렵다는 의견).
   import { onMount, tick } from 'svelte';
-  import { X, ArrowUpRight, BookOpen, ZoomIn, Check, GripHorizontal, Sparkles, LayoutGrid, Play, Smartphone, ShieldCheck, CalendarHeart, ListChecks, UsersRound, Type, MousePointerClick, Timer } from 'lucide-svelte';
+  import { X, ArrowUpRight, BookOpen, ZoomIn, Check, GripHorizontal, Sparkles, LayoutGrid, Play, Smartphone, ShieldCheck, CalendarHeart, CalendarDays, Archive, ListChecks, UsersRound, Type, MousePointerClick, Timer } from 'lucide-svelte';
   import { getCurrentWindow } from '@tauri-apps/api/window';
   import { WebviewWindow } from '@tauri-apps/api/webviewWindow';
   import { LazyStore } from '@tauri-apps/plugin-store';
@@ -27,14 +27,52 @@
   const major = version.split('.').slice(0, 2).join('.');
   const tabs = [`${major} 새 소식`, '툴킷 전체'];
 
-  type Shot = { file: string; title: string; alt: string; tall?: boolean };
+  type Shot = { file: string; title: string; alt: string; tall?: boolean; dir?: string };
   type Feature = {
-    id: string; badge: 'NEW' | '새 단장'; tone: string; icon: typeof Sparkles; chip: string;
+    id: string; badge: '6.1 NEW' | 'NEW' | '새 단장'; tone: string; icon: typeof Sparkles; chip: string;
     title: string; lead: string; points: { b: string; t: string }[];
     where: string; layout: 'side' | 'wide' | 'pair'; shots: Shot[];
   };
-  // 사진은 모두 개발 미리보기에서 찍은 실제 화면입니다(scripts/capture-release-6.0.mjs). 이름·일정은 예시입니다.
+  const criticalFixes = [
+    {
+      b: '툴킷 설정 빈 투명 창 클릭 차단 오류 수정 (치명적 · 6.0.1)',
+      t: 'D-Day 위젯이 툴바에 들어가며 설정 줄 표가 빠져 투명 빈 창이 화면 가운데 남아 클릭과 이동을 가로채던 문제를 해결하고 안전 오류 화면 보호를 더했어요.',
+    },
+    {
+      b: 'D-Day 컨트롤 창 닫힘 · 크기 전환 오류 수정',
+      t: '[닫기]·[완료]·Alt+F4 어느 것으로도 창이 닫히지 않던 문제와 [넓게 보기] 단추가 창 크기를 제대로 키우지 못하던 문제를 바로잡았어요.',
+    },
+    {
+      b: '할 일 날짜 뱃지 자정 갱신 · 드래그 안정화',
+      t: '자정이 지나도 날짜 뱃지 색상이 바로 바뀌고, 잘못된 날짜 표기·순서 끌기 중 뱃지가 커지거나 흔들리던 문제를 고쳤어요.',
+    },
+  ];
+  // 사진은 모두 개발 미리보기에서 찍은 실제 화면입니다(scripts/capture-release-6.0.mjs · update-6.1). 이름·일정은 예시입니다.
   const features: Feature[] = [
+    {
+      id: 'deadline-badge', badge: '6.1 NEW', tone: 'sky', icon: CalendarDays, chip: '날짜 뱃지',
+      title: '날짜 뱃지 · D-Day, 한결같고 말랑하게',
+      lead: '날짜 길이가 달라도 모든 줄의 뱃지 폭이 똑같이 맞춰지고, 옆 D-Day 칩과 같은 높이·말랑 딱지 모양으로 통일됐어요.',
+      points: [
+        { b: '칼각 정렬 · 글자 넘침 0%', t: '자릿수와 글꼴이 바뀌어도 줄바꿈이나 잘림 없이 뱃지 가운데에 단정하게 놓여요.' },
+        { b: '화면 글자 크기 스마트 연동', t: '설정에서 화면 글자 크기를 바꾸면 날짜·D-Day 뱃지도 알맞은 비율(18~28px)로 따라 조절돼요.' },
+        { b: '더 또렷한 5단계 색상', t: '지연·오늘·임박·1주·여유 5가지 색상 의미는 그대로 두고 밝기와 대비를 더 읽기 쉽게 다듬었어요.' },
+      ],
+      where: '메모 창 할 일 목록 · 하단 새 할 일 입력줄', layout: 'side',
+      shots: [{ dir: '/images/update-6.1/', file: 'todo-badge-dock', title: '통일된 날짜 뱃지 · D-Day 칩 · 다중 선택 도크', alt: '5단계 마감일 색상 뱃지와 D-Day 칩, 상단 다중 선택 도크가 나란히 정렬된 메모 창 실제 화면', tall: true }],
+    },
+    {
+      id: 'bulk-dock', badge: '6.1 NEW', tone: 'butter', icon: Archive, chip: '다중 선택 · 아카이브',
+      title: '여러 할 일을 한 번에 정리하고 보관해요',
+      lead: '여러 항목 선택을 켜면 목록 위에 꼭 맞는 말랑 도크가 열려 정렬·아카이브 보관·D-Day 고정을 손쉽게 할 수 있어요.',
+      points: [
+        { b: '2축 정밀 정렬 도크', t: '전체 선택 체크와 마감일 정렬(↓↑) 캡슐이 아래 목록 줄과 같은 세로선에 깔끔하게 맞춰져요.' },
+        { b: '아카이브 복사 · 이동 & 되돌리기', t: '[아카이브]를 눌러 복사해서 보관할지, 옮겨서 보관할지 고르고 Ctrl+Z로 바로 되돌려요.' },
+        { b: 'D-Day 한꺼번에 고정', t: '고른 할 일 여러 개를 한 번에 D-Day로 등록할 수 있어요.' },
+      ],
+      where: '메모 창 툴바의 여러 항목 선택 → 상단 다중 선택 도크', layout: 'side',
+      shots: [{ dir: '/images/update-6.1/', file: 'bulk-archive-dock', title: '다중 선택 아카이브 고르기 메뉴', alt: '다중 선택 도크의 아카이브 버튼을 눌러 복사해서 보관과 옮겨서 보관을 고르는 실제 화면', tall: true }],
+    },
     {
       id: 'dday', badge: 'NEW', tone: 'peach', icon: CalendarHeart, chip: 'D-Day',
       title: '다가오는 날, 한눈에 D-Day',
@@ -120,9 +158,10 @@
     },
   ];
   const extras = [
-    { b: '설정 창 새 단장', t: '모양 · 글자 · 동작 · 관리 네 칸으로 나눠 찾기 쉬워졌어요.' },
-    { b: '메모 칸 높이 안정', t: '창 크기를 바꿔도 메모 칸이 흔들리거나 사라지지 않아요.' },
-    { b: '작은 오류 수정', t: '띄어쓰기 없는 긴 글이 큰 빈칸을 남기던 줄바꿈, D-Day 위젯 단추 등을 고쳤어요.' },
+    { b: '설정 [완료] · [적용] 버튼 분리', t: '창을 닫지 않고 [적용]으로 바뀐 모양과 글자를 바로 확인하고, 다 되면 [완료]로 마쳐요.' },
+    { b: '설정 창 새 단장 (6.0)', t: '모양 · 글자 · 동작 · 관리 네 칸으로 나눠 찾기 쉬워졌어요.' },
+    { b: '메모 칸 높이 안정 (6.0)', t: '창 크기를 바꿔도 메모 칸이 흔들리거나 사라지지 않아요.' },
+    { b: '작은 오류 수정 (6.0)', t: '띄어쓰기 없는 긴 글이 큰 빈칸을 남기던 줄바꿈, D-Day 위젯 단추 등을 고쳤어요.' },
   ];
 
   // ── 툴킷 전체 탭 ── 도구 수는 등록부(registry)에서 세어 글과 숫자가 어긋나지 않게 합니다.
@@ -220,8 +259,9 @@
 </script>
 
 {#snippet photo(shot: Shot, tone: string, eager = false)}
-  <button class={`rn-shot ${tone}`} class:rn-shot-tall={shot.tall} aria-label={`${shot.title} 실제 화면 크게 보기`} onclick={() => zoom(`${base}${shot.file}.webp`, shot.title)}>
-    <img src={`${base}${shot.file}.webp`} alt={`${shot.alt}. 예시 자료로 찍은 실제 앱 화면.`} loading={eager ? 'eager' : 'lazy'}/>
+  {@const src = `${shot.dir ?? base}${shot.file}.webp`}
+  <button class={`rn-shot ${tone}`} class:rn-shot-tall={shot.tall} aria-label={`${shot.title} 실제 화면 크게 보기`} onclick={() => zoom(src, shot.title)}>
+    <img src={src} alt={`${shot.alt}. 예시 자료로 찍은 실제 앱 화면.`} loading={eager ? 'eager' : 'lazy'}/>
     <span class="rn-shot-zoom" aria-hidden="true"><ZoomIn size={14}/></span>
   </button>
 {/snippet}
@@ -244,23 +284,31 @@
     {#if tab === 0}
       <section class="rn-hero" aria-labelledby="rn-hero-title">
         <div class="rn-hero-copy">
-          <span class="rn-hero-kicker"><span class="rn-sticker">v{version}</span>큰 업데이트가 도착했어요</span>
+          <span class="rn-hero-kicker"><span class="rn-sticker">v{version}</span>치명적 오류 수정 · 사용성 업그레이드</span>
           <h1 id="rn-hero-title">더 귀엽고,<br/>더 손에 착 붙게.</h1>
-          <p>D-Day부터 모둠원 뽑기까지, {major}에서 달라진 점을 모았어요.</p>
+          <p>치명적인 오류를 바로잡고, 날짜 뱃지·다중 선택 정리부터 D-Day·모둠원 뽑기까지 {major}과 6.0의 달라진 점을 모두 모았어요.</p>
         </div>
         <img class="rn-hero-mascot" src="/chaltteok.webp" alt=""/>
         <p class="rn-safe"><ShieldCheck size={17}/><span>지금까지 쓰신 할 일 · 메모 · 툴킷 자료는 <b>그대로</b> 남아 있어요.</span></p>
       </section>
 
+      <section class="rn-bugfix" aria-labelledby="rn-bugfix-title">
+        <div class="rn-bugfix-head">
+          <span class="rn-bugfix-badge">치명적 오류 수정</span>
+          <h2 id="rn-bugfix-title">6.0.0 이후 발견된 주요 오류를 모두 고쳤어요</h2>
+        </div>
+        <ul>{#each criticalFixes as fix}<li><b>{fix.b}</b><span>{fix.t}</span></li>{/each}</ul>
+      </section>
+
       <nav class="rn-glance" aria-label="한눈에 보기">
         <span class="rn-glance-title">한눈에 보기</span>
-        <div>{#each features as f}{@const Icon = f.icon}<button class={`rn-chip ${f.tone}`} onclick={() => jump(f.id)}><Icon size={15}/>{f.chip}{#if f.badge === 'NEW'}<i>NEW</i>{/if}</button>{/each}</div>
+        <div>{#each features as f}{@const Icon = f.icon}<button class={`rn-chip ${f.tone}`} onclick={() => jump(f.id)}><Icon size={15}/>{f.chip}{#if f.badge === '6.1 NEW' || f.badge === 'NEW'}<i>{f.badge === '6.1 NEW' ? '6.1' : 'NEW'}</i>{/if}</button>{/each}</div>
       </nav>
 
       {#each features as f, fi}
         {@const Icon = f.icon}
         <article class={`rn-card ${f.tone} rn-${f.layout}`} id={`rn-${f.id}`} tabindex="-1" aria-labelledby={`rn-${f.id}-title`}>
-          <span class="rn-tab-label"><span class="rn-badge" class:rn-badge-new={f.badge === 'NEW'}>{f.badge}</span>{String(fi + 1).padStart(2, '0')}</span>
+          <span class="rn-tab-label"><span class="rn-badge" class:rn-badge-new={f.badge === '6.1 NEW' || f.badge === 'NEW'}>{f.badge}</span>{String(fi + 1).padStart(2, '0')}</span>
           <div class="rn-card-head">
             <span class="rn-card-icon" aria-hidden="true"><Icon size={22}/></span>
             <div><h2 id={`rn-${f.id}-title`}>{f.title}</h2><p class="rn-lead">{f.lead}</p></div>

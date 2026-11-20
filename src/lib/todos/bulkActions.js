@@ -23,12 +23,23 @@ export function describeBulkDdayResult(result) {
 }
 
 /**
- * [아카이브] 결과 안내.
+ * [아카이브] 결과 안내. 복사해서 보관 / 옮겨서 보관을 말로 구분해 무엇이 일어났는지 알려 줍니다.
  * @param {number} count 보관한 할 일 수
  * @param {boolean} ok 보관함에 들어간 것을 확인했는지
+ * @param {'copy' | 'move'} [mode]
  * @returns {string}
  */
-export function describeArchiveResult(count, ok) {
+export function describeArchiveResult(count, ok, mode = 'move') {
   if (!ok) return '아카이브에 넣지 못했어요. 할 일은 그대로 두었어요';
-  return `할 일 ${count}개를 아카이브에 보관했어요`;
+  return mode === 'copy'
+    ? `할 일 ${count}개를 아카이브에 복사했어요`
+    : `할 일 ${count}개를 아카이브로 옮겼어요`;
+}
+
+/**
+ * 복사해서 보관을 Ctrl+Z로 되돌렸을 때의 안내. 메모 창 모습은 그대로라 무엇이 되돌아갔는지 말해 줘야 합니다.
+ * @param {number} count
+ */
+export function describeArchiveUndo(count) {
+  return `아카이브에서 카드 ${count}개를 뺐어요`;
 }

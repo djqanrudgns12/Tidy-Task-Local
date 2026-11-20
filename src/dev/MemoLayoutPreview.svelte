@@ -9,19 +9,26 @@
   import MemoBody from '../components/MemoBody.svelte';
   import Titlebar from '../components/Titlebar.svelte';
   import MainToolbar from '../components/MainToolbar.svelte';
+  import BulkSelectDock from '../components/todo/BulkSelectDock.svelte';
   import { getTidyTheme, TIDY_THEMES } from '../lib/themes.js';
   import { createMemoLayoutController } from '../lib/layout/memoLayoutController.js';
   import { DEFAULT_NOTES_H, GESTURE_IDLE_MS, TODOS_MIN_H, resolveNotesPreference, splitterWindowHeight } from '../lib/layout/memoLayout.js';
+  import { resolveTodoBadgeMetrics } from '../lib/todos/todoBadgeMetrics.js';
+  import { todoBadgeFit } from '../lib/todos/todoBadgeFit.svelte.js';
   import { observeTodoSort } from './todoSortQA.js';
 
   const HEADER_H = 92; // 제목줄 + 툴바 두 줄(스크린샷과 비슷한 높이)
   const params = new URLSearchParams(location.search);
   const fullUI = params.has('full-ui');
   const sortQA = params.has('sort-qa');
+  const bulkQA = params.has('bulk-qa');
   // 자동 검수 브라우저는 '동작 줄이기'가 켜져 있으므로 일반 애니메이션 모드도 별도로 검수합니다.
   const nativeMatchMedia = window.matchMedia.bind(window);
-  if (sortQA && params.get('sort-motion') === 'full') {
+  if ((sortQA || bulkQA) && params.get('sort-motion') === 'full') {
     window.matchMedia = query => nativeMatchMedia(query === '(prefers-reduced-motion: reduce)' ? 'not all' : query);
+  }
+  if (bulkQA) {
+    appState.isEditMode = true;
   }
   let sortSaves = $state(0);
   let sortEvidence = $state({});
@@ -95,6 +102,13 @@
     root.style.setProperty('--ui-font-family', fontStack(appState.uiFontFamily));
     root.style.setProperty('--global-font-size', `${appState.fontSize}pt`);
     root.style.setProperty('--ui-font-size', `${appState.uiFontSize}pt`);
+    root.style.setProperty('--ui-font-scale', String((appState.uiFontSize || 10) / 10));
+    const tb = resolveTodoBadgeMetrics(appState.uiFontSize || 10);
+    root.style.setProperty('--tb-h', `${tb.heightPx}px`);
+    root.style.setProperty('--tb-fs', `${tb.fontSizePx}px`);
+    root.style.setProperty('--tb-icon', `${tb.iconSizePx}px`);
+    root.style.setProperty('--tb-radius', `${tb.radiusPx}px`);
+    root.style.setProperty('--tb-date-base-w', `${tb.slotWidthPx}px`);
     root.style.fontSize = `${appState.uiFontSize}pt`;
     const theme = (getTidyTheme(appState.themeColor) || getTidyTheme('purple') || TIDY_THEMES[0]).tidy;
     root.style.setProperty('--global-theme-color', appState.isDarkMode ? '#23272e' : theme.bg);
@@ -297,11 +311,22 @@
     controller.noteGeometry({ y: frameY, height: frameH });
     /** @type {any} */ (window).__memoPreview = { drag, dragBy, release, splitter, measure, scenario, addArchived, reset, controller, appState,
       setEventFirst: (/** @type {boolean} */ v) => { eventFirst = v; },
-      configure: async (/** @type {{ width?: number, height?: number, uiSize?: number, textSize?: number }} */ values) => {
+      configure: async (/** @type {{ width?: number, height?: number, uiSize?: number, textSize?: number, theme?: string, dark?: boolean, design?: string, font?: string, editMode?: boolean, todos?: any[], ddayItems?: any[], todayKey?: string, selectedIds?: string[], showNotes?: boolean, showArchived?: boolean }} */ values) => {
         if (values.width) frameW = values.width;
         if (values.height) frameH = values.height;
         if (values.uiSize) appState.uiFontSize = values.uiSize;
         if (values.textSize) appState.fontSize = values.textSize;
+        if (values.theme) appState.themeColor = values.theme;
+        if (typeof values.dark === 'boolean') appState.isDarkMode = values.dark;
+        if (values.design) appState.headerDesign = values.design;
+        if (values.font) { appState.uiFontFamily = values.font; appState.fontFamily = values.font; }
+        if (typeof values.editMode === 'boolean') appState.isEditMode = values.editMode;
+        if (Array.isArray(values.todos)) appState.todos = values.todos;
+        if (Array.isArray(values.ddayItems)) appState.ddayItems = values.ddayItems;
+        if (typeof values.todayKey === 'string') appState.todayKey = values.todayKey;
+        if (Array.isArray(values.selectedIds)) appState.selectedTodoIds = values.selectedIds;
+        if (typeof values.showNotes === 'boolean') appState.showNotes = values.showNotes;
+        if (typeof values.showArchived === 'boolean') appState.showArchived = values.showArchived;
         controller.markProgrammatic();
         await tick(); await nextFrames(); controller.recompute();
       } };
@@ -346,6 +371,33 @@
       <MainToolbar />
     {:else}
       <div class="main-header" style="height: {HEADER_H}px;">Tidy Task (제목줄 · 툴바 자리)</div>
+    {/if}
+    {#if appState.isEditMode}
+      {@const visibleSelectedCount = appState.filteredTodos.filter((t) => appState.selectedTodoIds.includes(t.id)).length}
+      {@const bulkLayoutSignature = `${appState.filteredTodos.map((t) => `${t.id}:${t.deadline || ''}`).join('|')}#${todoBadgeFit.slotPx}`}
+      <BulkSelectDock
+        sortOrder={appState.sortOrder === 'desc' ? 'desc' : 'asc'}
+        totalCount={appState.filteredTodos.length}
+        {visibleSelectedCount}
+        selectedCount={appState.selectedTodoIds.length}
+        themeColor={appState.themeColor}
+        dark={appState.isDarkMode}
+        globalFontSizePt={appState.fontSize || 10}
+        uiFontSizePt={appState.uiFontSize || 10}
+        fontFamily={appState.fontFamily}
+        uiFontFamily={appState.uiFontFamily}
+        headerDesign={appState.headerDesign}
+        layoutSignature={bulkLayoutSignature}
+        dateSlotPx={todoBadgeFit.slotPx}
+        frozen={appState.isUpdateFrozen}
+        onToggleAll={() => (appState.selectedTodoIds.length > 0 ? appState.deselectAll() : appState.selectAll())}
+        onToggleSort={() => appState.toggleDeadlineSort()}
+        onArchive={() => {}}
+        onDdayPointerDown={() => {}}
+        onDdayClick={() => {}}
+        onComplete={() => appState.archiveSelected()}
+        onDelete={() => appState.deleteSelected()}
+      />
     {/if}
     <div class="memo-preview-body">
       <MemoBody layout={controller} {onsplitterdown} />

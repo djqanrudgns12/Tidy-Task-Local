@@ -4,9 +4,11 @@ import { fitNoticeSize } from './toolkitRelease.js';
 // ID를 바꾸면 숨김 키도 바뀌어, 이전 공지를 "그만보기"한 사용자에게도 한 번 더 뜹니다.
 // 5.6.2(2026-09-27): 사용자 요청으로 공지를 5.6.2로 올리고 첫 탭에 5.6.2의 달라진 점을 더했습니다.
 // 6.0.0(2026-11-19): 사용자 요청으로 지난 공지(5.6.3 소식 · 지난 업데이트 · 롤링 썬더)를 모두 내리고 6.0.0 소식 하나로 바꿨습니다.
-//   ID가 바뀌므로 5.6.3 공지를 "그만보기"한 사용자에게도 6.0.0 공지가 한 번 뜹니다(의도).
+// 6.1.0(2026-11-20): 6.0.0 소식을 유지한 채 치명적 오류 수정(툴킷 설정 투명 창 · D-Day 컨트롤 닫힘/넓게 보기 · 날짜 뱃지 자정/드래그)과
+//   날짜 뱃지 규격 통일 · 다중 선택 인셋 도크 · 아카이브 드롭다운 내역을 더해 v6.1.0으로 올렸습니다.
+//   ID가 바뀌므로 v6.0.0 공지를 "그만보기"한 사용자에게도 v6.1.0 공지가 한 번 뜹니다(의도).
 //   처음 설정(initial-setup)은 이 공지와 별개의 영구 키라 그대로 두며, 새 사용자는 설정을 마친 뒤 이 공지를 봅니다.
-export const RELEASE_NEWS_ID = 'v6.0.0';
+export const RELEASE_NEWS_ID = 'v6.1.0';
 export const RELEASE_NEWS_LABEL = 'release-news';
 export const RELEASE_NEWS_KEY = `update-notice:${RELEASE_NEWS_ID}:hidden-until`;
 export const DISMISSED_FOREVER = Number.MAX_SAFE_INTEGER;

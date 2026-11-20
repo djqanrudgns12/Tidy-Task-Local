@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { describeArchiveResult, describeBulkDdayResult } from './bulkActions.js';
+import { describeArchiveResult, describeArchiveUndo, describeBulkDdayResult } from './bulkActions.js';
 import { ARCHIVE_TITLE_MAX, pickSelectedTodos, todoToArchiveNote } from './todoArchive.js';
 
 test('describeBulkDdayResult: 만든 개수와 건너뛴 이유를 함께 알린다', () => {
@@ -13,9 +13,12 @@ test('describeBulkDdayResult: 만든 개수와 건너뛴 이유를 함께 알린
   assert.equal(describeBulkDdayResult({ created: [], alreadyLinked: 0, missingDate: 2 }), '만든 D-Day가 없어요 (날짜 없는 2개 제외)');
 });
 
-test('describeArchiveResult: 실패하면 할 일을 지우지 않았다고 분명히 알린다', () => {
-  assert.equal(describeArchiveResult(3, true), '할 일 3개를 아카이브에 보관했어요');
-  assert.match(describeArchiveResult(3, false), /그대로 두었어요/);
+test('describeArchiveResult: 복사·옮김을 말로 구분하고, 실패하면 할 일을 지우지 않았다고 분명히 알린다', () => {
+  assert.equal(describeArchiveResult(3, true, 'copy'), '할 일 3개를 아카이브에 복사했어요');
+  assert.equal(describeArchiveResult(3, true, 'move'), '할 일 3개를 아카이브로 옮겼어요');
+  assert.equal(describeArchiveResult(2, true), '할 일 2개를 아카이브로 옮겼어요');
+  assert.match(describeArchiveResult(3, false, 'copy'), /그대로 두었어요/);
+  assert.equal(describeArchiveUndo(3), '아카이브에서 카드 3개를 뺐어요');
 });
 
 test('pickSelectedTodos: 고른 순서가 아니라 목록 순서로 꺼내고, 없는 id는 무시한다', () => {

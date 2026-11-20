@@ -13,15 +13,31 @@
   import { REMOVAL_GUARD_MS, createRemovalGuard, isXArmed } from "../lib/todos/rowGestures.js";
   import Icon from "@iconify/svelte";
   import { CALENDAR_BOLD_DUOTONE } from "../lib/icons.js";
-  import { daysUntil } from "../lib/dateUtils.js";
+  import { daysUntil, parseDeadline } from "../lib/dateUtils.js";
   import { formatShortDate } from "../lib/datePicker/calendarModel.js";
   import { datePicker, dateTrigger } from "../lib/datePicker/datePickerClient.svelte.js";
   import { memoPickerAppearance } from "../lib/datePicker/memoAppearance.js";
+  import { resolveBulkDockPalette } from "../lib/todos/bulkDockLayout.js";
+  import {
+    classifyDeadlineKind,
+    computeFittedDateBadge,
+    deadlinePaletteSetToStyle,
+    resolveDeadlinePaletteSet,
+    resolveTodoBadgeMetrics,
+    splitShortDateParts,
+  } from "../lib/todos/todoBadgeMetrics.js";
+  import { setTodoBadgeFit, todoBadgeFit } from "../lib/todos/todoBadgeFit.svelte.js";
 
   let newTaskText = $state("");
   let newTaskDeadline = $state("");
 
-  let formDlInfo = $derived(getDeadlineInfo(newTaskDeadline));
+  let formDlInfo = $derived(getDeadlineInfo(newTaskDeadline, appState.todayKey));
+  // 상단 BulkSelectDock 전체 선택 체크박스와 동일한 조약돌 색상·대비 토큰을 공유합니다.
+  let chkPalette = $derived(resolveBulkDockPalette(appState.themeColor, appState.isDarkMode));
+  // 날짜 뱃지 7상태 정제 팔레트: 행마다 계산하지 않고 루트 변수에 1회만 주입해 O(1) 테마 전환을 유지합니다.
+  let dlPaletteStyle = $derived(
+    deadlinePaletteSetToStyle(resolveDeadlinePaletteSet(appState.themeColor, appState.isDarkMode)),
+  );
 
   // ✨ 마감일 달력은 메모 창 안이 아니라 별도 창(date-picker)으로 뜹니다.
   // 왜: 창을 세로로 줄이면(최소 210px) 달력(약 260px)이 창 밖으로 잘렸습니다.
@@ -70,10 +86,118 @@
     });
   });
 
+  /** @type {HTMLSpanElement | null} */
+  let probeEl = $state(null);
+  /** @type {HTMLSpanElement | null} */
+  let probeMainEl = $state(null);
+  /** @type {HTMLSpanElement | null} */
+  let probeDowEl = $state(null);
+  let probeKey = "";
+  let isProbeMeasuring = false;
+
+  /**
+   * 숨김 측정 span(.todo-badge-probe)에 합성 최장 표본을 그려
+   * 0~9·일~토 메트릭과 Overflow-Zero 3중 방어 피팅 결과를 갱신합니다.
+   * 주의: measureLayout() 높이에 영향을 주지 않도록 listContentEl 바깥(.todo-list-root 직속)에서만 돕니다.
+   */
+  function recomputeBadgeFit(force = false) {
+    if (!probeEl || !probeMainEl || !probeDowEl || isProbeMeasuring) return;
+    const uiPt = Number(appState.uiFontSize || 10);
+    const uiFont = String(appState.uiFontFamily || "");
+    const base = resolveTodoBadgeMetrics(uiPt);
+
+    isProbeMeasuring = true;
+    try {
+      const measureSample = (mainText, dowText, fontPx, letterSpacingEm) => {
+        probeEl.style.fontSize = `${fontPx}px`;
+        probeEl.style.letterSpacing = `${letterSpacingEm}em`;
+        probeMainEl.textContent = mainText;
+        probeDowEl.textContent = dowText;
+        return probeEl.getBoundingClientRect().width;
+      };
+
+      // 0~9 최장 숫자 w, 일~토 최장 요일 d를 1회 실측해 tnum 미지원 폰트까지 커버하는 최장 표본 생성
+      probeEl.style.fontSize = `${base.fontSizePx}px`;
+      probeEl.style.letterSpacing = "-0.025em";
+      probeDowEl.textContent = "";
+      let maxDigit = "8";
+      let maxDigitW = -1;
+      for (const d of "0123456789") {
+        probeMainEl.textContent = d;
+        const w = probeEl.getBoundingClientRect().width;
+        if (w > maxDigitW) {
+          maxDigitW = w;
+          maxDigit = d;
+        }
+      }
+
+      probeMainEl.textContent = "";
+      let maxDow = "수";
+      let maxDowW = -1;
+      for (const dow of ["일", "월", "화", "수", "목", "금", "토"]) {
+        probeDowEl.textContent = `(${dow})`;
+        const w = probeEl.getBoundingClientRect().width;
+        if (w > maxDowW) {
+          maxDowW = w;
+          maxDow = dow;
+        }
+      }
+
+      const synthMain = `1${maxDigit}/${maxDigit}${maxDigit}`;
+      const synthDow = `(${maxDow})`;
+      const synthW = measureSample(synthMain, synthDow, base.fontSizePx, -0.025);
+      const fallbackPairW = synthMain === "12/28" ? 0 : measureSample("12/28", synthDow, base.fontSizePx, -0.025);
+      const steadyMain = fallbackPairW > synthW ? "12/28" : synthMain;
+      const measuredBase = Math.max(synthW, fallbackPairW);
+
+      const nextCacheKey = `${Math.round(measuredBase * 100)}|${uiPt}|${uiFont}`;
+      if (force || nextCacheKey !== probeKey) {
+        probeKey = nextCacheKey;
+        const fit = computeFittedDateBadge({
+          base,
+          measuredBase,
+          measureAt: (fs, ls) => Math.max(
+            measureSample(synthMain, synthDow, fs, ls),
+            synthMain === "12/28" ? 0 : measureSample("12/28", synthDow, fs, ls),
+          ),
+        });
+        setTodoBadgeFit(fit);
+      }
+
+      // 기준 상태로 복원해 ResizeObserver가 안정 수렴하도록 유지합니다.
+      probeEl.style.fontSize = `${base.fontSizePx}px`;
+      probeEl.style.letterSpacing = "-0.025em";
+      probeMainEl.textContent = steadyMain;
+      probeDowEl.textContent = synthDow;
+    } finally {
+      isProbeMeasuring = false;
+    }
+  }
+
+  $effect(() => {
+    void [appState.uiFontSize, appState.uiFontFamily];
+    void tick().then(() => recomputeBadgeFit(true));
+  });
+
   onMount(() => {
     // 처음 누를 때 창을 만드느라 늦지 않게, 한가할 때 달력 창을 미리 만들어 둡니다.
     datePicker.schedulePrewarm();
-    return () => todoSorter.destroy();
+    recomputeBadgeFit(true);
+
+    const observer = typeof ResizeObserver === "undefined" || !probeEl
+      ? null
+      : new ResizeObserver(() => recomputeBadgeFit());
+    if (observer && probeEl) observer.observe(probeEl);
+
+    const onFontsDone = () => recomputeBadgeFit(true);
+    document.fonts?.addEventListener?.("loadingdone", onFontsDone);
+    void document.fonts?.ready?.then(() => recomputeBadgeFit(true));
+
+    return () => {
+      observer?.disconnect();
+      document.fonts?.removeEventListener?.("loadingdone", onFontsDone);
+      todoSorter.destroy();
+    };
   });
 
   // ✨ [TCREI: Composition-Safe] 플레이스홀더는 CSS :empty 기반으로 처리합니다.
@@ -81,50 +205,26 @@
   //     isInputEmpty가 true로 유지되어 플레이스홀더가 입력 글자와 겹치는 버그가 발생합니다.
   //     CSS :empty는 DOM의 실제 자식 노드 유무를 기준으로 판단하므로 IME와 무관하게 동작합니다.
 
-  // ✨ 데드라인 뱃지 정보 렌더러 (4/24일 형식 + 색상)
-  function getDeadlineInfo(deadline) {
+  // ✨ 데드라인 뱃지 정보 렌더러 ('11/23(월)' 형식 + 반응형 todayKey 기준 상태 분류)
+  function getDeadlineInfo(deadline, todayKeyStr = appState.todayKey) {
     if (!deadline) {
-      return {
-        isIcon: true,
-        color: appState.isDarkMode ? '#4b5563' : '#9ca3af',
-        bg: appState.isDarkMode ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.04)',
-        borderColor: appState.isDarkMode ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)',
-      };
+      return { kind: "unset", isIcon: true, label: "", main: "", dow: "" };
     }
 
-    // 날짜 계산·표기는 리마인더·달력과 같은 공용 함수를 씁니다(로컬 자정 기준, '9/30(수)' 형식).
-    const diffDays = daysUntil(deadline);
+    const todayDate = todayKeyStr ? parseDeadline(todayKeyStr) : new Date();
+    const diffDays = daysUntil(
+      deadline,
+      Number.isNaN(todayDate.getTime()) ? new Date() : todayDate,
+    );
+    const kind = classifyDeadlineKind(deadline, diffDays);
+    if (kind === "invalid") {
+      const raw = String(deadline);
+      return { kind, isIcon: false, label: raw, main: raw, dow: "" };
+    }
+
     const label = formatShortDate(deadline) || String(deadline);
-
-    let color, bg, borderColor;
-    if (diffDays < 0) {
-      // 🟣 지연됨 (보라색)
-      color = appState.isDarkMode ? '#c084fc' : '#9333ea';
-      bg    = appState.isDarkMode ? 'rgba(147,51,234,0.18)' : 'rgba(243,232,255,0.9)';
-      borderColor = appState.isDarkMode ? 'rgba(147,51,234,0.3)' : '#c084fc';
-    } else if (diffDays === 0) {
-      // 🔴 오늘 마감 (빨강색)
-      color = appState.isDarkMode ? '#fca5a5' : '#ef4444';
-      bg    = appState.isDarkMode ? 'rgba(239,68,68,0.18)' : 'rgba(254,226,226,0.9)';
-      borderColor = appState.isDarkMode ? 'rgba(239,68,68,0.3)' : '#fca5a5';
-    } else if (diffDays <= 3) {
-      // 🟠 마감 임박 (주황색)
-      color = appState.isDarkMode ? '#fb923c' : '#ea580c';
-      bg    = appState.isDarkMode ? 'rgba(234,88,12,0.18)' : 'rgba(255,237,213,0.9)';
-      borderColor = appState.isDarkMode ? 'rgba(234,88,12,0.3)' : '#fb923c';
-    } else if (diffDays <= 7) {
-      // 🟢 1주일 이내 (초록색)
-      color = appState.isDarkMode ? '#6ee7b7' : '#059669';
-      bg    = appState.isDarkMode ? 'rgba(16,185,129,0.18)' : 'rgba(209,250,229,0.9)';
-      borderColor = appState.isDarkMode ? 'rgba(16,185,129,0.3)' : '#6ee7b7';
-    } else {
-      // 🔵 여유 (파랑색)
-      color = appState.isDarkMode ? '#93c5fd' : '#3b82f6';
-      bg    = appState.isDarkMode ? 'rgba(59,130,246,0.18)' : 'rgba(219,234,254,0.9)';
-      borderColor = appState.isDarkMode ? 'rgba(59,130,246,0.3)' : '#93c5fd';
-    }
-
-    return { label, color, bg, borderColor };
+    const { main, dow } = splitShortDateParts(label);
+    return { kind, isIcon: false, label, main, dow };
   }
 
   // 이동 중 순서는 저장 상태와 분리합니다. 다른 입력의 자동 저장에도 임시 순서가 섞이지 않습니다.
@@ -276,11 +376,22 @@
   }
 </script>
 
-<div class="flex flex-col h-full pl-3 pr-3 pt-1">
+<div
+  class="todo-list-root relative flex flex-col h-full pl-3 pr-3 pt-1"
+  style="{dlPaletteStyle}; --tb-date-w: {todoBadgeFit.slotPx}px; --tb-date-fs: {todoBadgeFit.fontPx}px; --tb-date-ls: {todoBadgeFit.letterSpacingEm}em; --todo-accent: {appState.getThemeAccentColor()};"
+>
+  <!-- 숨김 측정 span: listContentEl 밖(.todo-list-root 직속)에 두어 measureLayout()에 영향이 없으며
+       data-todo-deadline-btn을 절대 붙이지 않아 BulkSelectDock·Dday 대상 탐색에 섞이지 않습니다. -->
+  <div class="todo-badge-probe-host" aria-hidden="true">
+    <span bind:this={probeEl} class="todo-badge-probe">
+      <span bind:this={probeMainEl}>18/88</span><span bind:this={probeDowEl} class="todo-badge-dow">(수)</span>
+    </span>
+  </div>
+
   <div
     bind:this={listViewportEl}
     class="flex-1 overflow-y-auto overflow-x-hidden min-h-0 border-t"
-    style="border-color: {appState.isDarkMode ? 'rgba(255,255,255,0.06)' : 'rgba(120,80,20,0.1)'};"
+    style="border-color: {appState.isEditMode ? 'transparent' : (appState.isDarkMode ? 'rgba(255,255,255,0.06)' : 'rgba(120,80,20,0.1)')};"
   >
     <!-- 줄 배경·강조색을 변수로 둬서, X 뒤 흐림 받침이 그 순간의 줄 배경과 정확히 같은 색이 되게 합니다.
          포인터 리스너는 조작이 아니라 "어느 줄 위에 있는지" 기록(X 무장·연타 보호)만 합니다. -->
@@ -290,7 +401,7 @@
       class="todo-rows min-h-[50px]"
       class:is-dark={appState.isDarkMode}
       class:is-settling={settling}
-      style="--todo-accent: {appState.getThemeAccentColor()};"
+      style="--todo-chk-fill: {chkPalette.accentFill}; --todo-chk-on: {chkPalette.onAccent}; --todo-chk-rim: {chkPalette.primaryRim}; --todo-chk-bg: {chkPalette.chkBg}; --todo-chk-border: {chkPalette.chkBorder};"
       onpointerover={trackHoverRow}
       onpointerleave={() => { hoverRowId = null; }}
       onpointermove={onListPointerMove}
@@ -300,8 +411,9 @@
       ondblclickcapture={swallowWhileSettling}
     >
       {#each visibleTodos as todo, index (todo.id)}
-        {@const dlInfo = getDeadlineInfo(todo.deadline)}
+        {@const dlInfo = getDeadlineInfo(todo.deadline, appState.todayKey)}
         {@const linkedDday = appState.findActiveDdayForTodo(todo.id)}
+        {@const isSelected = appState.isEditMode && appState.selectedTodoIds.includes(todo.id)}
 
         <!--
           transition-all 을 transition-colors 로 바꾼 이유:
@@ -314,21 +426,26 @@
           data-todo-id={todo.id}
           class="todo-row w-full min-w-full group flex items-start gap-1 px-1 transition-colors duration-200"
           class:is-restored={appState.recentlyRestoredIds.includes(todo.id)}
+          class:is-selected={isSelected}
           style="border-bottom-color: {appState.isDarkMode ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.06)'};"
         >
           <div class="todo-lead gap-1.5 ml-0.5">
             {#if appState.isEditMode}
               <button
+                type="button"
+                data-todo-select-btn
                 onclick={() => appState.toggleTodoSelection(todo.id)}
                 onmousedown={(e) => e.preventDefault()}
-                class={clsx(
-                  "w-4 h-4 rounded-sm border flex-shrink-0 flex items-center justify-center transition-all hover:scale-110 active:scale-95 shadow-sm cursor-pointer z-10 my-auto",
-                  appState.selectedTodoIds.includes(todo.id) ? "text-white" : (appState.isDarkMode ? "border-gray-500 bg-[#252830]" : "border-gray-400 bg-white")
-                )}
-                style={appState.selectedTodoIds.includes(todo.id) ? `background-color: ${appState.getThemeAccentColor()}; border-color: ${appState.getThemeAccentColor()};` : null}
+                class="todo-select-chk"
+                class:is-checked={isSelected}
+                aria-pressed={isSelected}
+                aria-label={isSelected ? "항목 선택 해제" : "항목 선택"}
+                title={isSelected ? "선택 해제" : "선택"}
               >
-                {#if appState.selectedTodoIds.includes(todo.id)}
-                  <Check size={11} strokeWidth={4} />
+                {#if isSelected}
+                  <svg class="todo-select-glyph" width="10" height="10" viewBox="0 0 14 14" aria-hidden="true" focusable="false">
+                    <path d="M3.2 7.4L5.9 9.9L10.8 4.4" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" />
+                  </svg>
                 {/if}
               </button>
             {/if}
@@ -361,25 +478,23 @@
                 onSelect: (v) => appState.setTodoDeadline(todo.id, v),
               }}
               data-sort-activator
-              class="todo-badge px-[0.6em] py-[0.3em] font-bold border rounded-full transition-all hover:scale-105 active:scale-95 flex items-center justify-center whitespace-nowrap shrink-0 cursor-pointer"
-              style="
-                color: {dlInfo.color};
-                background-color: {dlInfo.bg};
-                border-color: {dlInfo.borderColor};
-                min-width: 3.5em;
-                font-family: var(--ui-font-family);
-                font-size: calc(var(--global-font-size, 10pt) * 0.8);
-                outline: {datePicker.openKey === todoPickerKey(todo.id) ? `2px solid ${appState.getThemeAccentColor()}` : 'none'};
-                outline-offset: 1px;
-              "
-              title={sortDisabled ? "마감일 설정" : "마감일 설정 · 위아래로 끌면 순서 변경"}
+              class="todo-badge"
+              class:is-picker-open={datePicker.openKey === todoPickerKey(todo.id)}
+              data-dl={dlInfo.kind}
+              title={dlInfo.kind === "invalid"
+                ? `${dlInfo.label} (클릭해 날짜 다시 고르기)`
+                : (sortDisabled ? "마감일 설정" : "마감일 설정 · 위아래로 끌면 순서 변경")}
               data-todo-deadline-btn
               aria-expanded={datePicker.openKey === todoPickerKey(todo.id)}
             >
               {#if dlInfo.isIcon}
-                <Icon icon={CALENDAR_BOLD_DUOTONE} width="16" height="16" />
+                <span class="todo-badge-icon" aria-hidden="true">
+                  <Icon icon={CALENDAR_BOLD_DUOTONE} width="100%" height="100%" />
+                </span>
+              {:else if dlInfo.kind === "invalid"}
+                <span class="todo-badge-label is-invalid">{dlInfo.label}</span>
               {:else}
-                {dlInfo.label}
+                <span class="todo-badge-label"><span>{dlInfo.main}</span>{#if dlInfo.dow}<span class="todo-badge-dow">{dlInfo.dow}</span>{/if}</span>
               {/if}
             </button>
           </div>
@@ -459,24 +574,20 @@
           onSelect: (v) => { newTaskDeadline = v; },
           focusAfter: () => newTaskInputEl,
         }}
-        class="todo-date-button min-w-[28px] px-[0.4em] flex items-center justify-center rounded-lg border transition-all hover:scale-105 active:scale-95 relative whitespace-nowrap"
-        style="
-          background-color: {formDlInfo.bg};
-          border-color: {formDlInfo.borderColor};
-          color: {formDlInfo.color};
-          font-family: var(--ui-font-family);
-          outline: {datePicker.openKey === NEW_TASK_PICKER_KEY ? `2px solid ${appState.getThemeAccentColor()}` : 'none'};
-          outline-offset: 1px;
-        "
+        class="todo-badge todo-date-button"
+        class:is-picker-open={datePicker.openKey === NEW_TASK_PICKER_KEY}
+        data-dl={formDlInfo.kind}
         title={newTaskDeadline ? `마감일: ${formatShortDate(newTaskDeadline)}` : "마감일 설정"}
         aria-expanded={datePicker.openKey === NEW_TASK_PICKER_KEY}
       >
-        {#if newTaskDeadline}
-          <span class="font-bold leading-none" style="font-size: calc(var(--global-font-size, 10pt) * 0.8);">
-            {formatShortDate(newTaskDeadline)}
+        {#if formDlInfo.isIcon}
+          <span class="todo-badge-icon" aria-hidden="true">
+            <Icon icon={CALENDAR_BOLD_DUOTONE} width="100%" height="100%" />
           </span>
+        {:else if formDlInfo.kind === "invalid"}
+          <span class="todo-badge-label is-invalid">{formDlInfo.label}</span>
         {:else}
-          <Icon icon={CALENDAR_BOLD_DUOTONE} width="16" height="16" class="pointer-events-none shrink-0" />
+          <span class="todo-badge-label"><span>{formDlInfo.main}</span>{#if formDlInfo.dow}<span class="todo-badge-dow">{formDlInfo.dow}</span>{/if}</span>
         {/if}
       </button>
     </div>
@@ -514,8 +625,183 @@
 </div>
 
 <style>
-  /* 입력줄의 달력도 글자 높이를 따라가되, 여백은 고정해 확대 때 줄만 두꺼워지지 않게 합니다. */
-  .todo-date-button { min-height: 28px; padding-block: 4px; line-height: 1.4; }
+  /* ── 마감일 뱃지 공통 말랑 딱지 규격 (D-Day 칩과 1:1 쌍둥이 · 가로는 전 행 동일 고정 슬롯) ── */
+  .todo-badge-probe-host {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 0;
+    height: 0;
+    overflow: hidden;
+    visibility: hidden;
+    pointer-events: none;
+  }
+
+  .todo-badge-probe {
+    position: absolute;
+    left: 0;
+    top: 0;
+    display: inline-block;
+    white-space: nowrap;
+    font-family: var(--ui-font-family);
+    font-weight: 800;
+    font-variant-numeric: tabular-nums;
+    line-height: 1;
+    visibility: hidden;
+    pointer-events: none;
+  }
+
+  .todo-badge {
+    --tb-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+    position: relative;
+    box-sizing: border-box;
+    display: inline-flex;
+    align-items: center;
+    justify-content: safe center;
+    width: var(--tb-date-w, 64px);
+    height: var(--tb-h, 22px);
+    padding: 0 4px;
+    border-radius: var(--tb-radius, 999px);
+    border: 1px solid var(--badge-border);
+    background-color: var(--badge-bg);
+    color: var(--badge-color);
+    box-shadow: inset 0 -1.5px 0 var(--badge-rim), inset 0 1px 0 var(--tb-gloss);
+    font-family: var(--ui-font-family);
+    font-size: var(--tb-date-fs, var(--tb-fs, 10.5px));
+    font-weight: 800;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: var(--tb-date-ls, -0.025em);
+    line-height: 1;
+    white-space: nowrap;
+    overflow: hidden;
+    flex-shrink: 0;
+    cursor: pointer;
+    user-select: none;
+    transition:
+      transform 200ms var(--tb-spring),
+      background-color 140ms ease,
+      border-color 140ms ease;
+  }
+
+  .todo-badge[data-dl='overdue'] {
+    --badge-bg: var(--dl-overdue-bg);
+    --badge-hover-bg: var(--dl-overdue-hover-bg);
+    --badge-border: var(--dl-overdue-border);
+    --badge-hover-border: var(--dl-overdue-hover-border);
+    --badge-color: var(--dl-overdue-color);
+    --badge-rim: var(--dl-overdue-rim);
+  }
+  .todo-badge[data-dl='today'] {
+    --badge-bg: var(--dl-today-bg);
+    --badge-hover-bg: var(--dl-today-hover-bg);
+    --badge-border: var(--dl-today-border);
+    --badge-hover-border: var(--dl-today-hover-border);
+    --badge-color: var(--dl-today-color);
+    --badge-rim: var(--dl-today-rim);
+  }
+  .todo-badge[data-dl='soon'] {
+    --badge-bg: var(--dl-soon-bg);
+    --badge-hover-bg: var(--dl-soon-hover-bg);
+    --badge-border: var(--dl-soon-border);
+    --badge-hover-border: var(--dl-soon-hover-border);
+    --badge-color: var(--dl-soon-color);
+    --badge-rim: var(--dl-soon-rim);
+  }
+  .todo-badge[data-dl='week'] {
+    --badge-bg: var(--dl-week-bg);
+    --badge-hover-bg: var(--dl-week-hover-bg);
+    --badge-border: var(--dl-week-border);
+    --badge-hover-border: var(--dl-week-hover-border);
+    --badge-color: var(--dl-week-color);
+    --badge-rim: var(--dl-week-rim);
+  }
+  .todo-badge[data-dl='later'] {
+    --badge-bg: var(--dl-later-bg);
+    --badge-hover-bg: var(--dl-later-hover-bg);
+    --badge-border: var(--dl-later-border);
+    --badge-hover-border: var(--dl-later-hover-border);
+    --badge-color: var(--dl-later-color);
+    --badge-rim: var(--dl-later-rim);
+  }
+  .todo-badge[data-dl='unset'] {
+    --badge-bg: var(--dl-unset-bg);
+    --badge-hover-bg: var(--dl-unset-hover-bg);
+    --badge-border: var(--dl-unset-border);
+    --badge-hover-border: var(--dl-unset-hover-border);
+    --badge-color: var(--dl-unset-color);
+    --badge-rim: transparent;
+    border-style: dashed;
+    box-shadow: none;
+  }
+  .todo-badge[data-dl='invalid'] {
+    --badge-bg: var(--dl-invalid-bg);
+    --badge-hover-bg: var(--dl-invalid-hover-bg);
+    --badge-border: var(--dl-invalid-border);
+    --badge-hover-border: var(--dl-invalid-hover-border);
+    --badge-color: var(--dl-invalid-color);
+    --badge-rim: transparent;
+    border-style: dashed;
+    box-shadow: none;
+  }
+
+  .todo-badge:hover {
+    background-color: var(--badge-hover-bg);
+    border-color: var(--badge-hover-border);
+    transform: translateY(-0.5px) scale(1.04);
+  }
+  .todo-badge:active {
+    transform: scale(1.03, 0.92);
+    transition-duration: 140ms, 140ms, 90ms;
+  }
+  .todo-badge.is-picker-open {
+    outline: 2px solid var(--todo-accent);
+    outline-offset: 1px;
+  }
+  .todo-badge:focus-visible {
+    outline: 2px solid var(--todo-accent);
+    outline-offset: 1.5px;
+  }
+
+  .todo-badge-label {
+    display: inline-flex;
+    align-items: center;
+    max-width: 100%;
+    line-height: 1;
+    transform: translateY(var(--tb-label-nudge, 0.065em));
+  }
+  .todo-badge-label.is-invalid {
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .todo-badge-dow {
+    opacity: 0.80;
+  }
+  .todo-badge-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: calc(var(--tb-icon, 12.5px) + 1.5px);
+    height: calc(var(--tb-icon, 12.5px) + 1.5px);
+    flex: none;
+    pointer-events: none;
+    transform: translateY(-0.5px);
+  }
+
+  /* 하단 새 할 일 입력줄: 위 목록과 1:1 동일 고정 슬롯(64×22px @10pt)으로 입력창 좌우 점프를 없애고
+     위아래 3px 히트 확장(::before)으로 28px 입력창 높이와 누르기 쉬운 감도를 함께 확보합니다. */
+  .todo-date-button {
+    overflow: visible;
+  }
+  .todo-date-button .todo-badge-label {
+    overflow: hidden;
+  }
+  .todo-date-button::before {
+    content: '';
+    position: absolute;
+    inset: -3px 0;
+    border-radius: var(--tb-radius, 999px);
+  }
   /* ── 할 일 한 줄(행) 레이아웃 ─────────────────────────────────────
      왜 공책 밑줄을 배경 그라디언트에서 행 테두리로 바꿨는가:
        예전에는 36px 간격의 고정 그라디언트로 밑줄을 그렸습니다.
@@ -548,6 +834,59 @@
     flex-shrink: 0;
   }
 
+  /* ── 다중 선택 행 조약돌 체크 토글 (상단 BulkSelectDock 16×16px · rx=6px과 1:1 동일 규격) ── */
+  .todo-select-chk {
+    position: relative;
+    width: 16px;
+    height: 16px;
+    padding: 0;
+    margin-block: auto;
+    flex-shrink: 0;
+    display: inline-grid;
+    place-items: center;
+    border-radius: 6px;
+    border: 1.5px solid var(--todo-chk-border, #b4bac6);
+    background-color: var(--todo-chk-bg, #ffffff);
+    color: var(--todo-chk-on, #ffffff);
+    box-shadow: inset 0 -1px 0 rgba(15, 23, 42, 0.05);
+    cursor: pointer;
+    z-index: 10;
+    box-sizing: border-box;
+    transition:
+      transform 220ms cubic-bezier(0.34, 1.56, 0.64, 1),
+      background-color 140ms ease,
+      border-color 140ms ease,
+      box-shadow 140ms ease;
+  }
+  /* 옆 완료 버튼(5px 간격)과 겹치지 않는 2px 범위만 히트 영역을 넓혀 클릭감을 부드럽게 합니다. */
+  .todo-select-chk::before {
+    content: '';
+    position: absolute;
+    inset: -2px;
+    border-radius: 8px;
+  }
+  .todo-select-chk:hover {
+    border-color: var(--todo-chk-fill, var(--todo-accent));
+    transform: scale(1.1);
+  }
+  .todo-select-chk:active {
+    transform: scale(0.88);
+    transition-duration: 90ms;
+  }
+  .todo-select-chk:focus-visible {
+    outline: 2px solid var(--todo-accent);
+    outline-offset: 1.5px;
+  }
+  .todo-select-chk.is-checked {
+    background-color: var(--todo-chk-fill, var(--todo-accent));
+    border-color: var(--todo-chk-fill, var(--todo-accent));
+    box-shadow: inset 0 -1.5px 0 var(--todo-chk-rim, rgba(0, 0, 0, 0.25));
+  }
+  .todo-select-glyph {
+    display: block;
+    transform: translateY(-0.35px);
+  }
+
   /* ── 줄 배경과 X 받침 색 ─────────────────────────────────────
      X 뒤의 흐림 받침은 "그 순간의 줄 배경"과 같은 색이어야 글자가 잘린 듯 보이지 않고 부드럽게 사라집니다.
      줄 배경 = 테마색 위에 마우스 올림 덧칠(라이트 검정 5%, 다크 흰색 5%)이므로, 같은 값을 color-mix로 만듭니다. */
@@ -555,19 +894,31 @@
     --row-hover: rgba(0, 0, 0, 0.05);
     --row-surface-rest: var(--global-theme-color);
     --row-surface-hover: color-mix(in srgb, var(--global-theme-color) 95%, black);
+    --row-surface-selected: color-mix(in srgb, var(--todo-accent) 7%, var(--global-theme-color));
+    --row-surface-selected-hover: color-mix(in srgb, var(--todo-accent) 10%, var(--row-surface-hover));
     --done-rest-bg: #ffffff;
     --done-rest-border: #d1d5db;
   }
   .todo-rows.is-dark {
     --row-hover: rgba(255, 255, 255, 0.05);
     --row-surface-hover: color-mix(in srgb, var(--global-theme-color) 95%, white);
+    --row-surface-selected: color-mix(in srgb, var(--todo-accent) 11%, var(--global-theme-color));
+    --row-surface-selected-hover: color-mix(in srgb, var(--todo-accent) 14%, var(--row-surface-hover));
     --done-rest-bg: transparent;
     --done-rest-border: #6b7280;
   }
   .todo-row { --row-surface: var(--row-surface-rest); }
+  .todo-row.is-selected {
+    background-color: var(--row-surface-selected);
+    --row-surface: var(--row-surface-selected);
+  }
   .todo-row:hover {
     background-color: var(--row-hover);
     --row-surface: var(--row-surface-hover);
+  }
+  .todo-row.is-selected:hover {
+    background-color: var(--row-surface-selected-hover);
+    --row-surface: var(--row-surface-selected-hover);
   }
 
   /* ── 줄 끝 꼬리와 겹침 묶음(X · 키보드 손잡이) ─────────────────
@@ -702,6 +1053,15 @@
   @media (prefers-reduced-motion: reduce) {
     .todo-x-pop,
     .todo-rows .todo-row .todo-x-pop { transform: none !important; transition: opacity 140ms ease-out; }
+    .todo-badge,
+    .todo-badge:hover,
+    .todo-badge:active {
+      transform: none;
+      transition: background-color 140ms ease, border-color 140ms ease;
+    }
+    .todo-select-chk,
+    .todo-select-chk:hover,
+    .todo-select-chk:active { transform: none; transition-duration: 0ms; }
   }
 
   .todo-text {
